@@ -1,6 +1,31 @@
-/* Baseline reset only. Full layout, grid, and theme variables land in
-   stage 1 (section 6.1: two columns, dark theme respecting
-   prefers-color-scheme). */
+/* Dark theme by default; light theme only if the system prefers it
+   (section 6.1). Two columns (40/60) desktop, stacked mobile. */
+
+:root {
+  --bg: #15171c;
+  --bg-elevated: #1d2027;
+  --text: #e8e9ec;
+  --text-dim: #9a9ea8;
+  --border: #2d313a;
+  --accent: #6ea8fe;
+
+  --sentiment-neg2: #b3261e;
+  --sentiment-neg1: #d9534f;
+  --sentiment-0: #5a5f68;
+  --sentiment-pos1: #4caf50;
+  --sentiment-pos2: #1e7e34;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f6f8;
+    --bg-elevated: #ffffff;
+    --text: #1a1c20;
+    --text-dim: #5b5f68;
+    --border: #d8dae0;
+    --accent: #2563eb;
+  }
+}
 
 * {
   box-sizing: border-box;
@@ -9,4 +34,245 @@
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-shell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+.app-column-left {
+  flex: 1 1 360px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.app-column-right {
+  flex: 2 1 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .app-column-left,
+  .app-column-right {
+    max-width: none;
+    flex: 1 1 100%;
+  }
+}
+
+.app-title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+/* --- ArtifactInput --- */
+
+.artifact-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.artifact-input-mode-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.artifact-input-mode-toggle button {
+  flex: 1;
+  padding: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.artifact-input-mode-toggle button.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.artifact-textarea {
+  min-height: 160px;
+  resize: vertical;
+}
+
+.artifact-textarea,
+.artifact-url-input,
+.artifact-label-input,
+.persona-count-inputs input[type='number'] {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  width: 100%;
+}
+
+.run-button {
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #0a0d12;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.run-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- PersonaCountControl --- */
+
+.persona-count-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.persona-count-inputs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.persona-count-inputs input[type='range'] {
+  flex: 1;
+}
+
+.persona-count-inputs input[type='number'] {
+  width: 72px;
+}
+
+.persona-count-estimate {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+/* --- Grid / Tile, section 6.2 --- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--tile));
+  gap: 4px;
+  justify-content: start;
+}
+
+.tile {
+  width: var(--tile);
+  height: var(--tile);
+  border-radius: 4px;
+  position: relative;
+  transform: scale(0.85);
+  opacity: 0;
+  animation: tile-fill-in 150ms ease-out forwards;
+}
+
+.tile-empty {
+  border: 1px solid var(--border);
+  background: transparent;
+  opacity: 1;
+  animation: none;
+  transform: none;
+}
+
+.tile-error {
+  border: 1px dashed var(--text-dim);
+  background: transparent;
+  opacity: 1;
+  animation: none;
+  transform: none;
+}
+
+.tile-filled {
+  border: none;
+}
+
+.tile-sentiment-neg2 { background: var(--sentiment-neg2); }
+.tile-sentiment-neg1 { background: var(--sentiment-neg1); }
+.tile-sentiment-0 { background: var(--sentiment-0); }
+.tile-sentiment-pos1 { background: var(--sentiment-pos1); }
+.tile-sentiment-pos2 { background: var(--sentiment-pos2); }
+
+.tile-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+@keyframes tile-fill-in {
+  from {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- StatsStrip, section 6.4 --- */
+
+.stats-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  align-items: center;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.synthesizing-line {
+  color: var(--accent);
+  font-size: 0.85rem;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }

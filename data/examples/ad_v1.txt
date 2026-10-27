@@ -1,0 +1,36 @@
+Stop letting your bank keep the upside.
+
+Most checking accounts pay you basically nothing while your bank reinvests
+your deposits and keeps the spread. Nimbus flips that. Our High-Yield
+Vault runs on dynamic yield optimization, routing your idle cash across a
+basket of FDIC-insured partner banks to capture the best available APY
+every single day — automatically, with zero action from you.
+
+Right now that APY is sitting at 4.8%, nearly 11x the national average on
+a traditional savings account. No teaser rate that drops after 90 days.
+No minimum balance tiers. No "relationship banking" hoops.
+
+How it works:
+
+Link your existing bank account, tell Nimbus how much of your paycheck to
+sweep into the Vault, and let our allocation engine handle the rest. Our
+real-time rate arbitrage means your money is always parked wherever the
+yield curve favors you that day, across our network of partner
+institutions, without you lifting a finger.
+
+Because the Vault is structured as a cash management account rather than
+a single deposit account, your balance benefits from extended FDIC
+pass-through coverage well beyond the standard $250,000 limit at any one
+bank.
+
+Over 140,000 people have already moved their emergency fund to Nimbus.
+Average time to set up: 6 minutes. Average extra yield captured in year
+one: $612 per $10,000 deposited, compared to the national average savings
+rate.
+
+Your money should be working as hard as you do.
+
+Open your Vault — nimbus.money/vault
+
+Nimbus is a financial technology company, not a bank. Banking services
+provided by Nimbus's partner banks, Members FDIC.

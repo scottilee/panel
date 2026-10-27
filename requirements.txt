@@ -1,7 +1,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.5
-openai==1.59.7
+openai==3.40.0  # verified installed/working version in this sandbox; the 1.x pin was a guess
 python-dotenv==1.0.1
 requests==2.32.3
 readability-lxml==0.8.1
