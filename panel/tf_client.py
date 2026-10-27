@@ -7,17 +7,20 @@ Verified empirically against the live Token Factory catalog on 2026-10-27:
   return clean JSON directly in message.content — no code-fence stripping
   needed on the happy path. _strip_code_fences below is a defensive
   fallback for whatever doesn't follow that, not the primary path.
-- Not just Ultra — Super is a reasoning model too (Nano wasn't checked
-  under load, only on trivial prompts): all can spend completion tokens
-  on hidden chain-of-thought in a separate message.reasoning_content
-  field before content. Reasoning-token usage is stochastic, not a fixed
-  overhead: the identical persona-batch prompt at max_tokens=8000 finished
-  cleanly with reasoning_tokens=3350 on one call and truncated with zero
-  content on an immediate retry of the same request. So finish_reason ==
-  "length" is reported distinctly from "content didn't validate"
-  (ChatJsonTruncatedError vs ValidationError) and chat_json retries it a
-  couple of times at a doubled budget rather than failing immediately —
-  a validation-repair retry would just waste a call on this failure mode.
+- Not just Ultra — Super and Nano are reasoning models too. All three can
+  spend completion tokens on hidden chain-of-thought before content.
+  Reasoning-token usage is stochastic, not a fixed overhead: the identical
+  persona-batch prompt at max_tokens=8000 finished cleanly with
+  reasoning_tokens=3350 on one call and truncated with zero content on an
+  immediate retry of the same request. So finish_reason == "length" is
+  reported distinctly from "content didn't validate" (ChatJsonTruncatedError
+  vs ValidationError) and chat_json retries it a couple of times at a
+  doubled budget rather than failing immediately — a validation-repair
+  retry would just waste a call on this failure mode.
+- Nano specifically: confirmed under load (2026-10-27, panel/react.py's
+  REACTION_MAX_TOKENS) that section 5.2's stated max_tokens=400 for
+  reaction calls is wrong — it truncated ~every call. 3000 is the
+  measured-safe budget (observed usage topped out at 2092).
 """
 
 from __future__ import annotations

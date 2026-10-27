@@ -29,6 +29,7 @@ from panel.personas import (  # noqa: E402
     save_personas,
 )
 from panel.prompts import REACTION_SYSTEM, reaction_user  # noqa: E402
+from panel.react import REACTION_MAX_TOKENS  # noqa: E402
 from panel.schemas import Persona, Reaction  # noqa: E402
 from panel.tf_client import ChatJsonError, chat_json, env  # noqa: E402
 
@@ -140,7 +141,7 @@ async def react_one(persona: Persona, artifact_text: str, sem: asyncio.Semaphore
                 schema=Reaction,
                 temperature=0.7,
                 seed=hash(persona.id) % (2**31),
-                max_tokens=400,
+                max_tokens=REACTION_MAX_TOKENS,
             )
             return result.data.model_copy(update={"persona_id": persona.id})
         except ChatJsonError as e:
