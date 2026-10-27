@@ -1,0 +1,12 @@
+/* Baseline reset only. Full layout, grid, and theme variables land in
+   stage 1 (section 6.1: two columns, dark theme respecting
+   prefers-color-scheme). */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}

@@ -1,0 +1,19 @@
+{
+  "name": "panel",
+  "devPort": 5195,
+  "database": {
+    "mode": "root-compose"
+  },
+  "tools": {
+    "sqitch": true,
+    "aws": false,
+    "terraform": false,
+    "codex": true
+  },
+  "firewall": {
+    "domains": {
+      "smtp.maileroo.com": "Maileroo — server-side transactional email (app/lib/notify/email.server.ts)",
+      "api.twilio.com": "Twilio — SMS / phone OTP (app/lib/notify/sms.server.ts)"
+    }
+  }
+}
