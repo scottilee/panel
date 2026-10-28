@@ -1,4 +1,5 @@
-// useReducer reducer + selectors (stats, filters, deltas). Stage 1, Agent B.
+// useReducer reducer + selectors (stats, filters, deltas), plus the two
+// enumerated Persona fields the filters depend on the order of.
 //
 // state.personas is the fixed, ordered sample for the current run (section
 // 3: "same count always selects the same personas"). It's kept in sync with
@@ -35,6 +36,10 @@ const initialCompareState = {
 }
 
 export const initialState = {
+  // Both are placeholders until App.jsx's mount effect replaces poolSize
+  // with the real pool length (GET /personas, now 1,000) and clamps the
+  // count to it. 100 rather than the pool size on purpose: it's the
+  // default panel size, and the first paint lays the grid out for it.
   personaCount: 100,
   poolSize: 100,
   inputMode: 'text',
@@ -79,9 +84,9 @@ export function reducer(state, action) {
         compare: initialCompareState,
       }
 
-    // Stage 7: the real client learns the run_id only once POST /run
-    // resolves (mock mode never dispatches this -- there's no real id to
-    // know, and nothing downstream needs one in mock mode).
+    // The real client learns the run_id only once POST /run resolves.
+    // Mock mode never dispatches this -- there is no real id to know, and
+    // nothing downstream needs one in mock mode.
     case 'SET_RUN_ID':
       return { ...state, runId: action.runId }
     case 'COMPARE_SET_RUN_ID':
@@ -205,29 +210,30 @@ export function reducer(state, action) {
 // --- Selectors ---------------------------------------------------------
 
 // filteredIds: null means no filter active (everyone counted, same
-// behavior as before Stage 2); a Set restricts both `total` and the
+// behavior as when no filters existed); a Set restricts both `total` and the
 // reactions averaged in to that segment (section 6.5: "recomputes the
 // stats strip for the segment only").
+// The arithmetic both selectors share. Mirrors panel/api/main.py's
+// _compute_stats -- Run A and Run B had line-for-line copies of this.
+function statsOver(reactions, total) {
+  const done = reactions.length
+  if (done === 0) return { done, total, meanSentiment: 0, wouldActPct: 0 }
+  return {
+    done,
+    total,
+    meanSentiment: reactions.reduce((sum, r) => sum + r.sentiment, 0) / done,
+    wouldActPct: (100 * reactions.filter((r) => r.would_act).length) / done,
+  }
+}
+
 export function selectLiveStats(state, filteredIds = null) {
   const allReactions = Object.values(state.reactionsById)
   const reactions = filteredIds ? allReactions.filter((r) => filteredIds.has(r.persona_id)) : allReactions
-  const done = reactions.length
   const total = filteredIds ? filteredIds.size : state.progress.total || state.personas.length
-  if (done === 0) return { done, total, meanSentiment: 0, wouldActPct: 0 }
-  const meanSentiment = reactions.reduce((sum, r) => sum + r.sentiment, 0) / done
-  const wouldActPct = (100 * reactions.filter((r) => r.would_act).length) / done
-  return { done, total, meanSentiment, wouldActPct }
+  return statsOver(reactions, total)
 }
 
 // --- Segment filters, section 6.5 ---------------------------------------
-
-export function ageBandFor(age) {
-  if (age <= 24) return '18-24'
-  if (age <= 34) return '25-34'
-  if (age <= 49) return '35-49'
-  if (age <= 64) return '50-64'
-  return '65+'
-}
 
 // tech_comfort and skepticism are 1-100 (section 3 said 1-5; widened by
 // request on 2026-10-28). Tri-section matches panel/synthesize.py's
@@ -239,9 +245,21 @@ export function scoreBand(value) {
   return 'high'
 }
 
-// Canonical order for income_band, independent of mock.js's own copy --
-// state.js shouldn't depend on the mock-data module for a spec-level
-// constant it needs regardless of which backend is in play.
+// The two enumerated Persona fields, in the same order as
+// panel/schemas.py's REGIONS / INCOME_BANDS literals. Owned here because
+// the filter logic below is what depends on their order; mock.js
+// re-exports them.
+export const REGIONS = [
+  'Northeast US',
+  'Southeast US',
+  'Midwest US',
+  'Southwest US',
+  'West US',
+  'Western Europe',
+  'Asia-Pacific',
+  'Latin America',
+]
+
 export const INCOME_BANDS = ['<25k', '25-40k', '40-75k', '75-150k', '150k+']
 
 // region/techComfort/skepticism stay chip-style ({group, value}, exact
@@ -305,13 +323,10 @@ export function selectIsRunning(state) {
 // --- Compare (run B), section 6.6/6.7 -----------------------------------
 
 export function selectCompareLiveStats(state) {
-  const reactions = Object.values(state.compare.reactionsById)
-  const done = reactions.length
-  const total = state.compare.progress.total || state.personas.length
-  if (done === 0) return { done, total, meanSentiment: 0, wouldActPct: 0 }
-  const meanSentiment = reactions.reduce((sum, r) => sum + r.sentiment, 0) / done
-  const wouldActPct = (100 * reactions.filter((r) => r.would_act).length) / done
-  return { done, total, meanSentiment, wouldActPct }
+  return statsOver(
+    Object.values(state.compare.reactionsById),
+    state.compare.progress.total || state.personas.length,
+  )
 }
 
 export function selectCompareElapsedSeconds(state) {
@@ -348,10 +363,10 @@ export function selectDeltaByPersonaId(state) {
 }
 
 // Section 6.6: clicking a finding's affected_segment chip applies that
-// filter (reusing Stage 2's activeFilters). affected_segment_filter's
+// filter (reusing the same activeFilters shape). affected_segment_filter's
 // fields don't map 1:1 onto filter chip groups -- age_band has no
 // Persona field (it's derived from age), and the Big Five traits have no
-// chip group at all (out of Stage 2's scope) -- clauses on those are
+// chip group at all -- clauses on those are
 // skipped rather than erroring, since "apply what can be applied" is
 // more useful than refusing the whole chip for one unmappable clause.
 const SEGMENT_FIELD_TO_GROUP = {
@@ -375,7 +390,25 @@ const AGE_BAND_RANGES = {
   '65+': [65, 85],
 }
 
+// Chips are positive selections with no negation, so a '!=' clause has to
+// be turned into the complement set before it can be expressed as chips.
+// Until this existed, '!=' fell through to the same handling as '==' and
+// the chip selected *exactly the personas the finding excluded* -- the
+// clause's own inverse. SEGMENT_OPS in panel/schemas.py permits '!=' and
+// nothing in the synthesis prompt discourages it, so this is reachable.
+//
+// Complements are only expressible for the two unordered groups (region,
+// and the tri-sected score bands). The age and income chips are a single
+// contiguous range, so "every band except a middle one" cannot be
+// represented at all -- those clauses are skipped, consistently with how
+// unmappable fields are already handled.
+function complementNames(all, excluded) {
+  const drop = new Set(Array.isArray(excluded) ? excluded : [excluded])
+  return all.filter((v) => !drop.has(v))
+}
+
 function ageRangeForClause(op, value) {
+  if (op === '!=') return null
   const names = op === 'in' ? value : [value]
   const ranges = names.map((n) => AGE_BAND_RANGES[n]).filter(Boolean)
   if (!ranges.length) return null
@@ -384,23 +417,35 @@ function ageRangeForClause(op, value) {
 
 function incomeRangeForClause(op, value) {
   const names = op === 'in' ? value : [value]
-  const idxs = names.map((n) => INCOME_BANDS.indexOf(n)).filter((i) => i >= 0)
+  let idxs = names.map((n) => INCOME_BANDS.indexOf(n)).filter((i) => i >= 0)
+  if (op === '!=') {
+    // Only when the excluded band sits at one end, leaving the rest
+    // contiguous.
+    if (idxs.length !== 1) return null
+    const excluded = idxs[0]
+    if (excluded === 0) idxs = [1, INCOME_BANDS.length - 1]
+    else if (excluded === INCOME_BANDS.length - 1) idxs = [0, INCOME_BANDS.length - 2]
+    else return null
+  }
   if (!idxs.length) return null
   return { minIndex: Math.min(...idxs), maxIndex: Math.max(...idxs) }
 }
 
+const SCORE_BANDS = ['low', 'mid', 'high']
+
 function scoreBandsForClause(op, value) {
   if (op === '==') return [scoreBand(value)]
+  if (op === '!=') return complementNames(SCORE_BANDS, scoreBand(value))
   if (op === 'in') return [...new Set(value.map(scoreBand))]
   if (op === '<=' || op === '<') {
     if (value <= 33) return ['low']
     if (value <= 66) return ['low', 'mid']
-    return ['low', 'mid', 'high']
+    return SCORE_BANDS
   }
   if (op === '>=' || op === '>') {
     if (value >= 67) return ['high']
     if (value >= 34) return ['mid', 'high']
-    return ['low', 'mid', 'high']
+    return SCORE_BANDS
   }
   return []
 }
@@ -422,6 +467,8 @@ export function segmentFilterToChips(clauses) {
       if (range) chips.push({ group, ...range })
     } else if (clause.op === 'in') {
       for (const v of clause.value) chips.push({ group, value: v })
+    } else if (clause.op === '!=') {
+      for (const v of complementNames(REGIONS, clause.value)) chips.push({ group, value: v })
     } else {
       chips.push({ group, value: clause.value })
     }

@@ -1,24 +1,26 @@
 // Real fetch + SSE client. Swapped for mock.js behind ?mock=1. Section 6.9.
 //
-// The real client (POST /run + EventSource on /run/{id}/stream) is stage 7.
-// This file's mock branch emits the same event shapes stage 7's real client
-// will (section 3's SSE event list: reaction, progress, synthesizing,
-// synthesis, done, error) so the rest of the app never has to know which
-// branch it's talking to.
+// Both branches emit the same event shapes (section 3's SSE event list:
+// reaction, progress, synthesizing, synthesis, done, error) so the rest of
+// the app never has to know which one it's talking to. The real branch is
+// POST /run plus an EventSource on /run/{id}/stream; the mock branch
+// synthesizes the same sequence on timers, with no network and no credits
+// spent.
 
 import {
   buildMockCompareResult,
   buildMockPersonas,
   buildMockReactions,
   buildMockReactionsB,
+  buildMockSynthesis,
   EXAMPLES,
-  MOCK_SYNTHESIS,
 } from './mock.js'
 
-// Mock mode's pool is synthesized on demand (buildMockPersonas takes any n),
-// so the slider can go well past the real ~100-persona pool to exercise
-// grid layout at scale (section 6.2's N=1000 case) without touching the
-// real data/personas.json pool size.
+// Mock mode's pool is synthesized on demand (buildMockPersonas takes any
+// n). This matched the real pool when it was 100 and still does now that
+// it's 1,000 -- which is the point: mock mode has to exercise the same
+// grid layout, filter and tile-size behaviour at the same N as a real run,
+// with no API calls and no credits spent (section 6.2's N=1000 case).
 export const MOCK_POOL_SIZE = 1000
 
 const REACTION_INTERVAL_MS = 80
@@ -83,14 +85,15 @@ export function previewPersonas(n) {
 // called before the POST resolves still takes effect.
 // cached: section 6.8's demo fallback -- real mode only. Appends
 // ?cached=true, which the backend only honors if `text` matches one of
-// the real example files byte-for-byte (panel/fetch.py's _find_cached_
-// example); mock mode ignores it, since it has no such concept.
-export function startRun({ text, label, personaCount, onEvent, previousReactionsById, cached }) {
+// the real example files byte-for-byte (api/main.py's
+// _find_cached_example); mock mode ignores it, since it has no such
+// concept.
+export function startRun({ text, url, label, personaCount, onEvent, previousReactionsById, cached }) {
   if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById })
-  return startRealRun({ text, label, personaCount, onEvent, cached })
+  return startRealRun({ text, url, label, personaCount, onEvent, cached })
 }
 
-function startRealRun({ text, label, personaCount, onEvent, cached = false }) {
+function startRealRun({ text, url, label, personaCount, onEvent, cached = false }) {
   let cancelled = false
   let es = null
 
@@ -100,7 +103,14 @@ function startRealRun({ text, label, personaCount, onEvent, cached = false }) {
       const res = await fetch(`/run${cached ? '?cached=true' : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, label: label || undefined, persona_count: personaCount }),
+        // RunRequest is text XOR url, so send exactly one. JSON.stringify
+        // drops undefined keys, which is what makes that work here.
+        body: JSON.stringify({
+          text: text || undefined,
+          url: url || undefined,
+          label: label || undefined,
+          persona_count: personaCount,
+        }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
@@ -114,10 +124,27 @@ function startRealRun({ text, label, personaCount, onEvent, cached = false }) {
     }
     if (cancelled) return
 
+    // In URL mode the artifact's text only exists server-side (the
+    // backend fetched and extracted it), but the UI needs it locally:
+    // "Apply and compare" rewrites one phrase of the artifact text and
+    // reruns, which with an empty local copy would silently no-op. One
+    // extra GET of the run record is cheaper than widening POST /run's
+    // response shape (a section 3 contract).
+    let fetchedText
+    if (url) {
+      try {
+        const record = await fetch(`/run/${runId}`).then((r) => (r.ok ? r.json() : null))
+        fetchedText = record?.artifact?.text
+      } catch {
+        // Non-fatal: the run itself is already underway. Apply-and-compare
+        // stays disabled for this run rather than the run failing.
+      }
+    }
+
     // Not one of section 3's SSE events -- a local-only signal so the
     // caller (App.jsx) can stash the run_id for POST /compare later.
     // Mock mode never emits this; real callers must handle it.
-    onEvent({ type: 'run_started', data: { run_id: runId } })
+    onEvent({ type: 'run_started', data: { run_id: runId, artifact_text: fetchedText } })
 
     es = new EventSource(`/run/${runId}/stream`)
     for (const type of ['reaction', 'progress', 'synthesizing', 'synthesis', 'done']) {
@@ -168,8 +195,7 @@ export async function getExamples() {
 // difference) rather than a fixed, disconnected canned object. Still
 // fast and synchronous -- no network, no delay -- matching section 6.9's
 // "no real computation cost" intent, just not "hardcoded regardless of
-// input". The real client (stage 7) will POST /compare and await the
-// response.
+// input". The real branch below POSTs /compare instead.
 // personas/reactionsAById: mock mode only (it recomputes Run B locally,
 // never calling a server). runA/runB: real mode only (the two run_ids
 // POST /compare needs; the backend already has both runs' real reactions
@@ -237,7 +263,10 @@ function startMockRun({ personaCount, onEvent, previousReactionsById }) {
       onEvent({ type: 'synthesizing' })
       timeoutId = setTimeout(() => {
         if (cancelled) return
-        onEvent({ type: 'synthesis', data: MOCK_SYNTHESIS })
+        // Built from this run's personas, not the module-level N=100
+        // MOCK_SYNTHESIS, so the evidence ids it cites actually have
+        // tiles in the grid at whatever N the slider is on.
+        onEvent({ type: 'synthesis', data: buildMockSynthesis(personas) })
         onEvent({
           type: 'done',
           data: {

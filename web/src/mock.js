@@ -1,20 +1,15 @@
 // Synthetic data shaped exactly like panel/schemas.py (build spec section 3),
 // so the UI can be built and reviewed end to end before any backend exists
 // (section 6.9). The timed SSE-shaped event emission on top of this data is
-// stage 1's job (the mock SSE client); this file only produces valid shapes.
+// api.js's startMockRun; this file only produces valid shapes.
 
-export const REGIONS = [
-  'Northeast US',
-  'Southeast US',
-  'Midwest US',
-  'Southwest US',
-  'West US',
-  'Western Europe',
-  'Asia-Pacific',
-  'Latin America',
-]
-
-export const INCOME_BANDS = ['<25k', '25-40k', '40-75k', '75-150k', '150k+']
+// REGIONS/INCOME_BANDS are real domain constants mirroring
+// panel/schemas.py, not mock data -- they live in state.js (which owns the
+// filter logic that reads them) and are re-exported here only because this
+// module and Filters.jsx both already imported them from this path.
+// INCOME_BANDS was previously declared in both files.
+export { REGIONS, INCOME_BANDS } from './state.js'
+import { REGIONS, INCOME_BANDS } from './state.js'
 
 const FIRST_NAMES = [
   'Dolores', 'Marcus', 'Priya', 'Jin', 'Fatima', 'Logan', 'Ingrid', 'Tomas',
@@ -124,7 +119,7 @@ function seededShuffle(array, seed) {
 // each get a distinct, non-block-clustered full name instead of the first
 // 20 cycling in lockstep with the last 20 (which produced e.g. "Dolores
 // Park" five times over -- every Nth name repeating in lockstep -- before
-// before this fix).
+// this fix).
 const NAME_PAIRS = seededShuffle(
   FIRST_NAMES.flatMap((first) => LAST_NAMES.map((last) => [first, last])),
   1337,
@@ -237,7 +232,14 @@ export function buildMockReactions(personas) {
 }
 
 export function buildMockSynthesis(personas) {
-  const evidenceFrom = (start) => personas.slice(start, start + 4).map((p) => p.id)
+  // Evidence ids are drawn from the personas this run actually has, and
+  // the offsets wrap. Fixed slices at 0-3/10-13/20-23 meant that at N=10
+  // or N=20 two of the three findings cited ids with no tile in the grid,
+  // and the Findings panel highlights evidence by exact persona_id.
+  // Finding.evidence requires 3 to 5 entries, so this needs >= 3 personas
+  // -- the N slider's floor is 10.
+  const evidenceFrom = (start) =>
+    Array.from({ length: Math.min(4, personas.length) }, (_, i) => personas[(start + i) % personas.length].id)
   return {
     headline: 'Pricing reads as a subscription to 41% of personas over 55',
     findings: [
@@ -305,9 +307,13 @@ function flipGroupsFor(personas) {
 // it wasn't about).
 export function buildMockReactionsB(personas, reactionsAById) {
   const { positiveIds, negativeIds } = flipGroupsFor(personas)
-  return personas.map((p) => {
+  // A persona with no Run A reaction is skipped, not mapped to undefined:
+  // this used to `return before` (i.e. undefined) inside a .map, and the
+  // callers in api.js read `.persona_id` off every element, so a partial
+  // reactionsAById produced a TypeError rather than a shorter list.
+  return personas.flatMap((p) => {
     const before = reactionsAById[p.id]
-    if (!before) return before
+    if (!before) return []
     if (positiveIds.has(p.id)) {
       return { ...before, would_act: true, sentiment: Math.min(2, before.sentiment + 2) }
     }
@@ -347,14 +353,29 @@ export function buildMockCompareResult(personas, reactionsAById, reactionsBById)
       flipped_to_act: toAct,
     }
   })
+  // Percentage POINTS of the whole panel, matching panel/compare.py's
+  // `would_act_pct_b - would_act_pct_a`. This was the raw flip count,
+  // which only coincided with the percentage at N=100 -- at N=300 it
+  // reported 15 where the real delta was 5.0, in a field CompareBar
+  // renders with a '%' next to it.
+  const n = personas.length || 1
+  const deltaPct = (100 * (flippedPositive - flippedNegative)) / n
   return {
     run_a: 'mock-run',
     run_b: 'mock-run-b',
     deltas,
     flipped_positive: flippedPositive,
     flipped_negative: flippedNegative,
-    would_act_delta_pct: flippedPositive - flippedNegative,
-    summary: 'Naming the price as one-time flips 19 skeptical, low-tech-comfort readers toward acting.',
+    would_act_delta_pct: deltaPct,
+    // Built from the numbers just computed rather than hardcoded. The old
+    // string claimed 19 flips while flipped_positive computed to 15 (four
+    // of the 19 targeted personas already had would_act: true in Run A),
+    // and CompareBar shows the sentence and the counters side by side.
+    summary:
+      `Naming the price as one-time flips ${flippedPositive} skeptical, ` +
+      `low-tech-comfort readers toward acting` +
+      (flippedNegative ? ` and pushes ${flippedNegative} away` : '') +
+      `.`,
   }
 }
 
@@ -494,9 +515,10 @@ City's official website.`,
   },
 ]
 
-export const MOCK_PERSONAS = buildMockPersonas(100)
-export const MOCK_REACTIONS = buildMockReactions(MOCK_PERSONAS)
-export const MOCK_SYNTHESIS = buildMockSynthesis(MOCK_PERSONAS)
-// No static MOCK_COMPARE_RESULT: it has to be computed from whatever
-// Run A/Run B reactions a given run actually produced (see api.js's
-// getCompareResult), not fixed at N=100 ahead of time.
+// No module-level MOCK_PERSONAS / MOCK_REACTIONS / MOCK_SYNTHESIS /
+// MOCK_COMPARE_RESULT. Everything here is built from the personas a given
+// run actually selected (see api.js's startMockRun and getCompareResult),
+// because a constant fixed at N=100 silently mismatches every other N --
+// MOCK_SYNTHESIS used to cite evidence ids that had no tile in the grid
+// below N=24, and the three N=100 constants were being constructed on
+// every page load whether mock mode was on or not.

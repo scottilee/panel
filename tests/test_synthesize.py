@@ -112,7 +112,7 @@ def test_bands_trisect_the_1_100_scale(value, expected):
 def test_persona_csv_has_header_and_one_row_each(pool):
     csv = build_persona_summary_csv(list(pool.values()))
     lines = csv.splitlines()
-    assert lines[0] == "id,age,region,income_band,tech_comfort,skepticism,occupation"
+    assert lines[0] == "id,age,age_band,region,income_band,tech_comfort,skepticism,occupation"
     assert len(lines) == len(pool) + 1
 
 
@@ -209,3 +209,411 @@ def test_apply_recounted_pct_also_fixes_the_headline(pool):
 def test_apply_recounted_pct_leaves_accurate_numbers_alone(pool):
     out = _apply_recounted_pct(make_synthesis(["p001", "p002", "p003"], affected_pct=30), pool)
     assert all(f.affected_pct == 30 for f in out.findings)
+
+
+# --- Sharded digest stage (the 1000-persona scale-up, 2026-10-28) -----------
+
+
+def _reaction(i):
+    from panel.schemas import Reaction
+
+    return Reaction(
+        persona_id=f"p{i:03d}",
+        sentiment=0,
+        would_act=False,
+        gut_reaction="Hm.",
+        top_confusion="unclear price",
+        top_objection="too expensive",
+        what_would_change_my_mind="state the price",
+    )
+
+
+def test_format_digests_renders_themes_as_examples_not_counts():
+    """The digest carries no quantities at all. The model is asked for a
+    few example ids per theme, and rendering "(2/50)" from however many
+    examples it happened to give would manufacture a statistic -- the
+    confusion between evidence and quantity that broke this stage twice.
+    """
+    from panel.synthesize import _DigestTheme, _format_digests, _ShardDigest
+
+    digest = _ShardDigest(
+        confusions=[
+            _DigestTheme(theme="price is unclear", persona_ids=["p001", "p002"]),
+            _DigestTheme(theme="no trial mentioned", persona_ids=["p005", "p006", "p007"]),
+        ],
+        objections=[_DigestTheme(theme="too expensive", persona_ids=["p003", "p009"])],
+        requested_changes=[_DigestTheme(theme="state the price", persona_ids=["p004", "p008"])],
+        quotes=['p001: "What does it cost?"'],
+    )
+    out = _format_digests([(50, digest)])
+    assert "a batch of 50 reactions" in out
+    assert "price is unclear [e.g. p001, p002]" in out
+    assert "no trial mentioned [e.g. p005, p006, p007]" in out
+    assert 'p001: "What does it cost?"' in out
+    # No "/50" fraction anywhere beside a theme.
+    assert "/50)" not in out
+
+
+def test_digest_theme_examples_are_capped():
+    """The schema itself bounds the id list, so a model trying to be
+    exhaustive fails validation (and gets chat_json's repair retry with
+    the reason) instead of grinding through all N reactions."""
+    import pydantic
+    import pytest as _pytest
+
+    from panel.synthesize import _DigestTheme
+
+    _DigestTheme(theme="fine", persona_ids=[f"p{i:03d}" for i in range(5)])
+    with _pytest.raises(pydantic.ValidationError, match="at most 5"):
+        _DigestTheme(theme="too many", persona_ids=[f"p{i:03d}" for i in range(6)])
+
+
+def test_clean_digest_drops_hallucinated_ids():
+    from panel.schemas import Reaction
+    from panel.synthesize import _clean_digest, _DigestTheme, _ShardDigest
+
+    shard = [_reaction(1), _reaction(2)]
+    assert {r.persona_id for r in shard} == {"p001", "p002"}
+    digest = _ShardDigest(
+        confusions=[
+            _DigestTheme(theme="real", persona_ids=["p001", "p999", "p001"]),
+            _DigestTheme(theme="entirely invented", persona_ids=["p888"]),
+        ],
+        objections=[],
+        requested_changes=[],
+        quotes=[],
+    )
+    cleaned = _clean_digest(digest, shard)
+    assert len(cleaned.confusions) == 1
+    assert cleaned.confusions[0].theme == "real"
+    # Deduplicated as well as filtered.
+    assert cleaned.confusions[0].persona_ids == ["p001"]
+    assert isinstance(shard[0], Reaction)
+
+
+@pytest.mark.asyncio
+async def test_small_panel_sends_raw_reactions(monkeypatch, pool):
+    """Below SHARD_THRESHOLD nothing about the prompt changes -- the
+    100-persona demo path must stay exactly the single call it was."""
+    from panel import synthesize as S
+
+    captured = {}
+
+    async def fake_call(system, user):
+        captured["user"] = user
+        return _synthesis_fixture()
+
+    monkeypatch.setattr(S, "_synthesis_call", fake_call)
+
+    async def boom(reactions):
+        raise AssertionError("should not shard below the threshold")
+
+    monkeypatch.setattr(S, "_digest_reactions", boom)
+
+    reactions = [_reaction(i) for i in range(1, 11)]
+    await S.synthesize("some artifact text", list(pool.values()), reactions)
+    assert "Their reactions:" in captured["user"]
+    assert '"gut_reaction": "Hm."' in captured["user"]
+
+
+@pytest.mark.asyncio
+async def test_large_panel_shards_through_super(monkeypatch, pool):
+    from panel import synthesize as S
+
+    shard_sizes = []
+
+    async def fake_digest_shard(shard, sem):
+        shard_sizes.append(len(shard))
+        return S._ShardDigest(
+            confusions=[
+                S._DigestTheme(
+                    theme="price is unclear",
+                    persona_ids=[r.persona_id for r in shard[:3]],
+                )
+            ],
+            objections=[],
+            requested_changes=[],
+            quotes=['p001: "What does it cost?"'],
+        )
+
+    captured = {}
+
+    async def fake_call(system, user):
+        captured["user"] = user
+        return _synthesis_fixture()
+
+    monkeypatch.setattr(S, "_digest_shard", fake_digest_shard)
+    monkeypatch.setattr(S, "_synthesis_call", fake_call)
+
+    reactions = [_reaction(i) for i in range(1, 251)]
+    await S.synthesize("some artifact text", list(pool.values()), reactions)
+
+    assert shard_sizes == [50, 50, 50, 50, 50]
+    assert "digested by a first-pass model in 5 batches" in captured["user"]
+    assert "covering 250 of the 250 reactions" in captured["user"]
+    # The raw reactions must NOT also be in the prompt -- that's the whole
+    # point of digesting them.
+    assert '"gut_reaction": "Hm."' not in captured["user"]
+    assert "price is unclear [e.g. p001," in captured["user"]
+
+
+@pytest.mark.asyncio
+async def test_one_failed_shard_does_not_lose_the_run(monkeypatch, pool):
+    """Every Nano call has already been paid for by the time digesting
+    starts, so a dropped shard degrades the counts rather than raising."""
+    from panel import synthesize as S
+
+    calls = {"n": 0}
+
+    async def flaky_digest_shard(shard, sem):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            return None
+        return S._ShardDigest(
+            confusions=[S._DigestTheme(theme="t", persona_ids=[shard[0].persona_id])],
+            objections=[],
+            requested_changes=[],
+            quotes=["p001: x"],
+        )
+
+    captured = {}
+
+    async def fake_call(system, user):
+        captured["user"] = user
+        return _synthesis_fixture()
+
+    monkeypatch.setattr(S, "_digest_shard", flaky_digest_shard)
+    monkeypatch.setattr(S, "_synthesis_call", fake_call)
+
+    reactions = [_reaction(i) for i in range(1, 301)]
+    await S.synthesize("t", list(pool.values()), reactions)
+    assert "in 5 batches covering 250 of the 300 reactions" in captured["user"]
+
+
+@pytest.mark.asyncio
+async def test_all_shards_failing_raises(monkeypatch, pool):
+    from panel import synthesize as S
+    from panel.tf_client import ChatJsonError
+
+    async def always_none(shard, sem):
+        return None
+
+    monkeypatch.setattr(S, "_digest_shard", always_none)
+    with pytest.raises(ChatJsonError):
+        await S.synthesize("t", list(pool.values()), [_reaction(i) for i in range(1, 201)])
+
+
+def _synthesis_fixture():
+    return Synthesis(
+        headline="30% of low-tech readers bounced.",
+        findings=[
+            Finding(
+                claim=f"claim {i}",
+                affected_pct=30,
+                affected_segment="low tech comfort",
+                affected_segment_filter=[SegmentClause(field="tech_comfort", op="<=", value=33)],
+                evidence=["p001", "p002", "p003"],
+                severity="high",
+            )
+            for i in range(3)
+        ],
+        highest_leverage_edit=HighestLeverageEdit(
+            current_text="some artifact",
+            proposed_text="a clearer artifact",
+            rationale="clarity",
+            predicted_flips=5,
+        ),
+        who_you_are_losing="low tech comfort readers",
+        who_you_are_winning="nobody yet",
+    )
+
+
+def test_persona_csv_quotes_commas_in_free_text():
+    """occupation is free text written by Super, so a comma in it must not
+    shift every later column of that row."""
+    from panel.schemas import Persona
+
+    p = Persona(
+        id="p001",
+        age=40,
+        region="West US",
+        income_band="40-75k",
+        tech_comfort=50,
+        skepticism=50,
+        **{**BASE_PERSONA, "occupation": "Chef, line"},
+    )
+    rows = build_persona_summary_csv([p]).splitlines()
+    assert rows[1] == 'p001,40,35-49,West US,40-75k,50,50,"Chef, line"'
+    # And it round-trips as 7 fields, which is what Ultra has to read.
+    import csv
+    import io
+
+    parsed = list(csv.reader(io.StringIO(build_persona_summary_csv([p]))))
+    assert len(parsed[0]) == len(parsed[1]) == 8
+
+
+# --- Invalid enum values in a segment filter (found live, 2026-10-28) -------
+
+
+def test_unknown_clause_values_flags_invented_age_bands():
+    from panel.synthesize import unknown_clause_values
+
+    bad = [SegmentClause(field="age_band", op="in", value=["50-59", "70+"])]
+    assert sorted(unknown_clause_values(bad)) == ["50-59", "70+"]
+
+    good = [SegmentClause(field="age_band", op="in", value=["50-64", "65+"])]
+    assert unknown_clause_values(good) == []
+
+
+def test_unknown_clause_values_checks_region_and_income_too():
+    from panel.synthesize import unknown_clause_values
+
+    assert unknown_clause_values([SegmentClause(field="region", op="==", value="Mars")]) == ["Mars"]
+    assert unknown_clause_values([SegmentClause(field="region", op="==", value="West US")]) == []
+    assert unknown_clause_values([SegmentClause(field="income_band", op="==", value="$$$")]) == ["$$$"]
+    assert unknown_clause_values([SegmentClause(field="income_band", op="==", value="40-75k")]) == []
+
+
+def test_unknown_clause_values_ignores_numeric_fields():
+    """Numeric clauses are thresholds, not enum members -- any value is
+    legal and the recount handles it."""
+    from panel.synthesize import unknown_clause_values
+
+    assert unknown_clause_values([SegmentClause(field="skepticism", op=">=", value=70)]) == []
+    assert unknown_clause_values([SegmentClause(field="openness", op="<", value=1)]) == []
+
+
+def test_recount_is_skipped_rather_than_zeroing_a_bogus_filter(pool):
+    """The live failure: Ultra said 'users aged 50 and older' with a filter
+    of ['50-59', '70+']. Those bands match nobody, so the recount was 0 and
+    overwrote a real number with a confidently wrong one."""
+    synth = make_synthesis(["p001", "p002", "p003"], affected_pct=40, headline="40% of over-50s balk")
+    bogus = [SegmentClause(field="age_band", op="in", value=["50-59", "70+"])]
+    synth = synth.model_copy(
+        update={
+            "findings": [
+                f.model_copy(update={"affected_segment_filter": bogus}) for f in synth.findings
+            ]
+        }
+    )
+    out = _apply_recounted_pct(synth, pool)
+    assert all(f.affected_pct == 40 for f in out.findings)
+    assert "40%" in out.headline
+
+
+def test_persona_csv_includes_the_age_band(pool):
+    """Ultra never saw a legal band name before this -- only raw ages."""
+    rows = build_persona_summary_csv(list(pool.values())).splitlines()
+    assert rows[0].split(",")[2] == "age_band"
+    bands = {r.split(",")[2] for r in rows[1:]}
+    from panel.personas import AGE_BANDS
+
+    assert bands <= set(AGE_BANDS)
+
+
+@pytest.mark.asyncio
+async def test_an_empty_digest_is_dropped_not_counted_as_coverage(monkeypatch, pool):
+    """The coverage claim is the only thing telling Ultra how much of the
+    panel it is reasoning about, so a digest with nothing usable in it must
+    not inflate that number."""
+    from panel import synthesize as S
+
+    calls = {"n": 0}
+
+    async def digest(shard, sem):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # Every id invented, so _clean_digest strips the whole thing.
+            return S._ShardDigest(
+                confusions=[S._DigestTheme(theme="ghost", persona_ids=["p9999"])],
+                objections=[],
+                requested_changes=[],
+                quotes=[],
+            )
+        return S._ShardDigest(
+            confusions=[S._DigestTheme(theme="real", persona_ids=[shard[0].persona_id])],
+            objections=[],
+            requested_changes=[],
+            quotes=[],
+        )
+
+    captured = {}
+
+    async def fake_call(system, user):
+        captured["user"] = user
+        return _synthesis_fixture()
+
+    monkeypatch.setattr(S, "_digest_shard", digest)
+    monkeypatch.setattr(S, "_synthesis_call", fake_call)
+
+    # 200 reactions at SHARD_SIZE 50 = 4 shards, the first one unusable.
+    await S.synthesize("t", list(pool.values()), [_reaction(i) for i in range(1, 201)])
+    assert "in 3 batches covering 150 of the 200 reactions" in captured["user"]
+    assert "ghost" not in captured["user"]
+
+
+def test_reactions_for_digest_sends_only_what_a_summary_can_use():
+    """Not the full Reaction JSON: that repeats ten field names per record
+    and ships run_id/latency_ms/raw_error to a model being asked what
+    people said."""
+    import json as _json
+
+    from panel.synthesize import _reactions_for_digest
+
+    r = _reaction(42).model_copy(
+        update={"run_id": "r_20261028_abcd", "latency_ms": 6005, "sentiment": -1}
+    )
+    line = _reactions_for_digest([r])
+    assert line.startswith("p042 | gut:")
+    assert r.top_confusion in line and r.what_would_change_my_mind in line
+    for noise in ("run_id", "r_20261028_abcd", "6005", "latency"):
+        assert noise not in line, noise
+    # And it is materially smaller than the JSON it replaced.
+    assert len(line) < len(_json.dumps([r.model_dump(mode="json")]))
+
+
+@pytest.mark.asyncio
+async def test_failed_reactions_are_kept_out_of_the_digest(monkeypatch, pool):
+    """A "(no response)" placeholder is an error marker, not an opinion --
+    letting it through would have Super inventing a theme out of it."""
+    from panel import synthesize as S
+
+    seen = {}
+
+    async def fake_chat_json(**kwargs):
+        seen["user"] = kwargs["user"]
+        raise S.ChatJsonError("stop here", 0)
+
+    monkeypatch.setattr(S, "chat_json", fake_chat_json)
+    good = _reaction(1)
+    broken = _reaction(2).model_copy(
+        update={
+            "gut_reaction": "(no response)",
+            "top_confusion": "(no response)",
+            "top_objection": "(no response)",
+            "what_would_change_my_mind": "(no response)",
+            "raw_error": "APIConnectionError: boom",
+        }
+    )
+    import asyncio
+
+    await S._digest_shard([good, broken], asyncio.Semaphore(1))
+    assert "p001" in seen["user"]
+    assert "p002" not in seen["user"]
+    assert "(no response)" not in seen["user"]
+    # The count it is told must match what it was actually given.
+    assert "These are 1 people's first reactions" in seen["user"]
+
+
+@pytest.mark.asyncio
+async def test_a_shard_of_only_failed_reactions_is_skipped(monkeypatch, pool):
+    from panel import synthesize as S
+
+    async def boom(**kwargs):
+        raise AssertionError("should not call the model with nothing to summarize")
+
+    monkeypatch.setattr(S, "chat_json", boom)
+    broken = _reaction(2).model_copy(update={"raw_error": "APIConnectionError: boom"})
+    import asyncio
+
+    assert await S._digest_shard([broken], asyncio.Semaphore(1)) is None

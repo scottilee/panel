@@ -4,9 +4,16 @@
 // it -- together they replace the single findings-card-grid this synthesis
 // data used to render through.
 
-export default function Verdict({ synthesis, runLabel, wouldActPct, onApplyAndCompare, applyDisabled }) {
+export default function Verdict({ synthesis, runLabel, wouldActPct, total, onApplyAndCompare, applyDisabled }) {
   if (!synthesis) return null
   const edit = synthesis.highest_leverage_edit
+  // Count, not percentage: this used to render the percentage against a
+  // hardcoded "of 100", which was only ever right at N=100 -- at N=250 it
+  // claimed "96 of 100" for 240 people, and at N=1000 it understated by
+  // an order of magnitude. `total` is the number of reactions currently
+  // in view (segment filters included), so the two halves of the sentence
+  // always come from the same denominator.
+  const unconvinced = Math.round((total * (100 - wouldActPct)) / 100)
 
   return (
     <section aria-label="Verdict" className="verdict-card">
@@ -15,17 +22,17 @@ export default function Verdict({ synthesis, runLabel, wouldActPct, onApplyAndCo
           <span className="verdict-eyebrow">THE VERDICT &middot; {runLabel}</span>
           <h1 className="verdict-headline">{synthesis.headline}</h1>
         </div>
-        {/* The headline number is the share NOT convinced, not the share
+        {/* The headline number is the count NOT convinced, not the share
             who would act. Same data either way, but "4% would act" reads
             as the product failing, while "96 of 100 aren't convinced"
             reads as the finding -- which is what this tool actually
-            delivers. Real runs land at 92-100 unconvinced by design (see
+            delivers. Real runs land at 92-100% unconvinced by design (see
             the anti-sycophancy check), so framing it as the diagnosis is
             both more useful and more honest than framing it as a
             conversion rate. */}
         <div className="verdict-bigact">
-          <span className="verdict-bigact-value">{Math.round(100 - wouldActPct)}</span>
-          <span className="verdict-bigact-label">of 100 aren&rsquo;t convinced</span>
+          <span className="verdict-bigact-value">{unconvinced}</span>
+          <span className="verdict-bigact-label">of {total} aren&rsquo;t convinced</span>
         </div>
       </div>
 

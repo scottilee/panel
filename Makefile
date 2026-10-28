@@ -11,7 +11,7 @@ REGION  ?= us-central1
 SERVICE ?= panel
 IMAGE   = $(REGION)-docker.pkg.dev/$(PROJECT)/$(SERVICE)/$(SERVICE):latest
 
-.PHONY: check test build run-local bootstrap push deploy url destroy
+.PHONY: test build run-local bootstrap push deploy url destroy
 
 ## Run the test suite (no API calls, no credits)
 test:
@@ -21,9 +21,15 @@ test:
 build:
 	docker build -t $(SERVICE):local .
 
-## Run the container locally on :8081 (needs TF_API_KEY in your env)
+## Run the container locally on :8081 (reads TF_API_KEY from .env)
+## --env-file, not -e TF_API_KEY=$(TF_API_KEY), and @-prefixed: make echoes
+## every recipe line it runs, so the old form printed the real key into
+## terminal scrollback and any CI log, and left it visible in `ps` for the
+## container's lifetime. Passing the file means the value never appears on
+## a command line.
 run-local: build
-	docker run --rm -p 8081:8080 -e PORT=8080 -e TF_API_KEY=$(TF_API_KEY) $(SERVICE):local
+	@test -f .env || (echo ".env not found -- it must contain TF_API_KEY" && exit 1)
+	@docker run --rm -p 8081:8080 -e PORT=8080 --env-file .env $(SERVICE):local
 
 ## One-time: create the Artifact Registry repo and enable APIs, so `push` has
 ## somewhere to push to. Safe to re-run.

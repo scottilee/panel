@@ -1,8 +1,9 @@
 """Prompt string constants. See build spec section 4.
 
-4.1 (persona generation) and 4.2 (reaction) are implemented here, needed by
-stage 4's anti-sycophancy check. 4.3 (synthesis) and 4.4 (compare summary)
-are stage 6, left as stubs.
+All four of section 4's prompts live here: 4.1 (persona generation), 4.2
+(reaction), 4.3 (synthesis) and 4.4 (compare summary). The shard-digest
+prompt for panels above 150 personas is not one of section 4's four, so it
+sits in synthesize.py next to the only code that uses it.
 
 Note: section 4 says this file lives at panel/prompts.py, but section 2's
 tree listing omits it — flagging that spec gap rather than silently
@@ -75,11 +76,45 @@ Rules:
 """
 
 
-def persona_generation_user(slice_description: str) -> str:
-    return PERSONA_GENERATION_USER_TEMPLATE.format(
+def persona_generation_user(
+    slice_description: str,
+    avoid_names: list[str] | None = None,
+    avoid_occupations: list[str] | None = None,
+) -> str:
+    """avoid_names / avoid_occupations: everything already used by earlier
+    batches. Each batch is otherwise generated blind to the other 990 at
+    n=1000, so Super's heavy mode collapse on names and jobs ("barista"
+    came up 5 times in just 100) produced collisions that then had to be
+    repaired one persona at a time. Telling it what's taken prevents them
+    instead.
+    """
+    prompt = PERSONA_GENERATION_USER_TEMPLATE.format(
         slice_description=slice_description,
         persona_schema_json=PERSONA_SCHEMA_JSON,
     )
+    if avoid_names:
+        prompt += (
+            "\nThese full names are already taken by other personas. Do not reuse any "
+            "of them, and do not reuse their first names either:\n"
+            + ", ".join(sorted(avoid_names))
+            + "\n"
+        )
+    if avoid_occupations:
+        # No example jobs here on purpose. An earlier version named three
+        # ("a dialysis technician, a crane operator, a school bus
+        # dispatcher") and Super used all three verbatim in the very next
+        # batch -- across 90 batches that would have replaced one kind of
+        # mode collapse with another, authored by this prompt.
+        prompt += (
+            "\nThese occupations are already used. Do not reuse them, and do not "
+            "reach for the usual stock jobs (barista, graphic designer, software "
+            "engineer, nurse, teacher). Pick ordinary, specific work that fits each "
+            "person's region and income band -- the kind of job that rarely shows up "
+            "in a marketing deck but employs a lot of people:\n"
+            + ", ".join(sorted(avoid_occupations))
+            + "\n"
+        )
+    return prompt
 
 
 REACTION_SYSTEM = (
@@ -121,14 +156,17 @@ def reaction_user(persona_json: str, artifact_text: str) -> str:
     )
 
 
-# --- Stage 6 ----------------------------------------------------------------
+# --- Synthesis and compare (sections 4.3 and 4.4) ---------------------------
 
+# "a reaction study", not "a 100-person reaction study": the panel is any
+# size from 10 to 1,000, and the real count is in the aggregate stats the
+# user prompt supplies. Naming a fixed 100 here had Ultra writing up
+# hundred-person language for a 400-person run.
 SYNTHESIS_SYSTEM = (
-    "You are a senior qualitative researcher writing up a 100-person "
-    "reaction study for a founder who has ten minutes. Be specific, "
-    "quantitative, and blunt. Every claim must cite persona IDs as "
-    "evidence. Output only a JSON object matching the schema, no prose, "
-    "no code fences."
+    "You are a senior qualitative researcher writing up a reaction study "
+    "for a founder who has ten minutes. Be specific, quantitative, and "
+    "blunt. Every claim must cite persona IDs as evidence. Output only a "
+    "JSON object matching the schema, no prose, no code fences."
 )
 
 SYNTHESIS_USER_TEMPLATE = """The artifact tested:
@@ -136,10 +174,10 @@ SYNTHESIS_USER_TEMPLATE = """The artifact tested:
 {artifact_text}
 ---
 
-The personas (id, age, region, income_band, tech_comfort, skepticism, occupation):
+The personas (id, age, age_band, region, income_band, tech_comfort, skepticism, occupation):
 {persona_summary_csv}
 
-Their reactions:
+{reactions_label}
 {reactions_json}
 
 Aggregate stats: mean sentiment {mean_sentiment:.3f}, {would_act_pct:.1f}% would act, sentiment by region {by_region}, by tech_comfort {by_tech_comfort}, by skepticism {by_skepticism}.
@@ -149,7 +187,7 @@ Produce the schema:
 
 Rules:
 - headline: one sentence with a number and a segment, the single most important thing.
-- findings: exactly 3, ordered by severity. affected_pct is computed from the reactions, not estimated. affected_segment names the segment in plain words. affected_segment_filter is the same segment as a structured, machine-checkable filter: a list of {{"field": one of "region"/"age_band"/"income_band"/"tech_comfort"/"skepticism", "op": one of "=="/"!="/"<="/">="/"<"/">"/"in", "value": a matching literal or, for "in", a list of literals}} clauses, ANDed together -- this must exactly match affected_segment, since it is what gets recounted to check affected_pct. evidence lists 3 to 5 bare persona ID strings whose top_confusion or top_objection directly supports the claim -- exactly like ["p042", "p017", "p088"], ID only. Do NOT append the quote, a colon, a name, or any explanation to an ID: "p042: \\"it doesn't say the price\\"" is wrong, "p042" is right. tech_comfort and skepticism are on a 1-100 scale (not 1-5) -- pick thresholds that actually split the real distribution you're given, not a guess like ">= 4".
+- findings: exactly 3, ordered by severity. affected_pct is computed from the reactions, not estimated. affected_segment names the segment in plain words. affected_segment_filter is the same segment as a structured, machine-checkable filter: a list of {{"field": one of "region"/"age_band"/"income_band"/"tech_comfort"/"skepticism", "op": one of "=="/"!="/"<="/">="/"<"/">"/"in", "value": a matching literal or, for "in", a list of literals}} clauses, ANDed together -- this must exactly match affected_segment, since it is what gets recounted to check affected_pct. For region, age_band and income_band the value MUST be copied character-for-character from the table above; the only legal age_band values are "18-24", "25-34", "35-49", "50-64" and "65+", so "users 50 and older" is {{"field": "age_band", "op": "in", "value": ["50-64", "65+"]}} -- a band you invent ("50-59", "70+") matches nobody and the finding is recounted to 0%. evidence lists 3 to 5 bare persona ID strings whose top_confusion or top_objection directly supports the claim -- exactly like ["p042", "p017", "p088"], ID only. Do NOT append the quote, a colon, a name, or any explanation to an ID: "p042: \\"it doesn't say the price\\"" is wrong, "p042" is right. tech_comfort and skepticism are on a 1-100 scale (not 1-5) -- pick thresholds that actually split the real distribution you're given, not a guess like ">= 4".
 - highest_leverage_edit: current_text must be a short phrase or single sentence quoted verbatim from the artifact (a few words to one sentence, never a full paragraph) so it can be applied as one exact find-and-replace -- "$29" or "No refunds after 7 days", not a block of text. proposed_text must be a drop-in replacement for exactly that phrase, not advice. predicted_flips is your count of personas whose what_would_change_my_mind this edit satisfies.
 - who_you_are_losing / who_you_are_winning: one sentence each, segment-level, no persona names.
 - Never praise the artifact. If reactions are mostly positive, the findings are about the remaining objections and the segment that is still cold.
@@ -165,11 +203,18 @@ def synthesis_user(
     by_region: str,
     by_tech_comfort: str,
     by_skepticism: str,
+    reactions_label: str = "Their reactions:",
 ) -> str:
+    """reactions_label exists because above a few hundred personas the raw
+    reactions no longer fit in one prompt and synthesize() sends Super-written
+    digests of them instead (see SHARD_THRESHOLD). Ultra has to be told which
+    of the two it's looking at, or it reports digest theme counts as if they
+    were individual reactions."""
     return SYNTHESIS_USER_TEMPLATE.format(
         artifact_text=artifact_text,
         persona_summary_csv=persona_summary_csv,
         reactions_json=reactions_json,
+        reactions_label=reactions_label,
         mean_sentiment=mean_sentiment,
         would_act_pct=would_act_pct,
         by_region=by_region,
@@ -178,8 +223,6 @@ def synthesis_user(
         synthesis_schema_json=SYNTHESIS_SCHEMA_JSON,
     )
 
-
-COMPARE_SUMMARY_SYSTEM = "One sentence. No preamble. Output plain text."
 
 COMPARE_SUMMARY_USER_TEMPLATE = """Artifact A and B differ as follows:
 {unified_diff}

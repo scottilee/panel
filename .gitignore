@@ -12,7 +12,12 @@ data/runs/*.json
 
 # Terraform
 infra/.terraform/
-infra/.terraform.lock.hcl
+# NOT infra/.terraform.lock.hcl -- that one is meant to be committed. It
+# pins the exact provider build (hashicorp/google 6.50.0, validated
+# 2026-10-28) the same way requirements.txt pins the Python side, so a
+# deploy weeks later resolves the provider it was tested against rather
+# than whatever "~> 6.0" means by then.
 infra/*.tfstate
 infra/*.tfstate.*
 infra/terraform.tfvars
+data/personas.partial.json

@@ -37,7 +37,26 @@ resource "google_artifact_registry_repository" "panel" {
 }
 
 # The Token Factory key goes in Secret Manager rather than a plain env var
-# so it never lands in Terraform state or the service's revision config.
+# so it never lands in the service's revision config, where it would be
+# readable by anyone with Cloud Run viewer access and visible in the
+# console's revision details.
+#
+# It DOES land in Terraform state, and an earlier version of this comment
+# wrongly claimed otherwise. Terraform records every attribute of every
+# resource it manages, and `sensitive = true` only suppresses CLI output
+# -- so secret_data below is stored verbatim in infra/terraform.tfstate.
+# That file is gitignored, but it is a plaintext secret on disk and should
+# be treated as one (back it up like a key, not like config).
+#
+# To keep it out of state entirely, create the version out of band and
+# stop managing it here:
+#
+#   printf '%s' "$TF_API_KEY" | gcloud secrets versions add panel-tf-api-key --data-file=-
+#
+# then delete the google_secret_manager_secret_version resource below and
+# point the service's secret_key_ref at version "latest". Left as-is
+# because one-command setup and teardown was the explicit goal, and the
+# tradeoff is worth stating rather than hiding.
 resource "google_secret_manager_secret" "tf_api_key" {
   secret_id = "${var.service_name}-tf-api-key"
   replication {
@@ -120,15 +139,44 @@ resource "google_cloud_run_v2_service" "panel" {
         value = tostring(var.max_concurrency)
       }
 
+      # Spend limits. This service is invokable by allUsers (judges need a
+      # link, not credentials) and every run spends real Token Factory
+      # credits, so these bound what one caller can do. Set here rather
+      # than left to the code defaults so the ceiling is visible in the
+      # infrastructure, where someone deciding how much to risk will look.
+      env {
+        name  = "MAX_PERSONA_COUNT"
+        value = tostring(var.max_persona_count)
+      }
+
+      env {
+        name  = "MAX_CONCURRENT_RUNS"
+        value = tostring(var.max_concurrent_runs)
+      }
+
+      env {
+        name  = "RATE_LIMIT_RUNS"
+        value = tostring(var.rate_limit_runs)
+      }
+
       ports {
         container_port = 8080
       }
     }
 
-    # A full run is ~40-90s of streaming (100 Nano calls, then one Ultra
-    # call) on a single long-lived SSE connection, so the default 5-minute
-    # request timeout is cut close on a slow synthesis.
-    timeout = "900s"
+    # One long-lived SSE connection per run, held open for the whole run:
+    # ~40-90s at the default 100 personas (100 Nano calls, then one Ultra
+    # call), and ~10 minutes at the 1,000-persona maximum (1,000 Nano
+    # calls, then 20 Super digest calls in two waves, then Ultra). The
+    # default 5-minute request timeout would cut the large end off
+    # mid-stream.
+    #
+    # 1800s rather than 900s: 900 left only ~4 minutes of headroom over a
+    # full-size run, and the digest stage's per-call latency is the part
+    # of that estimate with the least measurement behind it. A timeout
+    # costs nothing until it fires, and when it fires here it discards a
+    # run whose every model call has already been paid for.
+    timeout = "1800s"
   }
 
   depends_on = [

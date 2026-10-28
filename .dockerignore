@@ -9,3 +9,5 @@ data/runs
 .env
 infra/.terraform
 infra/*.tfstate*
+infra/terraform.tfvars
+data/personas.partial.json

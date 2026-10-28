@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
+import csv
+import io
 import json
 import re
 from collections import defaultdict
 
-from panel.personas import age_band_for
-from panel.prompts import SYNTHESIS_SYSTEM, synthesis_user
-from panel.schemas import Persona, Reaction, SegmentClause, Synthesis
-from panel.tf_client import ChatJsonTruncatedError, chat_json, env
+from typing import get_args
 
-MODEL_ULTRA = env("MODEL_ULTRA", "nvidia/Nemotron-3-Ultra-550b-a55b")
+from pydantic import BaseModel, Field
+
+from panel.config import MODEL_NANO, MODEL_ULTRA
+from panel.personas import AGE_BANDS, age_band_for
+from panel.prompts import SYNTHESIS_SYSTEM, synthesis_user
+from panel.schemas import INCOME_BANDS, Persona, REGIONS, Reaction, SegmentClause, Synthesis
+from panel.tf_client import ChatJsonError, ChatJsonTruncatedError, chat_json
 
 
 def apply_edit(artifact_text: str, current_text: str, proposed_text: str) -> str | None:
@@ -136,6 +142,37 @@ def recount_affected_pct(personas_by_id: dict[str, Persona], clauses: list[Segme
     return 100 * matched / len(personas_by_id)
 
 
+# The legal values for the three enumerated segment fields, derived from
+# the schema Literals rather than retyped, so they cannot drift from it.
+_ENUM_SEGMENT_VALUES: dict[str, set[str]] = {
+    "region": set(get_args(REGIONS)),
+    "income_band": set(get_args(INCOME_BANDS)),
+    "age_band": set(AGE_BANDS),
+}
+
+
+def unknown_clause_values(clauses: list[SegmentClause]) -> list[str]:
+    """Values in enum-field clauses that match no real persona attribute.
+
+    SegmentClause.value is typed `str | int | list[...]` -- wide enough to
+    cover numeric and string fields both -- so a band name Ultra invents
+    validates fine and then matches nobody. Observed live (2026-10-28,
+    N=10): {"field": "age_band", "op": "in", "value": ["50-59", "70+"]}
+    for a finding whose own prose said "users aged 50 and older". The real
+    bands are 50-64 and 65+, so the recount found 0 personas and
+    _apply_recounted_pct overwrote a true 40% with 0% -- a confidently
+    wrong number, which is worse than the estimate it replaced.
+    """
+    unknown: list[str] = []
+    for clause in clauses:
+        legal = _ENUM_SEGMENT_VALUES.get(clause.field)
+        if legal is None:
+            continue
+        values = clause.value if isinstance(clause.value, list) else [clause.value]
+        unknown.extend(str(v) for v in values if str(v) not in legal)
+    return unknown
+
+
 def _mean(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
@@ -162,14 +199,50 @@ def _by_segment(personas_by_id: dict[str, Persona], reactions: list[Reaction], k
 
 
 def build_persona_summary_csv(personas: list[Persona]) -> str:
-    """Compact CSV, not the full persona JSON, to keep the prompt under
-    ~40k tokens for 100 personas (section 4.3)."""
-    header = "id,age,region,income_band,tech_comfort,skepticism,occupation"
-    rows = [
-        f"{p.id},{p.age},{p.region},{p.income_band},{p.tech_comfort},{p.skepticism},{p.occupation}"
-        for p in personas
-    ]
-    return "\n".join([header, *rows])
+    """Compact CSV, not the full persona JSON, to keep the prompt small:
+    ~70 bytes a persona against ~400 tokens for a full Persona JSON
+    (section 4.3). Emitted in full at every N -- 1,000 rows is ~18k
+    tokens, which is still the cheap half of the synthesis prompt.
+
+    Written with csv.writer rather than an f-string join because
+    `occupation` is free text from Super: a single comma in it ("Chef, line"
+    did appear) shifted every later column of that row, silently handing
+    Ultra a persona table where ages and regions no longer lined up with
+    their headers.
+    """
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    # age_band is included alongside age even though it's derived from it.
+    # Without it Ultra had never seen a legal band name -- only raw ages --
+    # and invented its own ("50-59", "70+"), which matched no persona, so
+    # the recount below replaced a real 40% with 0%. Showing the band is
+    # cheaper and more reliable than asking it to bucket ages itself.
+    writer.writerow(
+        [
+            "id",
+            "age",
+            "age_band",
+            "region",
+            "income_band",
+            "tech_comfort",
+            "skepticism",
+            "occupation",
+        ]
+    )
+    for p in personas:
+        writer.writerow(
+            [
+                p.id,
+                p.age,
+                age_band_for(p.age),
+                p.region,
+                p.income_band,
+                p.tech_comfort,
+                p.skepticism,
+                p.occupation,
+            ]
+        )
+    return buf.getvalue().rstrip("\n")
 
 
 _EVIDENCE_ID_RE = re.compile(r"\bp\d{3,}\b")
@@ -231,6 +304,19 @@ def _apply_recounted_pct(synthesis: Synthesis, personas_by_id: dict[str, Persona
     new_findings = []
     headline = synthesis.headline
     for finding in synthesis.findings:
+        # A filter citing a band/region/income value that doesn't exist
+        # cannot be recounted -- it would match zero personas for a reason
+        # that has nothing to do with the data. Keep Ultra's own estimate
+        # in that case: an unverified number beats a verified-wrong one.
+        unknown = unknown_clause_values(finding.affected_segment_filter)
+        if unknown:
+            print(
+                f"synthesize: keeping Ultra's affected_pct {finding.affected_pct} for segment "
+                f"{finding.affected_segment!r} -- its filter cites value(s) that match no "
+                f"persona attribute: {unknown}"
+            )
+            new_findings.append(finding)
+            continue
         recount = round(recount_affected_pct(personas_by_id, finding.affected_segment_filter))
         if abs(recount - finding.affected_pct) > AFFECTED_PCT_TOLERANCE:
             print(
@@ -248,6 +334,267 @@ def _apply_recounted_pct(synthesis: Synthesis, personas_by_id: dict[str, Persona
     return synthesis.model_copy(update={"findings": new_findings, "headline": headline})
 
 
+# --- Sharded digest stage (large panels) ------------------------------------
+#
+# One Reaction serializes to roughly 400 tokens, so the single-call prompt
+# in section 4.3 is ~40k tokens at 100 personas -- fine -- and ~400k at
+# 1000, which is both past Ultra's usable context and the most expensive
+# way imaginable to ask one question. Above SHARD_THRESHOLD the reactions
+# are condensed into themes in batches first, and Ultra reads those.
+#
+# Condensed by NANO, not Super, which is not where this started. Super is
+# the mid tier and "summarize a batch" looks like a mid-tier job, so it
+# got the work first. Raced head to head on the same real 50-reaction
+# shard (2026-10-28):
+#
+#   Nano   83s, 10 themes, 5 quotes
+#   Super  157s, 13 themes, 0 quotes  (dropped a required field)
+#
+# Twice the wall-clock for a worse answer, and in a live N=200 run Super
+# exhausted the entire truncation ladder (12000 -> 24000 -> 48000) on some
+# shards. Super keeps the job it is genuinely needed for -- writing the
+# persona pool offline, where quality compounds into every future run --
+# and the per-batch condensing goes to the cheap tier that measurably does
+# it better.
+#
+# Below the threshold nothing changes at all -- the 100-persona demo path
+# is byte-for-byte the prompt it has always been.
+
+SHARD_THRESHOLD = 150
+# 50, not the 100 this started at, with the concurrency raised to match so
+# the smaller shards cost no extra wall-clock. The real fix for the
+# failures described above _DIGEST_USER_TEMPLATE was simplifying the task,
+# not shrinking the batch -- but a shorter batch is less to get through
+# whatever reasoning the model does do, and at 20 shards for a full 1,000
+# panel they still run in two waves.
+SHARD_SIZE = 50
+SHARD_CONCURRENCY = 10
+# 24000. Measured, not guessed, and larger than it looks like it should
+# be: the prompt for a 50-reaction shard is only ~5k tokens and the output
+# well under 2k, yet Nano truncated with *zero* content at 8000 and
+# succeeded at 16000. (Super, before it lost this job, truncated at 8000,
+# 12000 and 24000 alike.)
+#
+# This is the third time on this project that a budget which looked
+# generous against prompt-plus-output was far too small against reasoning
+# (reactions 400 -> 3000, persona batches 8000 -> 16000, digests 8000 ->
+# 24000). Size Nemotron budgets from measured truncation, never from how
+# big the visible text is: max_tokens is a ceiling, not a charge, so
+# erring high costs nothing and erring low costs ~2.3x in silent retry.
+DIGEST_MAX_TOKENS = 24000
+
+# Example ids per theme. Enforced in the schema AND stated in the prompt
+# from this one constant, so the two cannot drift: the cap is what keeps
+# the task cheap (find a few instances, not classify all N), and a model
+# that ignores it fails validation and gets chat_json's repair retry with
+# the reason, rather than quietly grinding through the whole shard.
+DIGEST_EXAMPLES_PER_THEME = 5
+DIGEST_THEMES_PER_CATEGORY = 6
+
+
+class _DigestTheme(BaseModel):
+    """One recurring theme, with a few people who expressed it as examples.
+
+    Note what is NOT here: a count, and an exhaustive membership list.
+    Both were tried and both were too expensive -- see
+    _DIGEST_USER_TEMPLATE. `persona_ids` is explicitly a handful of
+    examples for Ultra to cite from, never a tally, and nothing downstream
+    treats its length as a quantity.
+    """
+
+    theme: str
+    persona_ids: list[str] = Field(max_length=DIGEST_EXAMPLES_PER_THEME)
+
+
+class _ShardDigest(BaseModel):
+    confusions: list[_DigestTheme]
+    objections: list[_DigestTheme]
+    requested_changes: list[_DigestTheme]
+    quotes: list[str]
+
+
+_DIGEST_SYSTEM = (
+    "You group a batch of first-reaction responses by what they say, for a "
+    "senior researcher who will write the final report. Never merge two "
+    "genuinely different complaints into one theme. Output only a JSON "
+    "object matching the schema, no prose, no code fences."
+)
+
+# Deliberately asks for themes and a handful of examples -- never for a
+# count, an ordering, or an exhaustive membership list. Two measured
+# failures got it here, on real N=200 runs:
+#
+# 1. Asking for `count` per theme ("count, do not estimate"), plus "most
+#    common first" and "at most 8 each", both of which also require
+#    counting and then sorting: Super spent 32000 completion tokens --
+#    every rung of chat_json's retry ladder -- and emitted zero content,
+#    losing half the panel's data.
+# 2. Dropping the count but asking for *every* id under each theme: no
+#    truncation, but the digest stage still ran for minutes, because
+#    exhaustively classifying 50 reactions into 3 categories is the same
+#    long serial task wearing a different hat.
+#
+# So the model is asked only for what it is actually good at -- "what did
+# these people say" -- bounded to a handful of examples. Every number in
+# the final report comes from Ultra's affected_segment_filter being
+# recounted over the real personas in Python (see _apply_recounted_pct),
+# which is where the project's numbers have come from all along.
+_DIGEST_USER_TEMPLATE = """These are {n} people's first reactions to the same piece of text, one per line.
+
+{reactions_text}
+
+Summarize them into this schema:
+{schema}
+
+Rules:
+- confusions: the distinct things people did not understand. objections: the distinct things that would stop them. requested_changes: the distinct changes they asked for. Give at most {max_themes} of each, as short phrases in plain words. Only include something more than one person raised.
+- persona_ids: for each theme, 2 to {max_examples} ids from the reactions above as examples, exactly as given (e.g. "p042"). Examples only -- do not try to list everyone, do not count, and do not order the themes.
+- quotes: 3 to 6 verbatim gut_reaction strings that best capture the range of this batch, each prefixed with its persona id and a colon.
+- Do not editorialize, recommend, or evaluate the text. You are summarizing what these people said.
+"""
+
+
+def _reactions_for_digest(reactions: list[Reaction]) -> str:
+    """One line per reaction, carrying only the five fields a thematic
+    summary can use.
+
+    Not the full Reaction JSON, which is what this sent at first: that
+    repeats ten field names per record and ships run_id, latency_ms and
+    raw_error to a model being asked what people said. 37% fewer input
+    tokens for strictly less irrelevant material to wade through.
+    (Measuring this is also what showed the input was never the problem
+    here -- see DIGEST_MAX_TOKENS.)
+    """
+    return "\n".join(
+        f"{r.persona_id} | gut: {r.gut_reaction} | confused by: {r.top_confusion} "
+        f"| stopped by: {r.top_objection} | would change mind: {r.what_would_change_my_mind}"
+        for r in reactions
+    )
+
+
+async def _digest_shard(
+    shard: list[Reaction], sem: asyncio.Semaphore
+) -> _ShardDigest | None:
+    """One Nano call per shard. Returns None on failure rather than
+    raising: a lost shard narrows the themes Ultra sees (and is declared
+    to it in the label), while raising would throw away the whole run
+    after every Nano call has already been paid for. Verified on a real
+    run where one of two shards failed -- the report still came out
+    coherent and correctly segmented."""
+    usable = [r for r in shard if not r.raw_error]
+    if not usable:
+        print("synthesize: shard had no usable reactions, skipping its digest")
+        return None
+    user = _DIGEST_USER_TEMPLATE.format(
+        n=len(usable),
+        reactions_text=_reactions_for_digest(usable),
+        schema=json.dumps(_ShardDigest.model_json_schema()),
+        max_themes=DIGEST_THEMES_PER_CATEGORY,
+        max_examples=DIGEST_EXAMPLES_PER_THEME,
+    )
+    async with sem:
+        try:
+            result = await chat_json(
+                model=MODEL_NANO,
+                system=_DIGEST_SYSTEM,
+                user=user,
+                schema=_ShardDigest,
+                temperature=0.2,
+                max_tokens=DIGEST_MAX_TOKENS,
+            )
+            return result.data
+        except ChatJsonError as e:
+            print(f"synthesize: shard digest failed, continuing without it: {e}")
+            return None
+
+
+def _clean_digest(digest: _ShardDigest, shard: list[Reaction]) -> _ShardDigest:
+    """Drops ids that aren't in this shard, and themes left with none.
+
+    The digest's whole value to Ultra is that the ids under a theme are a
+    real evidence pool it can cite from, and a hallucinated id would get
+    cited into a Finding and then fail _invalid_evidence two stages later,
+    where the cause is no longer visible. Cheaper to check here, where the
+    shard is right at hand.
+    """
+    real = {r.persona_id for r in shard}
+
+    def clean(themes: list[_DigestTheme]) -> list[_DigestTheme]:
+        out = []
+        for t in themes:
+            ids = [i for i in dict.fromkeys(t.persona_ids) if i in real]
+            if ids:
+                out.append(t.model_copy(update={"persona_ids": ids}))
+        return out
+
+    return digest.model_copy(
+        update={
+            "confusions": clean(digest.confusions),
+            "objections": clean(digest.objections),
+            "requested_changes": clean(digest.requested_changes),
+        }
+    )
+
+
+def _format_digests(digests: list[tuple[int, _ShardDigest]]) -> str:
+    """No counts printed, deliberately.
+
+    persona_ids is a handful of examples, not a tally, so rendering
+    "(3/50)" beside a theme would invent a statistic out of how many
+    examples the model happened to give -- the exact confusion between
+    evidence and quantity that broke the first two versions of this stage.
+    Every number Ultra reports gets recounted from its
+    affected_segment_filter instead.
+    """
+    lines = []
+    for n, digest in digests:
+        lines.append(f"--- a batch of {n} reactions ---")
+        for label, themes in (
+            ("confusions", digest.confusions),
+            ("objections", digest.objections),
+            ("requested changes", digest.requested_changes),
+        ):
+            lines.append(f"{label}:")
+            for t in themes:
+                lines.append(f"  - {t.theme} [e.g. {', '.join(t.persona_ids)}]")
+        lines.append("representative quotes:")
+        lines.extend(f"  {q}" for q in digest.quotes)
+    return "\n".join(lines)
+
+
+async def _digest_reactions(reactions: list[Reaction]) -> tuple[str, str]:
+    """-> (block, label) for the synthesis prompt's reactions section."""
+    shards = [reactions[i : i + SHARD_SIZE] for i in range(0, len(reactions), SHARD_SIZE)]
+    sem = asyncio.Semaphore(SHARD_CONCURRENCY)
+    print(f"synthesize: digesting {len(reactions)} reactions in {len(shards)} shards via Nano")
+    results = await asyncio.gather(*(_digest_shard(s, sem) for s in shards))
+    digests = []
+    for shard, d in zip(shards, results):
+        if d is None:
+            continue
+        cleaned = _clean_digest(d, shard)
+        # A digest whose every theme was dropped contributes nothing but
+        # would still inflate the "covering N of M reactions" claim below,
+        # which is the one thing telling Ultra how much of the panel it is
+        # actually reasoning about.
+        if cleaned.confusions or cleaned.objections or cleaned.requested_changes:
+            digests.append((len(shard), cleaned))
+        else:
+            print("synthesize: dropping an empty shard digest (no usable themes)")
+    if not digests:
+        raise ChatJsonError("every shard digest failed", 0)
+    counted = sum(n for n, _ in digests)
+    label = (
+        f"Their reactions, digested by a first-pass model in {len(digests)} batches "
+        f"covering {counted} of the {len(reactions)} reactions. These are themes, "
+        "not tallies: the ids beside each one are a few examples, so do not treat "
+        "them as counts. Cite evidence from the ids shown, and let "
+        "affected_segment_filter carry every quantity -- it is recounted against the "
+        "real personas, so an accurate filter matters more than an accurate guess:"
+    )
+    return _format_digests(digests), label
+
+
 async def synthesize(artifact_text: str, personas: list[Persona], reactions: list[Reaction]) -> Synthesis:
     personas_by_id = {p.id: p for p in personas}
 
@@ -259,10 +606,17 @@ async def synthesize(artifact_text: str, personas: list[Persona], reactions: lis
     by_tech = _by_segment(personas_by_id, reactions, lambda p: _tech_band(p.tech_comfort))
     by_skep = _by_segment(personas_by_id, reactions, lambda p: _skepticism_band(p.skepticism))
 
+    if len(reactions) > SHARD_THRESHOLD:
+        reactions_block, reactions_label = await _digest_reactions(reactions)
+    else:
+        reactions_block = json.dumps([r.model_dump(mode="json") for r in reactions])
+        reactions_label = "Their reactions:"
+
     user = synthesis_user(
         artifact_text=artifact_text,
         persona_summary_csv=build_persona_summary_csv(personas),
-        reactions_json=json.dumps([r.model_dump(mode="json") for r in reactions]),
+        reactions_json=reactions_block,
+        reactions_label=reactions_label,
         mean_sentiment=mean_sentiment,
         would_act_pct=would_act_pct,
         by_region=json.dumps(by_region),

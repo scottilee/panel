@@ -32,20 +32,39 @@ import time
 from dataclasses import dataclass
 from typing import TypeVar
 
-from openai import AsyncOpenAI, InternalServerError, RateLimitError
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    InternalServerError,
+    RateLimitError,
+)
 from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
+# Sleeps taken *between* attempts, so the first attempt is immediate and
+# there are len(_BACKOFF_SECONDS) + 1 attempts in total. Previously this
+# list was enumerated with the first element skipped, which made the 0.5
+# dead and the attempt count an undocumented side effect of the length.
 _BACKOFF_SECONDS = [0.5, 1.0, 2.0, 4.0]
+
+# Retried by _call_with_backoff. Connection and timeout errors belong here
+# for the same reason 429s and 5xx do: at 50 concurrent calls against a
+# hosted API they are routine and transient, and the alternative is losing
+# a persona's reaction (or, before react.py's broad except, the whole run)
+# to a dropped socket.
+_RETRYABLE = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
 
 
 def _load_dotenv_fallback() -> dict[str, str]:
     """Reads repo-root .env for any var not already in os.environ.
 
-    panel/config.py (stage 7) is the real env-loading home; this is a
-    narrow stand-in so this module and its callers work before that
-    lands.
+    This is the codebase's only .env reader. panel/config.py was meant to
+    take the job over in stage 7 and instead ended up importing `env` from
+    here, so the two docstrings spent a while describing each other as
+    unwritten. The dependency has to run this way round: tf_client is the
+    bottom of the import graph (config imports it, not the reverse).
     """
     env: dict[str, str] = {}
     root = os.path.join(os.path.dirname(__file__), "..")
@@ -65,9 +84,9 @@ _DOTENV = _load_dotenv_fallback()
 
 
 def env(key: str, default: str | None = None) -> str | None:
-    """Reads an env var, falling back to the repo-root .env. Public so
-    other modules can look up MODEL_NANO/MODEL_SUPER/etc. before
-    panel/config.py (stage 7) exists.
+    """Reads an env var, falling back to the repo-root .env. Public
+    because it's the single env entry point -- panel/config.py and the
+    per-module MODEL_* lookups all come through here.
     """
     return os.environ.get(key) or _DOTENV.get(key) or default
 
@@ -131,12 +150,12 @@ class ChatJsonTruncatedError(ChatJsonError):
 
 async def _call_with_backoff(client: AsyncOpenAI, **kwargs):
     last_exc: Exception | None = None
-    for attempt, delay in enumerate(_BACKOFF_SECONDS):
+    for attempt in range(len(_BACKOFF_SECONDS) + 1):
         if attempt > 0:
-            await asyncio.sleep(delay)
+            await asyncio.sleep(_BACKOFF_SECONDS[attempt - 1])
         try:
             return await client.chat.completions.create(**kwargs)
-        except (RateLimitError, InternalServerError) as e:
+        except _RETRYABLE as e:
             last_exc = e
             continue
     raise last_exc  # type: ignore[misc]
@@ -149,7 +168,12 @@ async def chat_json(
     schema: type[T],
     temperature: float = 0.7,
     seed: int | None = None,
-    max_tokens: int = 400,
+    # 3000, not the 400 section 5.2 states. Every call site passes an
+    # explicit budget, so this default is only a trap for the next one --
+    # and 400 is the exact value measured to truncate essentially every
+    # Nano call (see this module's docstring). 3000 is the measured-safe
+    # floor for the smallest schema in the codebase.
+    max_tokens: int = 3000,
 ) -> ChatJsonResult:
     """Calls model, enforces schema, retries once on validation failure
     (with the error appended to the prompt), retries on 429/5xx with
@@ -202,6 +226,18 @@ async def chat_json(
                     latency_ms,
                 )
             truncation_retries += 1
+            # Logged, not silent. This retry doubles both the latency and
+            # the token spend of the call, and it used to leave no trace
+            # at all -- a stage running at 2-3x its expected cost looked
+            # simply "slow", which is exactly how persona generation came
+            # to pace at 110 minutes instead of 25 without anyone able to
+            # see why from the output.
+            print(
+                f"tf_client: {model} truncated at max_tokens={current_max_tokens} "
+                f"with no content; retrying at {current_max_tokens * 2} "
+                f"(retry {truncation_retries} of 2)",
+                flush=True,
+            )
             current_max_tokens *= 2
             continue
 

@@ -1,6 +1,9 @@
-"""Load data/personas.json; sample(n, seed); generate via Super.
+"""The persona pool: load and sample data/personas.json, and generate it
+via Super.
 
-Owned by Agent C, stage 4.
+Generation (generate_batch, rename_one, the avoid-list helpers) is only
+reached by scripts/gen_personas.py, offline. The server only ever calls
+load_personas and sample_stable.
 """
 
 from __future__ import annotations
@@ -12,19 +15,17 @@ from typing import get_args
 
 from pydantic import BaseModel
 
-from panel.prompts import PERSONA_GENERATION_SYSTEM, PERSONA_SCHEMA_JSON, PersonaDraftBatch, persona_generation_user
+from panel.config import MODEL_SUPER
+from panel.prompts import PERSONA_GENERATION_SYSTEM, PersonaDraftBatch, persona_generation_user
 from panel.schemas import INCOME_BANDS, Persona, REGIONS
-from panel.tf_client import ChatJsonError, chat_json, env
+from panel.tf_client import ChatJsonError, chat_json
 
 REGIONS_LIST = list(get_args(REGIONS))
 INCOME_BANDS_LIST = list(get_args(INCOME_BANDS))
 
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "data" / "personas.json"
 
-MODEL_SUPER = env("MODEL_SUPER", "nvidia/nemotron-3-super-120b-a12b")
-
 AGE_BANDS = ["18-24", "25-34", "35-49", "50-64", "65+"]
-AGE_BAND_SAMPLE_AGE = {"18-24": 21, "25-34": 29, "35-49": 41, "50-64": 58, "65+": 70}
 
 
 def age_band_for(age: int) -> str:
@@ -85,7 +86,7 @@ def sample_stable(n: int, personas: list[Persona] | None = None) -> list[Persona
     return pool[:n]
 
 
-def build_slots(total: int = 100) -> list[dict]:
+def build_slots(total: int = 100, offset: int = 0) -> list[dict]:
     """total (region, age_band, income_band) target slots for generation,
     per section 4.1's stratification grid. Assigned by independent
     modular cycles so region/age_band/income_band coverage is exact and
@@ -97,9 +98,14 @@ def build_slots(total: int = 100) -> list[dict]:
     age_band: i % 5 -> exactly even at total=100.
     income_band: (i*3 + 2) % 5 -> a coprime stride so it doesn't move in
     lockstep with age_band, exactly even at total=100.
+
+    offset continues the cycles from where a previous run stopped, so
+    appending 900 to an existing 100 lands on an exactly even 1000-wide
+    grid (125 per region) instead of restarting each cycle at 0 and
+    re-overweighting the same first four regions.
     """
     slots = []
-    for i in range(total):
+    for i in range(offset, offset + total):
         slots.append(
             {
                 "region": REGIONS_LIST[i % len(REGIONS_LIST)],
@@ -119,10 +125,40 @@ def slice_description(slots: list[dict]) -> str:
     return "Exactly these 10 target profiles, one persona per line:\n" + "\n".join(lines)
 
 
-async def generate_batch(slots: list[dict], temperature: float = 0.9) -> list[Persona]:
+# How much of the already-used set to actually put in a generation prompt.
+# The full set at n=1000 is ~3k tokens of names and ~4k of occupations;
+# cost is negligible but a list that long measurably drowns out the rules
+# that follow it. Sampling instead (a different sample each wave, see
+# avoid_sample) rotates coverage across batches and leaves the residue to
+# the dedup pass.
+AVOID_NAMES_CAP = 400
+AVOID_OCCUPATIONS_CAP = 200
+
+
+def avoid_sample(used: set[str], cap: int, seed: int) -> list[str]:
+    """A deterministic, bounded sample of `used`. sorted() first so the
+    sample depends only on the set contents and the seed, not on the
+    insertion order a set happens to iterate in."""
+    pool = sorted(used)
+    if len(pool) <= cap:
+        return pool
+    return random.Random(seed).sample(pool, cap)
+
+
+async def generate_batch(
+    slots: list[dict],
+    temperature: float = 0.9,
+    avoid_names: list[str] | None = None,
+    avoid_occupations: list[str] | None = None,
+) -> list[Persona]:
     """One Super call -> 10 PersonaDraft -> 10 Persona (ids assigned by
     the caller, not here, since a batch doesn't know its position in the
     full 100).
+
+    avoid_names/avoid_occupations carry what earlier batches already used,
+    so collisions are prevented rather than repaired afterwards -- at
+    n=1000 the repair path alone would be hundreds of individual Super
+    calls and still wouldn't converge in the 5 passes it allows.
     """
     if len(slots) != 10:
         raise ValueError("section 4.1 calls for exactly 10 personas per Super call")
@@ -130,14 +166,23 @@ async def generate_batch(slots: list[dict], temperature: float = 0.9) -> list[Pe
     result = await chat_json(
         model=MODEL_SUPER,
         system=PERSONA_GENERATION_SYSTEM,
-        user=persona_generation_user(slice_description(slots)),
+        user=persona_generation_user(slice_description(slots), avoid_names, avoid_occupations),
         schema=PersonaDraftBatch,
         temperature=temperature,
         # Reasoning-token usage for this prompt is stochastic (see
         # tf_client's module docstring); chat_json doubles this on
         # truncation up to 2 more times, so this only needs to be a
         # reasonable starting point, not a hard ceiling.
-        max_tokens=8000,
+        #
+        # 16000, not the 8000 this started at. 10 personas serialize to
+        # ~4.5k tokens of content and tf_client measured reasoning for
+        # this exact prompt at ~3.4k, so 8000 sat right on the line --
+        # and adding the avoid-lists pushed most calls over it. Every
+        # such call truncated, got silently retried at 16000, and so cost
+        # roughly 2.3x the tokens and wall-clock of asking for 16000 in
+        # the first place: a 900-persona run was pacing at ~110 minutes
+        # before this change.
+        max_tokens=16000,
     )
     drafts = result.data.root
     if len(drafts) != 10:
@@ -161,75 +206,92 @@ async def generate_batch(slots: list[dict], temperature: float = 0.9) -> list[Pe
 # templates here rather than additions to prompts.py.
 
 
-async def regenerate_one(
-    slot: dict, avoid_names: list[str], avoid_occupations: list[str], temperature: float = 0.9
+class _NewName(BaseModel):
+    name: str
+
+
+async def rename_one(
+    persona: Persona, avoid_names: list[str], temperature: float = 1.0
 ) -> Persona:
-    """One replacement persona for `slot`, told to avoid names/occupations
-    already used elsewhere in its region (fixing a C1 duplicate).
+    """A new full name for a persona whose name collides with another's,
+    with every other field untouched.
+
+    Repairing a name collision by regenerating the whole persona (what
+    this used to do) is both wasteful and destructive: data/cached holds
+    replayable example runs keyed by persona_id, so swapping the person
+    behind an id leaves a cached reaction attributed to someone whose
+    traits no longer explain it. A name is the only thing actually wrong,
+    so a name is the only thing that changes.
     """
-    avoid_clause = ""
-    if avoid_names:
-        avoid_clause += (
-            "\nDo not use any of these first names (already used in this region): "
-            + ", ".join(sorted(set(avoid_names)))
-            + "."
-        )
-    if avoid_occupations:
-        avoid_clause += (
-            "\nDo not use any of these occupations (already used in this region): "
-            + ", ".join(sorted(set(avoid_occupations)))
-            + "."
-        )
-
-    user = f"""Generate exactly 1 persona matching this slice:
-  region={slot['region']}, age band={slot['age_band']} (pick a specific age within that band), income_band={slot['income_band']}
-
-Rules:
-- Follows this schema exactly: {PERSONA_SCHEMA_JSON}
-- values, buying_triggers, pet_peeves: 2 to 4 items each, concrete, not abstract.
-- voice: 1 to 3 first-person sentences revealing how this person reads marketing, with a specific habit, limit, or trigger.
-- Avoid stereotypes tied to gender, race, or nationality.{avoid_clause}
-"""
+    user = (
+        f"This persona's name collides with another persona's and needs a new one:\n"
+        f"  name: {persona.name}\n"
+        f"  age {persona.age}, {persona.gender}, {persona.location} "
+        f"({persona.region}), works as a {persona.occupation}\n\n"
+        "Give one new full name (first and last) that plausibly belongs to this "
+        "specific person -- same kind of background, era, and place, not a "
+        "generic substitution. Do not reuse their current name or any of these, "
+        "and avoid reusing these first names:\n"
+        + ", ".join(sorted(set(avoid_names)))
+        + f"\n\nSchema: {json.dumps(_NewName.model_json_schema())}"
+    )
     result = await chat_json(
         model=MODEL_SUPER,
-        system=PERSONA_GENERATION_SYSTEM,
+        system=(
+            "You name fictional consumer personas. Output only JSON, no prose, "
+            "no code fences."
+        ),
         user=user,
-        schema=PersonaDraftBatch,
+        schema=_NewName,
         temperature=temperature,
         max_tokens=1500,
     )
-    drafts = result.data.root
-    if len(drafts) != 1:
-        raise ChatJsonError(f"expected 1 persona, got {len(drafts)}", result.latency_ms)
-    data = drafts[0].model_dump()
-    data["region"] = slot["region"]
-    data["income_band"] = slot["income_band"]
-    return Persona(id="pending", **data)
+    new_name = result.data.name.strip()
+    if not new_name:
+        raise ChatJsonError("empty replacement name", result.latency_ms)
+    return persona.model_copy(update={"name": new_name})
 
 
-def find_region_duplicates(personas: list[Persona]) -> list[tuple[str, str, str, list[str]]]:
-    """Returns (kind, region, value, persona_ids) for every name or
-    occupation that repeats within a region (check C1).
+def find_duplicate_names(personas: list[Persona]) -> list[tuple[str, list[str]]]:
+    """Returns (name, persona_ids) for every full name used by more than
+    one persona anywhere in the pool (check C1's hard gate).
+
+    Scoped globally, not per region: two identical names are a visible
+    bug wherever they sit, and at n=1000 the grid shows personas from
+    every region side by side anyway. Earlier this was region-scoped and
+    covered occupations too -- occupations are now a soft diversity
+    target instead (see occupation_stats), because 1000 personas across
+    8 regions cannot have 125 distinct jobs per region without the
+    generator inventing absurd ones, while 1000 distinct names is both
+    achievable and what a reader actually notices.
     """
-    from collections import Counter, defaultdict
+    from collections import Counter
 
-    by_region: dict[str, list[Persona]] = defaultdict(list)
-    for p in personas:
-        by_region[p.region].append(p)
-
+    names = Counter(p.name.strip().lower() for p in personas)
     issues = []
-    for region, group in by_region.items():
-        names = Counter(p.name.strip().lower() for p in group)
-        occs = Counter(p.occupation.strip().lower() for p in group)
-        for name, count in names.items():
-            if count > 1:
-                ids = [p.id for p in group if p.name.strip().lower() == name]
-                issues.append(("name", region, name, ids))
-        for occ, count in occs.items():
-            if count > 1:
-                ids = [p.id for p in group if p.occupation.strip().lower() == occ]
-                issues.append(("occupation", region, occ, ids))
+    for name, count in names.items():
+        if count > 1:
+            ids = [p.id for p in personas if p.name.strip().lower() == name]
+            issues.append((name, ids))
     return issues
+
+
+def occupation_stats(personas: list[Persona]) -> dict:
+    """Occupation diversity, reported but never gated on: repeats are
+    realistic (there really are many nurses), so this exists to catch
+    the generator collapsing onto a handful of jobs rather than to force
+    uniqueness.
+    """
+    from collections import Counter
+
+    occs = Counter(p.occupation.strip().lower() for p in personas)
+    total = len(personas)
+    return {
+        "total": total,
+        "unique": len(occs),
+        "ratio": len(occs) / total if total else 0.0,
+        "top_repeats": occs.most_common(8),
+    }
 
 
 class _VoicePeeves(BaseModel):

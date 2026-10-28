@@ -1,0 +1,21 @@
+# `make push` runs `gcloud builds submit .`, which uploads the build
+# context to Cloud Build. Without this file gcloud derives its ignore list
+# from .gitignore, which is close but not the same thing -- this makes the
+# exclusions explicit, since what is excluded here is what does NOT get
+# uploaded to Google's servers.
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+web/node_modules
+web/dist
+data/runs
+# Secrets: the API key (.env, infra/terraform.tfvars) and Terraform state,
+# which holds a copy of the key (see infra/main.tf).
+.env
+infra/.terraform
+infra/*.tfstate*
+infra/terraform.tfvars
+data/personas.partial.json

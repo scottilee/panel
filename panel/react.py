@@ -8,12 +8,19 @@ import asyncio
 import zlib
 from collections.abc import AsyncIterator
 
+from panel.config import MAX_CONCURRENCY, MODEL_NANO
 from panel.prompts import REACTION_SYSTEM, reaction_user
 from panel.schemas import Persona, Reaction
-from panel.tf_client import ChatJsonError, chat_json, env
+from panel.tf_client import chat_json
 
-MODEL_NANO = env("MODEL_NANO", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B")
-DEFAULT_MAX_CONCURRENCY = int(env("MAX_CONCURRENCY", "25"))
+# Imported from config rather than re-read from env here. This module used
+# to declare its own DEFAULT_MAX_CONCURRENCY = env("MAX_CONCURRENCY", "25")
+# while config.py declared the same name defaulting to 50 -- and it was
+# this one that actually capped the fan-out, so an unconfigured deployment
+# ran at half the throughput .env.example, infra/variables.tf and the
+# README's performance table all advertise (and the frontend's "roughly N
+# x 0.4 seconds" caption, calibrated at 50, under-predicted by ~1.7x).
+DEFAULT_MAX_CONCURRENCY = MAX_CONCURRENCY
 
 
 def seed_for(persona_id: str) -> int:
@@ -38,7 +45,7 @@ REACTION_MAX_TOKENS = 3000
 
 # Section 4 states temperature=0.7 for reactions. Measured empirically
 # (2026-10-28): rerunning the identical edited artifact against the
-# identical 100 personas gave 7 flipped-to-act personas on one run and 4
+# identical 100-persona panel gave 7 flipped-to-act personas on one run and 4
 # on an immediate rerun -- the same edit, same people, same text, nearly
 # double the variance. That noise was swamping the signal we actually
 # care about (does this edit help). Lower temperature trades away some
@@ -47,9 +54,15 @@ REACTION_MAX_TOKENS = 3000
 REACTION_TEMPERATURE = 0.4
 
 
-async def _react_one(
+async def react_one(
     persona: Persona, artifact_text: str, run_id: str, sem: asyncio.Semaphore
 ) -> Reaction:
+    """One persona's reaction, never raising. Public (it was _react_one)
+    because scripts/gen_personas.py's anti-sycophancy check had its own
+    line-for-line copy of this -- same model, prompt, temperature, seed
+    and token budget, and the same "(no response)" fallback -- which meant
+    fixes here (the broadened except below) silently didn't reach it.
+    """
     async with sem:
         try:
             result = await chat_json(
@@ -68,7 +81,20 @@ async def _react_one(
                     "latency_ms": result.latency_ms,
                 }
             )
-        except ChatJsonError as e:
+        except asyncio.CancelledError:
+            # Cancellation is fan_out shutting the run down on purpose;
+            # swallowing it into a "(no response)" Reaction would make the
+            # task look like it completed and defeat the cancel.
+            raise
+        except Exception as e:  # noqa: BLE001
+            # Deliberately not just ChatJsonError. tf_client's backoff
+            # retries only RateLimitError/InternalServerError, so
+            # APIConnectionError, APITimeoutError, BadRequestError and
+            # AuthenticationError all propagated out of here uncaught --
+            # straight past fan_out into _execute_run's blanket handler,
+            # which marked the whole run "error". That contradicted this
+            # module's own promise below, and at N=1000 meant one network
+            # blip on persona 900 discarded 899 already-paid reactions.
             return Reaction(
                 persona_id=persona.id,
                 sentiment=0,
@@ -79,7 +105,7 @@ async def _react_one(
                 what_would_change_my_mind="(no response)",
                 run_id=run_id,
                 latency_ms=getattr(e, "latency_ms", None),
-                raw_error=str(e),
+                raw_error=f"{type(e).__name__}: {e}",
             )
 
 
@@ -93,10 +119,22 @@ async def fan_out(
     order, not persona order) under a concurrency cap. A persona whose call
     fails after tf_client's retries still yields a Reaction — raw_error set,
     sentiment 0 — so one bad call never stalls the run.
+
+    Every task is cancelled if the consumer stops early (an exception
+    downstream, or the run being abandoned). All N tasks are created up
+    front, so without this they would keep running -- and keep spending
+    credits one Nano call at a time -- for a run nobody is reading.
     """
     sem = asyncio.Semaphore(concurrency or DEFAULT_MAX_CONCURRENCY)
     tasks = [
-        asyncio.create_task(_react_one(p, artifact_text, run_id, sem)) for p in personas
+        asyncio.create_task(react_one(p, artifact_text, run_id, sem)) for p in personas
     ]
-    for task in asyncio.as_completed(tasks):
-        yield await task
+    try:
+        for task in asyncio.as_completed(tasks):
+            yield await task
+    finally:
+        pending = [t for t in tasks if not t.done()]
+        for t in pending:
+            t.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)

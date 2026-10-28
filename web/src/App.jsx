@@ -183,6 +183,12 @@ export default function App() {
       switch (event.type) {
         case 'run_started':
           dispatch({ type: 'SET_RUN_ID', runId: event.data.run_id })
+          // URL mode only: the text the server extracted from the page,
+          // so the local copy matches what the panel actually read and
+          // "Apply and compare" has something to edit.
+          if (event.data.artifact_text) {
+            dispatch({ type: 'SET_ARTIFACT_TEXT', text: event.data.artifact_text })
+          }
           break
         case 'reaction':
           dispatch({ type: 'SET_RETRYING', retrying: false })
@@ -241,7 +247,13 @@ export default function App() {
     dispatch({ type: 'RUN_START' })
     const startedAt = Date.now()
     runHandleRef.current = startRun({
-      text: state.artifactText,
+      // In URL mode the server fetches and extracts the text itself
+      // (POST /run accepts text XOR url). This used to send
+      // state.artifactText unconditionally, which in URL mode is empty --
+      // so every URL-mode run was a 422 and the whole Text/URL toggle was
+      // dead in real mode.
+      text: state.inputMode === 'url' ? undefined : state.artifactText,
+      url: state.inputMode === 'url' ? state.artifactUrl.trim() : undefined,
       label: state.label,
       personaCount: state.personaCount,
       onEvent: makeRunEventHandler({ startedAt, allowRetry: true }),
@@ -404,6 +416,7 @@ export default function App() {
           synthesis={state.synthesis}
           runLabel={state.label || 'Untitled run'}
           wouldActPct={liveStats.wouldActPct}
+          total={liveStats.done}
           onApplyAndCompare={handleApplyAndCompare}
           applyDisabled={state.compare.visible}
         />

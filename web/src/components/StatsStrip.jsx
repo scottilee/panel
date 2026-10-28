@@ -1,4 +1,4 @@
-// Live stats: reactions in, mean sentiment, would-act %, elapsed. Section 6.4. Stage 1, Agent B.
+// Live stats: reactions in, mean sentiment, would-act %, elapsed. Section 6.4.
 
 import { STATUS } from '../state.js'
 

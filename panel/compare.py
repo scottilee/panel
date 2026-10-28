@@ -6,11 +6,10 @@ import difflib
 
 from pydantic import BaseModel
 
+from panel.config import MODEL_ULTRA
 from panel.prompts import compare_summary_user
 from panel.schemas import CompareDelta, CompareResult, Run
-from panel.tf_client import chat_json, env
-
-MODEL_ULTRA = env("MODEL_ULTRA", "nvidia/Nemotron-3-Ultra-550b-a55b")
+from panel.tf_client import chat_json
 
 
 class _CompareSummary(BaseModel):
