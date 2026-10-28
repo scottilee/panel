@@ -24,12 +24,26 @@ function Tooltip({ persona, reaction }) {
   )
 }
 
-function Tile({ persona, reaction, dimmed = false, onClick }) {
+// deltaKind (section 6.7): 'positive' | 'negative' | 'unchanged' | undefined.
+// When set, it overrides the normal sentiment coloring -- positive/negative
+// become solid green/red (letting .tile's always-on background-color
+// transition animate the change), unchanged keeps its own sentiment color
+// but fades to 50% opacity. transitionDelayMs staggers that transition
+// per tile so switching into delta view reads as a wave, not a blink.
+const DELTA_CLASS = {
+  positive: 'tile-delta-positive',
+  negative: 'tile-delta-negative',
+}
+
+function Tile({ persona, reaction, dimmed = false, highlighted = false, deltaKind, transitionDelayMs = 0, onClick }) {
   const className = [
     'tile',
     !reaction ? 'tile-empty' : reaction.raw_error ? 'tile-error' : 'tile-filled',
     reaction && !reaction.raw_error ? SENTIMENT_CLASS[reaction.sentiment] ?? 'tile-sentiment-0' : '',
+    deltaKind ? DELTA_CLASS[deltaKind] ?? '' : '',
+    deltaKind === 'unchanged' ? 'tile-delta-unchanged' : '',
     dimmed ? 'tile-dimmed' : '',
+    highlighted ? 'tile-highlighted' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -37,6 +51,7 @@ function Tile({ persona, reaction, dimmed = false, onClick }) {
   return (
     <div
       className={className}
+      style={deltaKind ? { transitionDelay: `${transitionDelayMs}ms` } : undefined}
       onClick={(e) => {
         e.stopPropagation()
         onClick?.(persona)
@@ -53,6 +68,9 @@ function propsAreEqual(prev, next) {
     prev.persona.id === next.persona.id &&
     prev.reaction === next.reaction &&
     prev.dimmed === next.dimmed &&
+    prev.highlighted === next.highlighted &&
+    prev.deltaKind === next.deltaKind &&
+    prev.transitionDelayMs === next.transitionDelayMs &&
     prev.onClick === next.onClick
   )
 }

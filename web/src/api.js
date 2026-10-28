@@ -6,7 +6,14 @@
 // synthesis, done, error) so the rest of the app never has to know which
 // branch it's talking to.
 
-import { buildMockPersonas, buildMockReactions, MOCK_SYNTHESIS } from './mock.js'
+import {
+  buildMockCompareResult,
+  buildMockPersonas,
+  buildMockReactions,
+  buildMockReactionsB,
+  EXAMPLES,
+  MOCK_SYNTHESIS,
+} from './mock.js'
 
 // Mock mode's pool is synthesized on demand (buildMockPersonas takes any n),
 // so the slider can go well past the real ~100-persona pool to exercise
@@ -34,9 +41,45 @@ export function previewPersonas(n) {
   throw new Error('real persona sampling not implemented yet (stage 7)')
 }
 
-export function startRun({ personaCount, onEvent }) {
-  if (isMockMode()) return startMockRun({ personaCount, onEvent })
+// previousReactionsById: only passed for a compare's second run (Run B).
+// Mock mode uses it to make Run B's reactions a deliberate, deterministic
+// edit of Run A's actual data (see mock.js's buildMockReactionsB) --
+// without it, Run B used to be generated the exact same way as Run A
+// (buildMockReactions depends only on the persona list, never on the
+// artifact text), so toggling Run A/Run B/Delta showed no visible change
+// at all. Stage 7's real client passes a run_a id instead; the backend
+// computes the real delta from genuinely different model output.
+export function startRun({ personaCount, onEvent, previousReactionsById }) {
+  if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById })
   throw new Error('real backend client not implemented yet (stage 7)')
+}
+
+// Section 6.8: three example buttons, loaded from GET /examples in the
+// real client (stage 8). Mock mode sources the same shape from mock.js.
+export async function getExamples() {
+  if (isMockMode()) return EXAMPLES
+  throw new Error('real /examples client not implemented yet (stage 8)')
+}
+
+// Section 6.6's "Apply this edit and compare": mock mode computes the
+// result from the two reaction sets the run actually produced (so it's
+// correct at any N, and actually reflects a real Run A vs Run B
+// difference) rather than a fixed, disconnected canned object. Still
+// fast and synchronous -- no network, no delay -- matching section 6.9's
+// "no real computation cost" intent, just not "hardcoded regardless of
+// input". The real client (stage 7) will POST /compare and await the
+// response.
+export async function getCompareResult({ personas, reactionsAById }) {
+  if (isMockMode()) {
+    // buildMockReactionsB is deterministic (same personas + reactionsA
+    // always produce the same Run B), so recomputing it here gives the
+    // exact same reactions startMockRun already streamed into Run B's
+    // live state -- no need to thread the accumulated state back in.
+    const reactionsBById = {}
+    for (const r of buildMockReactionsB(personas, reactionsAById)) reactionsBById[r.persona_id] = r
+    return buildMockCompareResult(personas, reactionsAById, reactionsBById)
+  }
+  throw new Error('real /compare client not implemented yet (stage 7)')
 }
 
 // Deterministic Fisher-Yates permutation (no Math.random) so reactions
@@ -60,9 +103,11 @@ function percent(items, pred) {
   return items.length ? (100 * items.filter(pred).length) / items.length : 0
 }
 
-function startMockRun({ personaCount, onEvent }) {
+function startMockRun({ personaCount, onEvent, previousReactionsById }) {
   const personas = buildMockPersonas(personaCount)
-  const reactions = buildMockReactions(personas)
+  const reactions = previousReactionsById
+    ? buildMockReactionsB(personas, previousReactionsById)
+    : buildMockReactions(personas)
   const order = completionOrder(personaCount)
   const total = personas.length
 

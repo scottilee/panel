@@ -15,6 +15,24 @@ export const STATUS = {
   ERROR: 'error',
 }
 
+// Section 6.6/6.7: the second run of a compare. `visible` (the second
+// textarea is open) is the N-lock condition per section 6.10 ("once a
+// compare is in flight") -- deliberately broader than "actively
+// streaming", since the lock should hold for the whole compare lifecycle
+// once it starts, not just while reactions are landing.
+const initialCompareState = {
+  visible: false,
+  text: '',
+  status: STATUS.IDLE,
+  reactionsById: {},
+  progress: { done: 0, total: 0 },
+  stats: null,
+  result: null,
+  startedAt: null,
+  elapsedMs: 0,
+  error: null,
+}
+
 export const initialState = {
   personaCount: 100,
   poolSize: 100,
@@ -31,6 +49,7 @@ export const initialState = {
   startedAt: null,
   elapsedMs: 0,
   error: null,
+  compare: initialCompareState,
 }
 
 export function reducer(state, action) {
@@ -54,6 +73,7 @@ export function reducer(state, action) {
         error: null,
         startedAt: null,
         elapsedMs: 0,
+        compare: initialCompareState,
       }
 
     case 'SET_INPUT_MODE':
@@ -76,6 +96,7 @@ export function reducer(state, action) {
         error: null,
         startedAt: Date.now(),
         elapsedMs: 0,
+        compare: initialCompareState,
       }
 
     case 'REACTION':
@@ -99,8 +120,64 @@ export function reducer(state, action) {
     case 'ERROR':
       return { ...state, status: STATUS.ERROR, error: action.message }
 
-    case 'TICK':
-      return state.startedAt ? { ...state, elapsedMs: Date.now() - state.startedAt } : state
+    case 'TICK': {
+      if (!state.startedAt && !state.compare.startedAt) return state
+      const now = Date.now()
+      return {
+        ...state,
+        elapsedMs: state.startedAt ? now - state.startedAt : state.elapsedMs,
+        compare: state.compare.startedAt
+          ? { ...state.compare, elapsedMs: now - state.compare.startedAt }
+          : state.compare,
+      }
+    }
+
+    // --- Section 6.6/6.7: compare (run B) -------------------------------
+
+    case 'COMPARE_SET_TEXT':
+      return { ...state, compare: { ...state.compare, visible: true, text: action.text } }
+
+    case 'COMPARE_RUN_START':
+      return {
+        ...state,
+        compare: {
+          ...state.compare,
+          visible: true,
+          status: STATUS.PENDING,
+          reactionsById: {},
+          progress: { done: 0, total: state.personas.length },
+          stats: null,
+          result: null,
+          error: null,
+          startedAt: Date.now(),
+          elapsedMs: 0,
+        },
+      }
+
+    case 'COMPARE_REACTION':
+      return {
+        ...state,
+        compare: {
+          ...state.compare,
+          status: state.compare.status === STATUS.PENDING ? STATUS.STREAMING : state.compare.status,
+          reactionsById: {
+            ...state.compare.reactionsById,
+            [action.reaction.persona_id]: action.reaction,
+          },
+        },
+      }
+
+    case 'COMPARE_PROGRESS':
+      return { ...state, compare: { ...state.compare, progress: action.progress } }
+
+    case 'COMPARE_DONE':
+      return { ...state, compare: { ...state.compare, status: STATUS.DONE, stats: action.stats } }
+
+    case 'COMPARE_RESULT':
+      return { ...state, compare: { ...state.compare, result: action.result } }
+
+    case 'COMPARE_ERROR':
+      return { ...state, compare: { ...state.compare, status: STATUS.ERROR, error: action.message } }
 
     default:
       return state
@@ -144,14 +221,29 @@ export function scoreBand(value) {
   return 'high'
 }
 
+// Canonical order for income_band, independent of mock.js's own copy --
+// state.js shouldn't depend on the mock-data module for a spec-level
+// constant it needs regardless of which backend is in play.
+export const INCOME_BANDS = ['<25k', '25-40k', '40-75k', '75-150k', '150k+']
+
+// region/techComfort/skepticism stay chip-style ({group, value}, exact
+// match). ageBand/incomeBand changed to range-style ({group, min, max} /
+// {group, minIndex, maxIndex}) on 2026-10-29 -- age filters on the real
+// persona.age number now, not the derived band; income filters on the
+// band's ordinal position in INCOME_BANDS, since income has no raw
+// number. Each range group has at most one entry in activeFilters (the
+// current slider position), so this still composes correctly with
+// selectFilteredPersonaIds's OR-within-group/AND-across-groups grouping.
 export function personaMatchesFilter(persona, filter) {
   switch (filter.group) {
     case 'region':
       return persona.region === filter.value
     case 'ageBand':
-      return ageBandFor(persona.age) === filter.value
-    case 'incomeBand':
-      return persona.income_band === filter.value
+      return persona.age >= filter.min && persona.age <= filter.max
+    case 'incomeBand': {
+      const idx = INCOME_BANDS.indexOf(persona.income_band)
+      return idx >= filter.minIndex && idx <= filter.maxIndex
+    }
     case 'techComfort':
       return scoreBand(persona.tech_comfort) === filter.value
     case 'skepticism':
@@ -190,6 +282,133 @@ export function selectElapsedSeconds(state) {
 
 export function selectIsRunning(state) {
   return state.status === STATUS.PENDING || state.status === STATUS.STREAMING || state.status === STATUS.SYNTHESIZING
+}
+
+// --- Compare (run B), section 6.6/6.7 -----------------------------------
+
+export function selectCompareLiveStats(state) {
+  const reactions = Object.values(state.compare.reactionsById)
+  const done = reactions.length
+  const total = state.compare.progress.total || state.personas.length
+  if (done === 0) return { done, total, meanSentiment: 0, wouldActPct: 0 }
+  const meanSentiment = reactions.reduce((sum, r) => sum + r.sentiment, 0) / done
+  const wouldActPct = (100 * reactions.filter((r) => r.would_act).length) / done
+  return { done, total, meanSentiment, wouldActPct }
+}
+
+export function selectCompareElapsedSeconds(state) {
+  return state.compare.elapsedMs / 1000
+}
+
+export function selectCompareIsRunning(state) {
+  return state.compare.status === STATUS.PENDING || state.compare.status === STATUS.STREAMING
+}
+
+// Section 6.10: "the second textarea inherits and locks the persona-count
+// control once a compare is in flight" -- for the whole lifecycle once it
+// opens, not just while streaming.
+export function selectCountLocked(state) {
+  return state.compare.visible
+}
+
+// Per-persona delta classification for the grid's delta view (section
+// 6.7). Sourced directly from both runs' live reactions rather than only
+// CompareResult.deltas, since the schema's `flipped_to_act` only encodes
+// the positive direction -- this derives both directions the same way,
+// from the same ground truth.
+export function selectDeltaByPersonaId(state) {
+  const byId = {}
+  for (const persona of state.personas) {
+    const a = state.reactionsById[persona.id]
+    const b = state.compare.reactionsById[persona.id]
+    if (!a || !b) continue
+    if (!a.would_act && b.would_act) byId[persona.id] = 'positive'
+    else if (a.would_act && !b.would_act) byId[persona.id] = 'negative'
+    else byId[persona.id] = 'unchanged'
+  }
+  return byId
+}
+
+// Section 6.6: clicking a finding's affected_segment chip applies that
+// filter (reusing Stage 2's activeFilters). affected_segment_filter's
+// fields don't map 1:1 onto filter chip groups -- age_band has no
+// Persona field (it's derived from age), and the Big Five traits have no
+// chip group at all (out of Stage 2's scope) -- clauses on those are
+// skipped rather than erroring, since "apply what can be applied" is
+// more useful than refusing the whole chip for one unmappable clause.
+const SEGMENT_FIELD_TO_GROUP = {
+  region: 'region',
+  age_band: 'ageBand',
+  income_band: 'incomeBand',
+  tech_comfort: 'techComfort',
+  skepticism: 'skepticism',
+}
+
+// age_band clauses only ever carry band names (via '==' or 'in'), never a
+// raw numeric threshold against age itself -- there's no <=/>= case to
+// handle for this field. Matches the AGE_MAX bound Filters.jsx's slider
+// uses for "65+" (85), so a clause built from the UI and one built here
+// agree on what "65+" means.
+const AGE_BAND_RANGES = {
+  '18-24': [18, 24],
+  '25-34': [25, 34],
+  '35-49': [35, 49],
+  '50-64': [50, 64],
+  '65+': [65, 85],
+}
+
+function ageRangeForClause(op, value) {
+  const names = op === 'in' ? value : [value]
+  const ranges = names.map((n) => AGE_BAND_RANGES[n]).filter(Boolean)
+  if (!ranges.length) return null
+  return { min: Math.min(...ranges.map((r) => r[0])), max: Math.max(...ranges.map((r) => r[1])) }
+}
+
+function incomeRangeForClause(op, value) {
+  const names = op === 'in' ? value : [value]
+  const idxs = names.map((n) => INCOME_BANDS.indexOf(n)).filter((i) => i >= 0)
+  if (!idxs.length) return null
+  return { minIndex: Math.min(...idxs), maxIndex: Math.max(...idxs) }
+}
+
+function scoreBandsForClause(op, value) {
+  if (op === '==') return [scoreBand(value)]
+  if (op === 'in') return [...new Set(value.map(scoreBand))]
+  if (op === '<=' || op === '<') {
+    if (value <= 33) return ['low']
+    if (value <= 66) return ['low', 'mid']
+    return ['low', 'mid', 'high']
+  }
+  if (op === '>=' || op === '>') {
+    if (value >= 67) return ['high']
+    if (value >= 34) return ['mid', 'high']
+    return ['low', 'mid', 'high']
+  }
+  return []
+}
+
+export function segmentFilterToChips(clauses) {
+  const chips = []
+  for (const clause of clauses) {
+    const group = SEGMENT_FIELD_TO_GROUP[clause.field]
+    if (!group) continue // Big Five or any other unmapped field -- skip
+    if (group === 'techComfort' || group === 'skepticism') {
+      for (const band of scoreBandsForClause(clause.op, clause.value)) {
+        chips.push({ group, value: band })
+      }
+    } else if (group === 'ageBand') {
+      const range = ageRangeForClause(clause.op, clause.value)
+      if (range) chips.push({ group, ...range })
+    } else if (group === 'incomeBand') {
+      const range = incomeRangeForClause(clause.op, clause.value)
+      if (range) chips.push({ group, ...range })
+    } else if (clause.op === 'in') {
+      for (const v of clause.value) chips.push({ group, value: v })
+    } else {
+      chips.push({ group, value: clause.value })
+    }
+  }
+  return chips
 }
 
 // Grid column count and tile size (px) for N tiles. Anchored to the two
