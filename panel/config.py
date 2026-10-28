@@ -24,7 +24,11 @@ MAX_CONCURRENCY = int(env("MAX_CONCURRENCY", "50"))
 TAVILY_API_KEY = env("TAVILY_API_KEY")
 
 DATA_DIR = ROOT / "data"
-RUNS_DIR = DATA_DIR / "runs"
+# Overridable because a container's image filesystem is the wrong place
+# to write run records: on Cloud Run it's ephemeral and in-memory, and a
+# read-only filesystem would make every run fail at the persist step.
+# Point it at /tmp there (see the Dockerfile).
+RUNS_DIR = Path(env("RUNS_DIR") or (DATA_DIR / "runs"))
 EXAMPLES_DIR = DATA_DIR / "examples"
 CACHED_DIR = DATA_DIR / "cached"
 WEB_DIST_DIR = ROOT / "web" / "dist"

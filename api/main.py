@@ -86,9 +86,18 @@ async def _broadcast(ctx: RunContext, event_type: str, data: object) -> None:
 
 
 def _persist(ctx: RunContext) -> None:
-    config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    path = config.RUNS_DIR / f"{ctx.run.run_id}.json"
-    path.write_text(ctx.run.model_dump_json(indent=2))
+    """Best-effort durability. The in-memory RUNS dict is what actually
+    serves reads and SSE replay, so a failed write must never take a run
+    down with it -- on a read-only or full container filesystem the whole
+    run would otherwise fail at the final persist step, after all the
+    model calls were already paid for.
+    """
+    try:
+        config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
+        path = config.RUNS_DIR / f"{ctx.run.run_id}.json"
+        path.write_text(ctx.run.model_dump_json(indent=2))
+    except OSError as e:
+        print(f"warning: could not persist run {ctx.run.run_id}: {e}")
 
 
 def _find_cached_example(text: str) -> dict | None:

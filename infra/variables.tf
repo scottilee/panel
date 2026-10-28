@@ -1,0 +1,48 @@
+variable "project_id" {
+  description = "Google Cloud project ID to deploy into."
+  type        = string
+}
+
+variable "region" {
+  description = "Cloud Run region."
+  type        = string
+  default     = "us-central1"
+}
+
+variable "service_name" {
+  description = "Cloud Run service name, also used for the Artifact Registry repo."
+  type        = string
+  default     = "panel"
+}
+
+variable "image" {
+  description = <<-EOT
+    Full image URI to deploy, e.g.
+    us-central1-docker.pkg.dev/PROJECT/panel/panel:latest
+    Build and push it first (`make push`); Terraform does not build images.
+  EOT
+  type        = string
+}
+
+variable "tf_api_key" {
+  description = "Nebius Token Factory API key. Stored in Secret Manager, not in the service config."
+  type        = string
+  sensitive   = true
+}
+
+variable "min_instances" {
+  description = <<-EOT
+    0 scales to zero (effectively free, but a cold start on the first
+    request). 1 keeps one instance warm (~$10-15/month) so a judge's first
+    click is instant. max_instance_count is pinned at 1 regardless -- run
+    state is in process memory.
+  EOT
+  type        = number
+  default     = 1
+}
+
+variable "max_concurrency" {
+  description = "In-flight Nano calls per run. 50 measured as the highest level with zero 429s."
+  type        = number
+  default     = 50
+}

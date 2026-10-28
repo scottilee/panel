@@ -9,3 +9,10 @@ web/dist/
 
 data/runs/*.json
 !data/runs/.gitkeep
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.tfstate
+infra/*.tfstate.*
+infra/terraform.tfvars

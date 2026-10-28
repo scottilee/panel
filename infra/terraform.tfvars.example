@@ -1,0 +1,15 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored --
+# it holds your Token Factory key.
+
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+
+# Set this to the image you pushed. `make push` prints it, and it looks like:
+#   us-central1-docker.pkg.dev/your-gcp-project-id/panel/panel:latest
+image = "us-central1-docker.pkg.dev/your-gcp-project-id/panel/panel:latest"
+
+tf_api_key = "your-nebius-token-factory-key"
+
+# 1 = stay warm (instant first click, ~$10-15/month)
+# 0 = scale to zero (free, cold start on first request)
+min_instances = 1
