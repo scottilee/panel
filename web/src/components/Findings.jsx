@@ -76,7 +76,9 @@ function FindingRow({ finding, overall, onSegmentClick, onEvidenceHoverStart, on
             <div
               className="finding-row-bar-baseline"
               style={{ left: `${overall}%` }}
-              title={`Whole panel: ${overall}% reacted negatively`}
+              data-tip={`Whole panel: ${overall}% reacted negatively`}
+              aria-label={`Whole panel: ${overall}% reacted negatively`}
+              role="img"
             />
           )}
         </div>

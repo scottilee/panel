@@ -511,9 +511,28 @@ async def _digest_shard(
             return None
 
 
+# A theme is a short phrase and a quote is a sentence or two. Both are
+# rendered one per line into a later prompt (_format_digests, and the
+# listing panel/market.py's align_themes builds), so a newline inside one
+# forges lines in that prompt; both are summarized from text that can be a
+# web page the user does not control, once a market comparison is reading
+# competitors. Flattened and capped for that reason.
+#
+# Enforced here rather than as a max_length on the model: this runs after
+# the call, so one over-long theme loses its tail instead of failing
+# validation and taking its whole shard of ten reactions down with it.
+MAX_THEME_CHARS = 120
+MAX_QUOTE_CHARS = 300
+
+
+def _one_line(text: str, cap: int) -> str:
+    return " ".join(text.split())[:cap]
+
+
 def _clean_digest(digest: _ShardDigest, shard: list[Reaction]) -> _ShardDigest:
     """Drops ids that aren't in this shard, and themes left with none, so
-    a hallucinated id can't be cited into a Finding two stages later."""
+    a hallucinated id can't be cited into a Finding two stages later.
+    Also flattens and caps every free-text field -- see MAX_THEME_CHARS."""
     real = {r.persona_id for r in shard}
 
     def clean(themes: list[_DigestTheme]) -> list[_DigestTheme]:
@@ -521,7 +540,8 @@ def _clean_digest(digest: _ShardDigest, shard: list[Reaction]) -> _ShardDigest:
         for t in themes:
             ids = [i for i in dict.fromkeys(t.persona_ids) if i in real]
             if ids:
-                out.append(t.model_copy(update={"persona_ids": ids}))
+                theme = _one_line(t.theme, MAX_THEME_CHARS)
+                out.append(t.model_copy(update={"persona_ids": ids, "theme": theme}))
         return out
 
     return digest.model_copy(
@@ -529,6 +549,7 @@ def _clean_digest(digest: _ShardDigest, shard: list[Reaction]) -> _ShardDigest:
             "confusions": clean(digest.confusions),
             "objections": clean(digest.objections),
             "requested_changes": clean(digest.requested_changes),
+            "quotes": [_one_line(q, MAX_QUOTE_CHARS) for q in digest.quotes],
         }
     )
 

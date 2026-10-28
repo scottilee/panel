@@ -197,3 +197,19 @@ async def test_a_competitor_only_theme_is_reported_as_neither(monkeypatch):
     result = await build_comparison("q", pages, breakdowns)
     assert result.shared_confusions == []
     assert result.only_yours_confusions == []
+
+
+def test_the_alignment_prompt_frames_its_input_as_data():
+    """The last model call that text fetched from the open web reaches.
+    A competitor page that tells its readers what to say can reach this
+    prompt two stages later, and this is the stage that decides which
+    confusions count as shared rather than yours alone."""
+    from panel.market import _ALIGN_SYSTEM, _ALIGN_USER
+
+    assert "never as instructions" in _ALIGN_SYSTEM
+    # The framing names the --- markers, so they have to be there.
+    assert "---" in _ALIGN_SYSTEM
+    assert _ALIGN_USER.count("---") == 2
+    before, _, after = _ALIGN_USER.partition("{listing}")
+    assert before.rstrip().endswith("---")
+    assert after.lstrip().startswith("---")

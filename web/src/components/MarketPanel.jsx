@@ -93,7 +93,10 @@ export default function MarketPanel({
   }
 
   const busy = status in STATUS_LABEL
-  const totalPages = pages.length
+  // The comparison's own list, not the one on screen: pages the panel
+  // mostly failed on are dropped after being listed, and "N of M" has to
+  // count the pages the themes were actually gathered from.
+  const totalPages = comparison?.pages?.length ?? pages.length
 
   return (
     <section aria-label="Market comparison" className="market-card">
@@ -129,6 +132,15 @@ export default function MarketPanel({
       {status === 'error' && (
         <p className="run-note run-note-error" role="alert">
           {error || 'The market comparison failed.'}
+        </p>
+      )}
+
+      {/* Reachable when the server cancels without the Stop button --
+          an instance shutdown or redeploy cancels outstanding tasks and
+          tells every open stream. */}
+      {status === 'cancelled' && (
+        <p className="market-note">
+          Stopped before the comparison was built. Nothing further was read.
         </p>
       )}
 

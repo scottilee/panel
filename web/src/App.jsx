@@ -369,6 +369,10 @@ export default function App() {
               return { ...m, status: 'done' }
             case 'no_pages':
               return { ...m, status: 'no_pages' }
+            // Without this the status stays 'reading', which keeps
+            // marketBusy true and so leaves Run disabled for good.
+            case 'cancelled':
+              return { ...m, status: 'cancelled' }
             case 'error':
               return { ...m, status: 'error', error: event.data?.message ?? 'unknown error' }
             default:

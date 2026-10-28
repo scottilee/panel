@@ -1047,3 +1047,173 @@ def test_run_request_defaults_to_reasoning_on():
 
     assert RunRequest(text=LONG_ENOUGH).fast is False
     assert RunRequest(text=LONG_ENOUGH, fast=True).fast is True
+
+
+def test_benchmark_corrects_panel_size_and_rebroadcasts_the_surviving_pages():
+    """A page is listed before it is read, with panel_size set to the
+    readers sent. Two things change while it is read: pages most readers
+    failed on are dropped, and panel_size becomes who actually answered.
+    Both have to reach the client, or the card labels a theme "3 of 4
+    pages" when the comparison only ever saw 3."""
+    import asyncio
+
+    from api import main as M
+    from panel.market import Candidate, MarketQuery
+    from panel.react import REACTION_FAILED
+
+    personas = PERSONA_POOL[:10]
+    parent = _finished_ctx("parent")
+    parent.personas = personas
+    # Two of the ten reads of the user's own page failed.
+    parent.run.reactions = [
+        _reaction(p.id, failed=i < 2) for i, p in enumerate(personas)
+    ]
+    RUNS["parent"] = parent
+    ctx = _benchmark_ctx("b4", status="pending")
+
+    async def pick(c, cat, n):
+        return [Candidate(url=f"https://{h}.example/", title=h) for h in ("good", "bad")]
+
+    # "good" loses one reader of ten; "bad" loses eight and is dropped.
+    async def panel(text, personas_, run_id, fast=False):
+        failures = 1 if "good" in text else 8
+        return [_reaction(p.id, failed=i < failures) for i, p in enumerate(personas_)]
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(M, "derive_query", lambda t: _async(MarketQuery(category="c", query="q")))
+        monkeypatch.setattr(M, "search_candidates", lambda q, u: [])
+        monkeypatch.setattr(M, "pick_pages", pick)
+        monkeypatch.setattr(M, "fetch_url_text", lambda url: f"a real competitor page {url} " * 10)
+        monkeypatch.setattr(M, "_panel_on_text", panel)
+        monkeypatch.setattr(M, "theme_breakdown", lambda r: _async({"confusions": [], "objections": [], "requested_changes": []}))
+        monkeypatch.setattr(M, "build_comparison", lambda q, p, b: _async({"pages": [x.model_dump(mode="json") for x in p]}))
+        events = _capture_benchmark_events(monkeypatch)
+        asyncio.run(M._execute_benchmark(ctx))
+    finally:
+        monkeypatch.undo()
+        RUNS.pop("parent", None)
+
+    assert ctx.status == "done"
+    # The failed page is gone and the survivors count answers, not sends.
+    assert [(p.label, p.panel_size) for p in ctx.pages] == [("Your page", 8), ("good.example", 9)]
+    # The client is told twice: once before reading, once with the final
+    # list. Without the second, it keeps the stale one.
+    page_lists = [d["pages"] for kind, d in events if kind == "pages"]
+    assert len(page_lists) == 2
+    assert [p["label"] for p in page_lists[0]] == ["Your page", "good.example", "bad.example"]
+    assert [p["label"] for p in page_lists[1]] == ["Your page", "good.example"]
+    assert [p["panel_size"] for p in page_lists[1]] == [8, 9]
+    # And the correction lands before the comparison it labels.
+    kinds = [k for k, _ in events]
+    assert kinds.index("pages") < kinds.index("comparing") < kinds.index("comparison")
+
+
+def _reaction(persona_id, failed=False):
+    from api.main import Reaction
+    from panel.react import REACTION_FAILED
+
+    return Reaction(
+        persona_id=persona_id, sentiment=0, would_act=False, gut_reaction="-",
+        top_confusion="-", top_objection="-", what_would_change_my_mind="-",
+        raw_error=REACTION_FAILED if failed else None,
+    )
+
+
+def _async(value):
+    async def coro():
+        return value
+
+    return coro()
+
+
+def _capture_benchmark_events(monkeypatch):
+    """Records what the stream would have carried, without a subscriber."""
+    from api import main as M
+
+    events = []
+    real = M._broadcast_benchmark
+
+    async def spy(ctx, event_type, data):
+        events.append((event_type, data))
+        await real(ctx, event_type, data)
+
+    monkeypatch.setattr(M, "_broadcast_benchmark", spy)
+    return events
+
+
+def test_eviction_waits_for_a_cancelled_task_to_unwind():
+    """cancel_benchmark marks "cancelled" before the task has unwound, and
+    the client closes its stream before POSTing the cancel -- so status
+    and subscribers both say "safe to drop" while fan_out is still tearing
+    down 50 paid calls. BENCHMARKS holds the only strong reference."""
+    import asyncio
+
+    from api import main as M
+
+    async def scenario():
+        ctx = _benchmark_ctx("unwinding", status="cancelled")
+        ctx.task = asyncio.create_task(asyncio.sleep(3600))
+        M.BENCHMARKS["unwinding"] = ctx
+        for i in range(M.MAX_RETAINED_RUNS + 5):
+            M.BENCHMARKS[f"done{i}"] = _benchmark_ctx(f"done{i}", status="done")
+        await asyncio.sleep(0)
+        M._evict_old_benchmarks()
+        kept = "unwinding" in M.BENCHMARKS
+        ctx.task.cancel()
+        await asyncio.gather(ctx.task, return_exceptions=True)
+        # Once it has finished unwinding it is evictable like any other.
+        # It is the oldest key, so it goes first of the next batch.
+        for i in range(6):
+            M.BENCHMARKS[f"later{i}"] = _benchmark_ctx(f"later{i}", status="done")
+        M._evict_old_benchmarks()
+        return kept, "unwinding" in M.BENCHMARKS
+
+    try:
+        kept_while_unwinding, kept_after = asyncio.run(scenario())
+        assert kept_while_unwinding
+        assert not kept_after
+    finally:
+        M.BENCHMARKS.clear()
+
+
+def test_eviction_waits_for_a_cancelled_run_to_unwind():
+    """_evict_old_runs has the same gap for the same reason."""
+    import asyncio
+
+    from api import main as M
+
+    async def scenario():
+        RUNS.clear()
+        ctx = _finished_ctx("unwinding", status="cancelled")
+        ctx.task = asyncio.create_task(asyncio.sleep(3600))
+        RUNS["unwinding"] = ctx
+        for i in range(M.MAX_RETAINED_RUNS + 5):
+            RUNS[f"done{i:03d}"] = _finished_ctx(f"done{i:03d}")
+        await asyncio.sleep(0)
+        M._evict_old_runs()
+        kept = "unwinding" in RUNS
+        ctx.task.cancel()
+        await asyncio.gather(ctx.task, return_exceptions=True)
+        return kept
+
+    try:
+        assert asyncio.run(scenario())
+    finally:
+        RUNS.clear()
+
+
+def test_a_cached_replay_is_not_refused_while_the_client_has_a_benchmark():
+    """The cached replay makes no model calls and takes no slot, and it is
+    the fallback when the live path is slow -- which is when a client is
+    most likely to have something of their own still running."""
+    from api import main as M
+
+    M.BENCHMARKS["b5"] = _benchmark_ctx("b5")
+    try:
+        live = client.post("/run", json={"text": LONG_ENOUGH})
+        assert live.status_code == 429
+        cached = client.post("/run?cached=true", json={"text": LONG_ENOUGH, "label": "pricing_v1"})
+        assert cached.status_code != 429, cached.json()
+    finally:
+        M.BENCHMARKS.clear()

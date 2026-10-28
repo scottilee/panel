@@ -127,11 +127,19 @@ def _evict_old_runs() -> None:
     """Drops the oldest finished runs once RUNS exceeds MAX_RETAINED_RUNS.
     Dicts preserve insertion order, so the oldest are the first keys. A
     run still in progress, or with a live SSE subscriber, is never
-    evicted."""
+    evicted.
+
+    Status alone is not enough: _cancel sets "cancelled" synchronously and
+    returns before the task has unwound, so a cancelled run can be
+    terminal and still have fan_out tearing down its in-flight calls.
+    RUNS holds the only strong reference to the task, so dropping it then
+    is what the docstring above promises not to do."""
     removable = [
         rid
         for rid, c in RUNS.items()
-        if c.run.status in ("done", "error", "cancelled") and not c.subscribers
+        if c.run.status in ("done", "error", "cancelled")
+        and not c.subscribers
+        and (c.task is None or c.task.done())
     ]
     for rid in removable[: max(0, len(RUNS) - MAX_RETAINED_RUNS)]:
         del RUNS[rid]
@@ -577,8 +585,12 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
         if previous is not None and previous.run.status in ACTIVE_STATUSES:
             await _cancel(previous)
     # One run at a time per client, so a single caller can't fill every
-    # service-wide slot and lock everyone else out for minutes.
-    if _client_is_busy(client_ip):
+    # service-wide slot and lock everyone else out for minutes. Exempting
+    # the cached replay for the same reason the ceiling below does: it
+    # makes no model calls and takes no slot, and it is the fallback when
+    # the live path is slow -- which is exactly when a client is most
+    # likely to have something else of their own still in flight.
+    if not cached and _client_is_busy(client_ip):
         raise HTTPException(
             429,
             "you already have a run or market comparison in progress; "
@@ -864,6 +876,10 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
         own_reactions = [
             r for r in parent.run.reactions if r.persona_id in {p.id for p in personas}
         ]
+        # panel_size was set optimistically to the personas sent. What
+        # belongs next to the themes is how many of them answered: a page
+        # whose themes came from 26 readers must not be labelled 50.
+        pages[0].panel_size = len(usable(own_reactions))
         breakdowns["Your page"] = await theme_breakdown(own_reactions)
         await _benchmark_page_done(ctx, "Your page")
 
@@ -884,6 +900,7 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
                 )
                 pages.remove(page)
             else:
+                page.panel_size = answered
                 breakdowns[page.label] = await theme_breakdown(reactions)
             await _benchmark_page_done(ctx, page.label)
 
@@ -891,6 +908,16 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
             ctx.status = "no_pages"
             await _broadcast_benchmark(ctx, "no_pages", {"query": market.query})
             return
+
+        # The list changed under the client: pages were dropped above and
+        # every panel_size was corrected. Without this the card keeps the
+        # list sent before the reading started, so a dropped page stays on
+        # screen as one the panel read and "3 of 3 pages" renders as
+        # "3 of 4" -- understating exactly the category-wide signal this
+        # feature exists to show.
+        await _broadcast_benchmark(
+            ctx, "pages", {"pages": [p.model_dump(mode="json") for p in pages]}
+        )
 
         ctx.status = "comparing"
         await _broadcast_benchmark(ctx, "comparing", {})
@@ -974,11 +1001,19 @@ async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
 def _evict_old_benchmarks() -> None:
     """Oldest finished benchmarks first, as _evict_old_runs does for runs.
     A running one is never dropped: BENCHMARKS holds the only strong
-    reference to its context, and with it the task's."""
+    reference to its context, and with it the task's.
+
+    The task check is what makes that true. cancel_benchmark sets
+    "cancelled" before the task unwinds, and the client closes its stream
+    before POSTing the cancel (web/src/api.js), so without it a just-
+    cancelled benchmark is terminal and subscriber-less while still
+    tearing down 50 in-flight calls."""
     removable = [
         bid
         for bid, b in BENCHMARKS.items()
-        if b.status not in BENCHMARK_ACTIVE_STATUSES and not b.subscribers
+        if b.status not in BENCHMARK_ACTIVE_STATUSES
+        and not b.subscribers
+        and (b.task is None or b.task.done())
     ]
     for bid in removable[: max(0, len(BENCHMARKS) - MAX_RETAINED_RUNS)]:
         del BENCHMARKS[bid]
