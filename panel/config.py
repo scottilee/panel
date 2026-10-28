@@ -23,10 +23,6 @@ MAX_CONCURRENCY = int(env("MAX_CONCURRENCY", "50"))
 
 TAVILY_API_KEY = env("TAVILY_API_KEY")
 
-# "false" runs fan_out in-process (default, used for the live demo); "true"
-# dispatches to the Nebius Serverless Job in jobs/react_job.py (stage 9).
-USE_SERVERLESS_JOB = env("USE_SERVERLESS_JOB", "false").lower() == "true"
-
 DATA_DIR = ROOT / "data"
 RUNS_DIR = DATA_DIR / "runs"
 EXAMPLES_DIR = DATA_DIR / "examples"

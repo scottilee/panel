@@ -65,9 +65,22 @@ function pickN(pool, seed, n) {
   return [...new Set(out)]
 }
 
+// Deterministic 32-bit mixing hash. Anything derived from a plain `i % k`
+// where k divides the grid's 10 columns lands in fixed columns and shows
+// up as vertical stripes (the real persona pool had exactly this problem
+// with its 5-cycle age/income bands). Hashing first breaks that alignment
+// while staying fully reproducible.
+function hash32(n) {
+  let h = Math.imul(n ^ 0x9e3779b9, 2654435761)
+  h ^= h >>> 15
+  h = Math.imul(h, 2246822507)
+  h ^= h >>> 13
+  return h >>> 0
+}
+
 function ageFor(i) {
   const bands = [21, 29, 41, 58, 70]
-  return bands[i % bands.length] + (i % 7)
+  return bands[hash32(i * 3 + 1) % bands.length] + (hash32(i) % 7)
 }
 
 const VOICE_TEMPLATES = [
@@ -193,19 +206,28 @@ const CHANGES = [
 const NON_NULL_CONFUSIONS = CONFUSIONS.filter((c) => c !== null)
 const NON_NULL_OBJECTIONS = OBJECTIONS.filter((o) => o !== null)
 
+// Bug found 2026-10-28: sentiment used to be `(i % 5) - 2`, a 5-cycle
+// that divides the grid's 10 columns, so every column rendered as one
+// solid sentiment colour -- repeating vertical stripes instead of a
+// mixed crowd. Hash the index to break that alignment, and skew by
+// skepticism so the segment filters surface a believable pattern too
+// (filtering to high-skepticism should actually look more negative, the
+// way it does with real model output).
 export function buildMockReaction(persona, i) {
-  const sentiment = ((i % 5) - 2)
+  const noise = hash32(i * 7 + 13) % 100
+  const score = (100 - persona.skepticism) * 0.6 + noise * 0.4
+  const sentiment = score < 18 ? -2 : score < 38 ? -1 : score < 62 ? 0 : score < 82 ? 1 : 2
   const atTwo = sentiment === 2
   return {
     persona_id: persona.id,
     sentiment,
-    would_act: sentiment >= 1 && i % 3 !== 0,
-    gut_reaction: pick(GUT_REACTIONS, i),
-    top_confusion: atTwo && i % 2 === 0 ? null : pick(NON_NULL_CONFUSIONS, i),
-    top_objection: atTwo && i % 2 === 1 ? null : pick(NON_NULL_OBJECTIONS, i),
-    what_would_change_my_mind: pick(CHANGES, i),
+    would_act: sentiment >= 1 && hash32(i) % 3 !== 0,
+    gut_reaction: pick(GUT_REACTIONS, hash32(i + 1)),
+    top_confusion: atTwo && hash32(i) % 2 === 0 ? null : pick(NON_NULL_CONFUSIONS, hash32(i + 2)),
+    top_objection: atTwo && hash32(i) % 2 === 1 ? null : pick(NON_NULL_OBJECTIONS, hash32(i + 3)),
+    what_would_change_my_mind: pick(CHANGES, hash32(i + 4)),
     run_id: 'mock-run',
-    latency_ms: 300 + (i % 7) * 50,
+    latency_ms: 300 + (hash32(i) % 7) * 50,
     raw_error: null,
   }
 }

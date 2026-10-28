@@ -5,6 +5,7 @@ Section 5.2.
 from __future__ import annotations
 
 import asyncio
+import zlib
 from collections.abc import AsyncIterator
 
 from panel.prompts import REACTION_SYSTEM, reaction_user
@@ -13,6 +14,16 @@ from panel.tf_client import ChatJsonError, chat_json, env
 
 MODEL_NANO = env("MODEL_NANO", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B")
 DEFAULT_MAX_CONCURRENCY = int(env("MAX_CONCURRENCY", "25"))
+
+
+def seed_for(persona_id: str) -> int:
+    """Stable per-persona seed. Python's built-in hash() randomizes string
+    hashing per process (PYTHONHASHSEED), so using it here meant the
+    "fixed seed per persona" the spec asks for (section 4) silently
+    changed on every server restart -- the one thing a seed is supposed to
+    prevent. crc32 is stable across processes and machines.
+    """
+    return zlib.crc32(persona_id.encode()) % (2**31)
 
 # Section 5.2 states max_tokens=400 for Nano. Measured empirically
 # (2026-10-27, 15-call samples at 800/1500/3000 against pricing_v1.txt):
@@ -47,7 +58,7 @@ async def _react_one(
                 user=reaction_user(persona.model_dump_json(), artifact_text),
                 schema=Reaction,
                 temperature=REACTION_TEMPERATURE,
-                seed=hash(persona.id) % (2**31),
+                seed=seed_for(persona.id),
                 max_tokens=REACTION_MAX_TOKENS,
             )
             return result.data.model_copy(

@@ -15,9 +15,17 @@ export default function Verdict({ synthesis, runLabel, wouldActPct, onApplyAndCo
           <span className="verdict-eyebrow">THE VERDICT &middot; {runLabel}</span>
           <h1 className="verdict-headline">{synthesis.headline}</h1>
         </div>
+        {/* The headline number is the share NOT convinced, not the share
+            who would act. Same data either way, but "4% would act" reads
+            as the product failing, while "96 of 100 aren't convinced"
+            reads as the finding -- which is what this tool actually
+            delivers. Real runs land at 92-100 unconvinced by design (see
+            the anti-sycophancy check), so framing it as the diagnosis is
+            both more useful and more honest than framing it as a
+            conversion rate. */}
         <div className="verdict-bigact">
-          <span className="verdict-bigact-value">{Math.round(wouldActPct)}%</span>
-          <span className="verdict-bigact-label">would act</span>
+          <span className="verdict-bigact-value">{Math.round(100 - wouldActPct)}</span>
+          <span className="verdict-bigact-label">of 100 aren&rsquo;t convinced</span>
         </div>
       </div>
 
@@ -34,7 +42,14 @@ export default function Verdict({ synthesis, runLabel, wouldActPct, onApplyAndCo
 
       <div className="verdict-edit-panel">
         <div className="verdict-edit-text">
-          <span className="verdict-edit-eyebrow">TRY THIS EDIT &middot; {edit.predicted_flips} PREDICTED FLIPS</span>
+          {/* predicted_flips is deliberately NOT shown. Measured against
+              real runs, Ultra predicted 35-45 flips where the actual
+              rerun produced 0-7 -- displaying a number we know is wrong
+              by that margin invites a judge to apply the edit and catch
+              us out. The edit itself and its rationale are the useful
+              part; the real flip count shows up after Apply and compare,
+              measured rather than guessed. */}
+          <span className="verdict-edit-eyebrow">ONE EDIT TO TRY</span>
           <span className="verdict-edit-change">
             <span className="verdict-edit-before">{edit.current_text}</span>
             {'  ->  '}

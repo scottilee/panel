@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import random
 import sys
 import time
 from collections import Counter
@@ -30,7 +31,7 @@ from panel.personas import (  # noqa: E402
     save_personas,
 )
 from panel.prompts import REACTION_SYSTEM, reaction_user  # noqa: E402
-from panel.react import REACTION_MAX_TOKENS, REACTION_TEMPERATURE  # noqa: E402
+from panel.react import REACTION_MAX_TOKENS, REACTION_TEMPERATURE, seed_for  # noqa: E402
 from panel.schemas import Persona, Reaction  # noqa: E402
 from panel.tf_client import ChatJsonError, chat_json, env  # noqa: E402
 
@@ -47,6 +48,8 @@ MIN_WOULD_ACT_FALSE = 25
 MAX_DEDUP_PASSES = 5
 MAX_SYCOPHANCY_ROUNDS = 3
 SKEPTICAL_BATCH_SIZE = 10
+# Fixed so the saved file's order is reproducible across regenerations.
+PERSONA_ORDER_SEED = 20261028
 
 
 async def generate_all(n: int, start_id: int = 1) -> list[Persona]:
@@ -144,7 +147,7 @@ async def react_one(persona: Persona, artifact_text: str, sem: asyncio.Semaphore
                 user=reaction_user(persona.model_dump_json(), artifact_text),
                 schema=Reaction,
                 temperature=REACTION_TEMPERATURE,
-                seed=hash(persona.id) % (2**31),
+                seed=seed_for(persona.id),
                 max_tokens=REACTION_MAX_TOKENS,
             )
             return result.data.model_copy(update={"persona_id": persona.id})
@@ -272,6 +275,18 @@ async def main() -> None:
 
     print("Checking for region-scoped duplicate names/occupations (C1)...")
     personas = await fix_region_duplicates(personas)
+
+    # The stratification grid assigns age and income bands in repeating
+    # 5-cycles, so generation order puts one age+income cohort in every
+    # 5th slot. api/main.py selects a run's personas as the first N in
+    # this file's order (sample_stable), and the grid is 10 columns wide
+    # -- 5 divides 10, so unshuffled order made every grid column a
+    # single cohort, showing up as vertical colour stripes instead of a
+    # mixed crowd. Shuffling here (deterministically, so the file is
+    # reproducible) keeps file order itself mixed, which means neither
+    # the server nor the browser needs its own shuffle to agree on
+    # which personas a given N uses.
+    random.Random(PERSONA_ORDER_SEED).shuffle(personas)
 
     c1 = check_c1(personas)
     print("\n=== C1: stratification + uniqueness ===")
