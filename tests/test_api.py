@@ -689,3 +689,48 @@ def test_a_new_run_can_replace_the_clients_previous_one(monkeypatch):
     r = client.post("/run", json={"text": LONG_ENOUGH, "replaces": "old"})
     assert r.status_code == 200
     assert RUNS["old"].run.status == "cancelled"
+
+
+def test_every_handler_annotation_actually_resolves():
+    """Guards a failure mode that does not raise on import.
+
+    With `from __future__ import annotations` a handler's parameter
+    annotation is just a string, so a MISSING import never raises --
+    Python has nothing to resolve until FastAPI tries. FastAPI then gives
+    up and treats the parameter as a query string, and the endpoint 422s
+    with "Field required / loc: query". POST /benchmark shipped broken
+    exactly this way, with a green test suite and a clean import.
+    """
+    import typing
+
+    from fastapi.routing import APIRoute
+
+    from api.main import app
+
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        # Raises NameError if any annotation names something unimported.
+        typing.get_type_hints(route.endpoint)
+
+
+def test_the_benchmark_driver_can_reach_everything_it_calls():
+    """Companion to the annotation guard above, for names used inside
+    function bodies rather than in signatures. Two missing imports got
+    into POST /benchmark this way -- `BenchmarkRequest` (caught by the
+    annotation guard) and `theme_breakdown` (not, because it is called
+    rather than annotated), and neither raised at import time."""
+    import api.main as M
+
+    for name in (
+        "theme_breakdown",
+        "build_comparison",
+        "derive_query",
+        "pick_pages",
+        "search_candidates",
+        "fetch_url_text",
+        "fan_out",
+        "MarketPage",
+        "MarketComparison",
+    ):
+        assert hasattr(M, name), f"api.main is missing {name}"

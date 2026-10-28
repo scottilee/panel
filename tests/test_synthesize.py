@@ -668,11 +668,11 @@ def _shard(confusions=(), objections=(), requested=(), quotes=()):
     )
 
 
-def test_theme_key_ignores_word_order_and_filler():
-    from panel.synthesize import _theme_key
+def testtheme_key_ignores_word_order_and_filler():
+    from panel.synthesize import theme_key
 
     same = ["price too high", "the price is too high", "Price is too high!", "too high price"]
-    assert len({_theme_key(t) for t in same}) == 1
+    assert len({theme_key(t) for t in same}) == 1
 
 
 def test_merge_collapses_phrasings_of_one_theme():

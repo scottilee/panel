@@ -61,7 +61,22 @@ def _is_public_address(addr: str) -> bool:
     return ip.is_global and not ip.is_multicast
 
 
-def _assert_public_url(url: str) -> None:
+def _assert_public_url(url: str, require_resolvable: bool = True) -> None:
+    """SSRF gate.
+
+    require_resolvable=False is for the Tavily path, where WE never open
+    the connection -- Tavily fetches the page on its own infrastructure
+    and hands back text. The check still rejects any host that resolves
+    to a private address (asking Tavily to fetch 10.0.0.1 is pointless
+    and suspicious), but a host this process simply cannot resolve is no
+    longer fatal there: we cannot prove it is private, and a fetch we do
+    not make cannot reach our own internals.
+    
+    It matters in production, not just in a sandbox. A deployment with
+    restricted egress DNS that relies on Tavily for fetching would
+    otherwise reject every URL a user submitted, with "could not
+    resolve" for pages that are perfectly public.
+    """
     parsed = urlparse(url)
     if parsed.scheme not in _ALLOWED_SCHEMES:
         raise UnsafeURLError(f"only http and https URLs are supported, not {parsed.scheme!r}")
@@ -74,11 +89,15 @@ def _assert_public_url(url: str) -> None:
     try:
         infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80))
     except socket.gaierror as e:
-        raise UnsafeURLError(f"could not resolve {host}") from e
+        if require_resolvable:
+            raise UnsafeURLError(f"could not resolve {host}") from e
+        return
 
     addresses = {info[4][0] for info in infos}
     if not addresses:
-        raise UnsafeURLError(f"could not resolve {host}")
+        if require_resolvable:
+            raise UnsafeURLError(f"could not resolve {host}")
+        return
     # Every resolved address must be public, not just the first: a host
     # with one public and one loopback A record would otherwise be a way
     # straight through this check.
@@ -135,7 +154,7 @@ def _fetch_via_tavily(url: str) -> str:
     # Tavily is a fixed, trusted endpoint, so the SSRF checks don't apply
     # to this request -- but the submitted URL still gets validated, since
     # Tavily would otherwise happily fetch it on our behalf.
-    _assert_public_url(url)
+    _assert_public_url(url, require_resolvable=False)
     resp = requests.post(
         "https://api.tavily.com/extract",
         json={"urls": [url]},

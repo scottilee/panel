@@ -22,6 +22,13 @@ from sse_starlette.sse import EventSourceResponse
 from panel import config
 from panel.classify import check_artifact
 from panel.compare import delta
+from panel.market import (
+    COMPETITOR_PAGES,
+    build_comparison,
+    derive_query,
+    pick_pages,
+    search_candidates,
+)
 from panel.fetch import UnsafeURLError, fetch_url_text
 from panel.personas import load_personas, sample_stable
 from panel.react import fan_out
@@ -29,9 +36,12 @@ from panel.schemas import (
     MIN_ARTIFACT_CHARS,
     Artifact,
     ArtifactCheck,
+    BenchmarkRequest,
     CheckRequest,
     CompareRequest,
     CompareResult,
+    MarketComparison,
+    MarketPage,
     Persona,
     Reaction,
     Run,
@@ -40,7 +50,7 @@ from panel.schemas import (
     Synthesis,
 )
 from panel.stats import mean_sentiment, would_act_pct
-from panel.synthesize import _apply_recounted_pct, synthesize
+from panel.synthesize import _apply_recounted_pct, synthesize, theme_breakdown
 from panel.tf_client import track_calls
 
 app = FastAPI(title="Panel")
@@ -125,6 +135,29 @@ def _evict_old_runs() -> None:
 
 
 PERSONA_POOL = load_personas()
+
+# --- Market benchmark -------------------------------------------------------
+
+# Each competitor page is a real panel run, so this is the cost lever.
+# 50 is enough for the theme stage to be stable (it shards at 10) and
+# keeps a three-competitor benchmark at ~150 Nano calls, about 4 cents.
+MARKET_PANEL_SIZE = int(config.env("MARKET_PANEL_SIZE") or "50")
+
+
+@dataclass
+class BenchmarkContext:
+    benchmark_id: str
+    run_id: str
+    status: str = "pending"
+    query: str = ""
+    pages: list[MarketPage] = field(default_factory=list)
+    comparison: MarketComparison | None = None
+    error_message: str | None = None
+    subscribers: list[asyncio.Queue] = field(default_factory=list)
+    task: asyncio.Task | None = None
+
+
+BENCHMARKS: dict[str, BenchmarkContext] = {}
 
 # --- Public-deployment spend limits -----------------------------------------
 #
@@ -577,6 +610,209 @@ async def cancel_run(run_id: str) -> dict:
         return {"run_id": run_id, "status": ctx.run.status, "cancelled": False}
     await _cancel(ctx)
     return {"run_id": run_id, "status": ctx.run.status, "cancelled": True}
+
+
+async def _broadcast_benchmark(ctx: BenchmarkContext, event_type: str, data: object) -> None:
+    event = _sse_event(event_type, data)
+    for queue in list(ctx.subscribers):
+        await queue.put(event)
+
+
+async def _panel_on_text(text: str, personas: list[Persona], run_id: str) -> list[Reaction]:
+    """A panel read with no Run record and no synthesis -- the benchmark
+    only needs the reactions, and a competitor's page does not deserve a
+    verdict of its own."""
+    reactions: list[Reaction] = []
+    async for reaction in fan_out(text, personas, run_id):
+        reactions.append(reaction)
+    return reactions
+
+
+async def _execute_benchmark(ctx: BenchmarkContext) -> None:
+    parent = RUNS.get(ctx.run_id)
+    try:
+        if parent is None:
+            raise ValueError("the run this benchmark was started from is gone")
+
+        # Same personas as the parent run, capped: apples to apples on who
+        # read what, without a 1,000-persona parent making this cost four
+        # times a full run.
+        personas = parent.personas[:MARKET_PANEL_SIZE]
+        own_text = parent.run.artifact.text
+
+        ctx.status = "searching"
+        await _broadcast_benchmark(ctx, "searching", {})
+        market = await derive_query(own_text)
+        ctx.query = market.query
+        await _broadcast_benchmark(
+            ctx, "query", {"category": market.category, "query": market.query}
+        )
+
+        candidates = await asyncio.to_thread(
+            search_candidates, market.query, parent.run.artifact.url
+        )
+        picked = await pick_pages(candidates, market.category, COMPETITOR_PAGES)
+        if not picked:
+            # A real and correct outcome for some categories: search for
+            # "meal planning app pricing" returns almost nothing but
+            # listicles. Saying so beats comparing against a blog post.
+            ctx.status = "no_pages"
+            await _broadcast_benchmark(ctx, "no_pages", {"query": market.query})
+            return
+
+        pages = [
+            MarketPage(
+                label="Your page",
+                is_yours=True,
+                panel_size=len(personas),
+                text=own_text,
+            )
+        ]
+        fetched: list[tuple[MarketPage, str]] = []
+        for candidate in picked:
+            try:
+                text = await asyncio.to_thread(fetch_url_text, candidate.url)
+            except Exception as e:  # noqa: BLE001 -- one bad page is not fatal
+                print(f"benchmark: skipping {candidate.url}: {type(e).__name__}: {e}")
+                continue
+            page = MarketPage(
+                label=_host_label(candidate.url),
+                url=candidate.url,
+                panel_size=len(personas),
+                text=text,
+            )
+            pages.append(page)
+            fetched.append((page, text))
+
+        if not fetched:
+            ctx.status = "no_pages"
+            await _broadcast_benchmark(ctx, "no_pages", {"query": market.query})
+            return
+
+        ctx.pages = pages
+        await _broadcast_benchmark(
+            ctx, "pages", {"pages": [p.model_dump(mode="json") for p in pages]}
+        )
+
+        ctx.status = "reading"
+        breakdowns: dict[str, dict] = {}
+        # The parent's own reactions are already paid for; reuse them
+        # rather than re-running the user's page.
+        own_reactions = [
+            r for r in parent.run.reactions if r.persona_id in {p.id for p in personas}
+        ]
+        breakdowns["Your page"] = await theme_breakdown(own_reactions)
+        await _broadcast_benchmark(ctx, "page_done", {"label": "Your page"})
+
+        for page, text in fetched:
+            reactions = await _panel_on_text(text, personas, f"{ctx.benchmark_id}:{page.label}")
+            breakdowns[page.label] = await theme_breakdown(reactions)
+            await _broadcast_benchmark(ctx, "page_done", {"label": page.label})
+
+        ctx.status = "comparing"
+        await _broadcast_benchmark(ctx, "comparing", {})
+        ctx.comparison = await build_comparison(ctx.query, pages, breakdowns)
+        ctx.status = "done"
+        await _broadcast_benchmark(ctx, "comparison", ctx.comparison)
+        await _broadcast_benchmark(ctx, "done", {})
+    except asyncio.CancelledError:
+        ctx.status = "cancelled"
+        await _broadcast_benchmark(ctx, "cancelled", {})
+        raise
+    except Exception as e:  # noqa: BLE001
+        print(f"benchmark {ctx.benchmark_id} failed: {type(e).__name__}: {e}", flush=True)
+        ctx.status = "error"
+        ctx.error_message = "the market comparison failed; see server logs"
+        await _broadcast_benchmark(ctx, "error", {"message": ctx.error_message})
+
+
+def _host_label(url: str) -> str:
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or url).lower().removeprefix("www.")
+    return host[:40]
+
+
+@app.post("/benchmark")
+async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
+    """Runs the panel over the user's copy and a few competitor pages.
+
+    Rate-limited against the run bucket, not the cheap check bucket: this
+    is three panel runs plus Tavily calls, so it costs more than a run,
+    not less.
+    """
+    parent = RUNS.get(req.run_id)
+    if parent is None:
+        raise HTTPException(404, "run not found")
+    if parent.run.status != "done":
+        raise HTTPException(409, "the run must finish before comparing it to the market")
+    if not parent.run.reactions:
+        raise HTTPException(409, "that run has no reactions to compare")
+    _check_rate_limit(request.client.host if request.client else "unknown")
+    if _active_run_count() >= MAX_CONCURRENT_RUNS:
+        raise HTTPException(429, "too many runs in flight; try again shortly")
+
+    # Unguessable for the same reason run ids are (see _new_run_id): a
+    # benchmark id is the only credential for reading the comparison,
+    # which embeds the user's own copy's themes.
+    benchmark_id = f"b_{secrets.token_urlsafe(16)}"
+    ctx = BenchmarkContext(benchmark_id=benchmark_id, run_id=req.run_id)
+    BENCHMARKS[benchmark_id] = ctx
+    for stale in list(BENCHMARKS)[:-MAX_RETAINED_RUNS]:
+        BENCHMARKS.pop(stale, None)
+    ctx.task = asyncio.create_task(_execute_benchmark(ctx))
+    return {"benchmark_id": benchmark_id}
+
+
+@app.get("/benchmark/{benchmark_id}")
+async def get_benchmark(benchmark_id: str) -> dict:
+    ctx = BENCHMARKS.get(benchmark_id)
+    if ctx is None:
+        raise HTTPException(404, "benchmark not found")
+    return {
+        "benchmark_id": ctx.benchmark_id,
+        "run_id": ctx.run_id,
+        "status": ctx.status,
+        "query": ctx.query,
+        "pages": [p.model_dump(mode="json") for p in ctx.pages],
+        "comparison": ctx.comparison.model_dump(mode="json") if ctx.comparison else None,
+        "error": ctx.error_message,
+    }
+
+
+@app.get("/benchmark/{benchmark_id}/stream")
+async def stream_benchmark(benchmark_id: str) -> EventSourceResponse:
+    ctx = BENCHMARKS.get(benchmark_id)
+    if ctx is None:
+        raise HTTPException(404, "benchmark not found")
+
+    async def generator():
+        queue: asyncio.Queue = asyncio.Queue()
+        ctx.subscribers.append(queue)
+        try:
+            # Replay enough for a reconnect to catch up, same
+            # subscribe-before-replay ordering as stream_run.
+            if ctx.query:
+                yield _sse_event("query", {"query": ctx.query})
+            if ctx.pages:
+                yield _sse_event(
+                    "pages", {"pages": [p.model_dump(mode="json") for p in ctx.pages]}
+                )
+            if ctx.comparison is not None:
+                yield _sse_event("comparison", ctx.comparison)
+            if ctx.status in ("done", "error", "no_pages", "cancelled"):
+                yield _sse_event(ctx.status, {"message": ctx.error_message or ""})
+                return
+            while True:
+                event = await queue.get()
+                yield event
+                if event["event"] in ("done", "error", "no_pages", "cancelled"):
+                    break
+        finally:
+            if queue in ctx.subscribers:
+                ctx.subscribers.remove(queue)
+
+    return EventSourceResponse(generator())
 
 
 @app.post("/compare")

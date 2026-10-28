@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { checkArtifact, getCompareResult, getExamples, getPoolSize, previewPersonas, startRun } from './api.js'
+import {
+  checkArtifact,
+  getCompareResult,
+  getExamples,
+  getPoolSize,
+  isMockMode,
+  previewPersonas,
+  startBenchmark,
+  startRun,
+} from './api.js'
 import ArtifactInput, { MAX_TEXT_LENGTH, MIN_TEXT_LENGTH } from './components/ArtifactInput.jsx'
 import CompareBar from './components/CompareBar.jsx'
 import Filters from './components/Filters.jsx'
 import Findings from './components/Findings.jsx'
+import MarketPanel from './components/MarketPanel.jsx'
 import Grid from './components/Grid.jsx'
 import PersonaCard from './components/PersonaCard.jsx'
 import PersonaCountControl from './components/PersonaCountControl.jsx'
@@ -97,6 +107,7 @@ export default function App() {
     return () => {
       runHandleRef.current?.cancel()
       compareRunHandleRef.current?.cancel()
+      marketHandleRef.current?.cancel()
     }
   }, [])
 
@@ -113,6 +124,10 @@ export default function App() {
   const [confirmCheckEntry, setConfirmCheckEntry] = useState(null)
   const [applyError, setApplyError] = useState(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  // Market benchmark: null until started, then a status string plus
+  // whatever has streamed in so far.
+  const [market, setMarket] = useState(null)
+  const marketHandleRef = useRef(null)
   const [highlightedIds, setHighlightedIds] = useState(null)
   const [viewMode, setViewMode] = useState('A')
   const [sortedByReaction, setSortedByReaction] = useState(false)
@@ -312,6 +327,49 @@ export default function App() {
     }
     setConfirmCheckEntry(null)
     startRunNow()
+  }
+
+  function handleStartBenchmark() {
+    // Mock mode has no run id (it never emits run_started), so the guard
+    // is mode-aware rather than simply requiring one.
+    if (!state.runId && !isMockMode()) return
+    marketHandleRef.current?.cancel()
+    setMarket({ status: 'pending', query: '', pages: [], comparison: null, error: null })
+    marketHandleRef.current = startBenchmark({
+      runId: state.runId,
+      text: state.artifactText,
+      panelSize: state.personaCount,
+      onEvent: (event) => {
+        setMarket((m) => {
+          if (!m) return m
+          switch (event.type) {
+            case 'searching':
+              return { ...m, status: 'searching' }
+            case 'query':
+              return { ...m, status: 'searching', query: event.data.query }
+            case 'pages':
+              return { ...m, status: 'reading', pages: event.data.pages }
+            case 'comparing':
+              return { ...m, status: 'comparing' }
+            case 'comparison':
+              return { ...m, comparison: event.data }
+            case 'done':
+              return { ...m, status: 'done' }
+            case 'no_pages':
+              return { ...m, status: 'no_pages' }
+            case 'error':
+              return { ...m, status: 'error', error: event.data?.message ?? 'unknown error' }
+            default:
+              return m
+          }
+        })
+      },
+    })
+  }
+
+  function handleDismissMarket() {
+    marketHandleRef.current?.cancel()
+    setMarket(null)
   }
 
   function handleCancelConfirmed() {
@@ -707,6 +765,24 @@ export default function App() {
           onEvidenceHoverStart={handleEvidenceHoverStart}
           onEvidenceHoverEnd={handleEvidenceHoverEnd}
         />
+
+        {/* Below the findings: the market comparison needs a finished run
+            to compare, and reads as "and here is how that sits against
+            everyone else" rather than competing with the verdict. Hidden
+            in mock mode, which has no backend to search with. */}
+        {state.synthesis && (state.runId || isMockMode()) && (
+          <MarketPanel
+            status={market?.status}
+            query={market?.query ?? ''}
+            pages={market?.pages ?? []}
+            comparison={market?.comparison ?? null}
+            error={market?.error ?? null}
+            onStart={handleStartBenchmark}
+            onDismiss={handleDismissMarket}
+            disabled={isRunning}
+            isMock={isMockMode()}
+          />
+        )}
       </div>
       {pinnedPersona && (
         <PersonaCard

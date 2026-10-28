@@ -18,6 +18,7 @@ test:
 	python3 -m pytest tests/ -q
 	@node scripts/check_precheck.mjs
 	@node scripts/check_mock.mjs
+	@node scripts/check_dev_proxy.mjs
 	@node scripts/check_edit.mjs
 
 ## Build the container locally

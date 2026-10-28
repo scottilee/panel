@@ -676,3 +676,105 @@ Transportation, Parking Services Division, at the number listed on the
 City's official website.`,
   },
 ]
+
+
+// --- Market benchmark, mock ------------------------------------------------
+//
+// Real mode searches the live web with Tavily; mock mode cannot and must
+// not pretend to. So the competitor labels here are obviously synthetic
+// and carry no URL, and the panel says so in the header -- the point is
+// to see the shape of the feature without implying we read anybody's
+// actual page.
+//
+// Themes come from the same generic pools the mock reactions use, so what
+// the comparison claims is consistent with the reactions sitting above it
+// on screen.
+
+// Synthetic competitor pages. Written rather than fetched, and named so
+// that nobody mistakes them for real companies -- mock mode makes no web
+// request. Short names on purpose: the earlier "example-competitor-a"
+// was 20 characters and ellipsised to "example-competi..." in the
+// narrower page columns, hiding the single letter that distinguished
+// them. They exist so the page-text modal has something real to show:
+// seeing WHAT the panel read is most of the value of that modal, and an
+// empty one would teach the user nothing about the feature.
+const MOCK_COMPETITORS = [
+  {
+    label: 'Competitor A',
+    text: `Save smarter. 4.10% APY, no minimum.
+
+Open an account in three minutes. No monthly fees, no minimum balance, no
+penalty for withdrawing. Your money is FDIC insured to $250,000 through our
+partner bank.
+
+Rate is variable and may change after account opening. See the rate sheet
+for current terms.`,
+  },
+  {
+    label: 'Competitor B',
+    text: `A savings account that actually pays.
+
+Most high street banks pay 0.4%. We pay 4.25%. That is the whole pitch.
+
+- No fees, ever
+- Move money out any time, same day
+- FDIC insured to $250,000
+- Rated 4.7 from 19,000 customers
+
+Takes about four minutes to open. You will need a photo ID and your Social
+Security number.`,
+  },
+  {
+    label: 'Competitor C',
+    text: `Earn 4.00% APY on every dollar.
+
+No minimum deposit. No monthly maintenance fee. Unlimited transfers between
+your accounts.
+
+Already a member? Sign in to open a savings account in one step.
+
+Annual Percentage Yield accurate as of today and subject to change without
+notice. Fees may reduce earnings.`,
+  },
+]
+
+export function buildMockComparison(artifactText, panelSize) {
+  const content = contentFor(artifactText)
+  const pages = [
+    {
+      label: 'Your page',
+      url: null,
+      is_yours: true,
+      panel_size: panelSize,
+      text: artifactText || '',
+    },
+    ...MOCK_COMPETITORS.map((c) => ({
+      label: c.label,
+      url: null,
+      is_yours: false,
+      panel_size: panelSize,
+      text: c.text,
+    })),
+  ]
+  const everyone = [pages[0].label, pages[1].label, pages[2].label]
+  const two = [pages[0].label, pages[3].label]
+  return {
+    query: `${content.confusions.length ? '' : ''}mock search — no web request was made`,
+    pages,
+    // Shared: drawn from the generic pools, so they match the reactions.
+    shared_confusions: [
+      { theme: content.confusions[0], pages: everyone, evidence: [] },
+      { theme: content.confusions[1], pages: two, evidence: [] },
+    ].filter((t) => t.theme),
+    shared_objections: [
+      { theme: content.objections[0], pages: everyone, evidence: [] },
+    ].filter((t) => t.theme),
+    only_yours_confusions: [
+      { theme: content.confusions[2] ?? 'Something only your page leaves unclear', pages: ['Your page'], evidence: [] },
+    ],
+    only_yours_objections: [
+      { theme: content.objections[1] ?? 'An objection only your page raises', pages: ['Your page'], evidence: [] },
+      { theme: content.objections[2], pages: ['Your page'], evidence: [] },
+    ].filter((t) => t.theme),
+  }
+}

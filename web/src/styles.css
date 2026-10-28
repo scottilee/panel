@@ -1748,3 +1748,306 @@ input::placeholder {
   background: #fdf1f0;
   color: #8a2520;
 }
+
+/* --- Market comparison (panel/market.py) -------------------------------
+   Built from the same pieces as the verdict card -- 22px radius, the
+   eyebrow, the big tight headline, the winning/losing badge pair -- rather
+   than its own visual language. It is making the same kind of statement
+   (here is the finding, here are its two sides), so it should look like
+   it belongs to the same app. The first version invented smaller type, a
+   different eyebrow and its own grey panels, and read as bolted on. */
+
+.market-card {
+  background: var(--bg-elevated);
+  border-radius: 22px;
+  box-shadow: var(--card-shadow);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.market-card-idle {
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.market-pitch {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.market-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.market-headline-block {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Matches .verdict-eyebrow exactly. */
+.market-eyebrow {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.market-query {
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-placeholder);
+}
+
+/* A step down from .verdict-headline's 34px: the verdict is the page's
+   main claim and this is a secondary one, so it should not compete. */
+.market-headline {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  overflow-wrap: break-word;
+}
+
+.market-headline-busy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  color: var(--text-dim);
+}
+
+.market-idle-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* The run spinner is white-on-accent; here it sits on a white card. */
+.market-spinner {
+  flex: 0 0 auto;
+  border-color: rgba(31, 111, 235, 0.22);
+  border-top-color: var(--accent);
+}
+
+.market-start {
+  flex: 0 0 auto;
+  min-height: 46px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.market-start:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.market-dismiss {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--link);
+  cursor: pointer;
+}
+
+.market-dismiss:hover {
+  color: var(--link-hover);
+}
+
+.market-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+/* Each page is a button, because the useful thing is seeing what the
+   panel actually read -- extraction is imperfect and a comparison built
+   on nav junk should be visibly that. */
+/* Fixed column counts, switched on the CARD's width, not the viewport's.
+   
+   Three things forced this. As flex with `flex: 1 1 180px`, a lone item
+   on the last row stretched to the full width -- four pages with three
+   per row made the fourth ("example-competitor-c") a full-width bar
+   beside three third-width ones. auto-fit has the same fault, collapsing
+   empty tracks so the survivor grows into them. auto-fill fixes the
+   orphan but leaves a visible hole when the track count does not divide
+   the item count (5 tracks, 4 items).
+   
+   Since there are always exactly 1 + COMPETITOR_PAGES items, 2 or 4
+   columns divide it exactly and neither stretches nor leaves a gap. And
+   the breakpoint has to be a container query: this column is at its
+   NARROWEST just above the 900px viewport breakpoint, where the layout
+   returns to two columns and the right one drops to ~430px, so a
+   viewport media query would give four cramped columns exactly where
+   there is least room. */
+.market-card {
+  container-type: inline-size;
+}
+
+.market-pages {
+  display: grid;
+  /* Two columns is also the no-container-query fallback, which is the
+     safe direction: narrow and correct rather than wide and cramped. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+@container (min-width: 700px) {
+  .market-pages {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.market-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius-sm);
+  background: var(--bg-elevated);
+  text-align: left;
+  cursor: pointer;
+}
+
+.market-page:hover {
+  border-color: var(--accent);
+}
+
+.market-page-yours {
+  background: var(--winning-bg);
+  border-color: transparent;
+}
+
+.market-page-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.market-page-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* The winning/losing badge pair, same tokens as the verdict's. */
+.market-badges {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.market-badge {
+  border-radius: var(--card-radius-sm);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.market-badge-shared {
+  background: var(--winning-bg);
+}
+
+.market-badge-yours {
+  background: var(--losing-bg);
+}
+
+.market-badge-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.market-badge-sub {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.market-themes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.market-theme-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.07);
+}
+
+.market-theme-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.market-theme {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: break-word;
+}
+
+.market-theme-count {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Wider than the confirm dialog: this one holds a whole page of copy. */
+.modal-wide {
+  max-width: 640px;
+}
+
+.market-page-text {
+  margin: 0 0 16px;
+  padding: 14px;
+  max-height: 44vh;
+  overflow: auto;
+  border-radius: var(--card-radius-sm);
+  background: var(--empty-bg);
+  border: 1px solid var(--empty-border);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}

@@ -13,6 +13,7 @@ export default defineConfig({
       '/run': 'http://localhost:8000',
       '/compare': 'http://localhost:8000',
       '/check': 'http://localhost:8000',
+      '/benchmark': 'http://localhost:8000',
       '/personas': 'http://localhost:8000',
       '/examples': 'http://localhost:8000',
     },

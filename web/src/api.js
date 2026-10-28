@@ -9,6 +9,7 @@
 
 import { localPrecheck } from './precheck.js'
 import {
+  buildMockComparison,
   buildMockCompareResult,
   buildMockPersonas,
   buildMockReactions,
@@ -359,6 +360,100 @@ function startMockRun({ personaCount, onEvent, previousReactionsById, text, skip
     cancel() {
       cancelled = true
       if (timeoutId) clearTimeout(timeoutId)
+    },
+  }
+}
+
+
+// --- Market benchmark -------------------------------------------------------
+
+// Mock mode has no backend to search with, so the feature is real-mode
+// only; the caller hides the button rather than offering something that
+// cannot work.
+// Mock mode walks the same event sequence on timers so the UI can be
+// seen without a backend, a Tavily key or credits. It never claims to
+// have read a real page -- see mock.js's buildMockComparison.
+const MOCK_BENCHMARK_STEPS_MS = 900
+
+function startMockBenchmark({ text, panelSize, onEvent }) {
+  let cancelled = false
+  const timers = []
+  const at = (ms, fn) => timers.push(setTimeout(() => !cancelled && fn(), ms))
+  const comparison = buildMockComparison(text, panelSize)
+
+  at(0, () => onEvent({ type: 'started', data: { benchmark_id: 'mock' } }))
+  at(MOCK_BENCHMARK_STEPS_MS * 0.3, () => onEvent({ type: 'searching' }))
+  at(MOCK_BENCHMARK_STEPS_MS * 1, () =>
+    onEvent({ type: 'query', data: { query: comparison.query } }))
+  at(MOCK_BENCHMARK_STEPS_MS * 2, () =>
+    onEvent({ type: 'pages', data: { pages: comparison.pages } }))
+  comparison.pages.forEach((p, i) =>
+    at(MOCK_BENCHMARK_STEPS_MS * (3 + i), () =>
+      onEvent({ type: 'page_done', data: { label: p.label } })))
+  at(MOCK_BENCHMARK_STEPS_MS * 7, () => onEvent({ type: 'comparing' }))
+  at(MOCK_BENCHMARK_STEPS_MS * 8, () => {
+    onEvent({ type: 'comparison', data: comparison })
+    onEvent({ type: 'done' })
+  })
+
+  return {
+    cancel() {
+      cancelled = true
+      timers.forEach(clearTimeout)
+    },
+  }
+}
+
+export function startBenchmark({ runId, text, panelSize, onEvent }) {
+  if (isMockMode()) return startMockBenchmark({ text, panelSize, onEvent })
+  let cancelled = false
+  let es = null
+
+  ;(async () => {
+    let benchmarkId
+    try {
+      const res = await fetch('/benchmark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: runId }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        onEvent({ type: 'error', data: { message: body.detail || `HTTP ${res.status}` } })
+        return
+      }
+      ;({ benchmark_id: benchmarkId } = await res.json())
+    } catch (e) {
+      onEvent({ type: 'error', data: { message: String(e) } })
+      return
+    }
+    if (cancelled) return
+    onEvent({ type: 'started', data: { benchmark_id: benchmarkId } })
+
+    es = new EventSource(`/benchmark/${benchmarkId}/stream`)
+    const TERMINAL = ['done', 'no_pages', 'cancelled']
+    for (const type of ['searching', 'query', 'pages', 'page_done', 'comparing', 'comparison', ...TERMINAL]) {
+      es.addEventListener(type, (e) => {
+        onEvent({ type, data: e.data ? JSON.parse(e.data) : undefined })
+        if (TERMINAL.includes(type)) es.close()
+      })
+    }
+    es.addEventListener('error', (e) => {
+      // Same shape check as startRealRun: a server-sent "error" event is a
+      // MessageEvent with .data; the browser's own failure is a bare Event.
+      if (e.data !== undefined) {
+        onEvent({ type: 'error', data: JSON.parse(e.data) })
+        es.close()
+      } else if (es.readyState === EventSource.CLOSED) {
+        onEvent({ type: 'error', data: { message: 'connection lost' } })
+      }
+    })
+  })()
+
+  return {
+    cancel() {
+      cancelled = true
+      es?.close()
     },
   }
 }

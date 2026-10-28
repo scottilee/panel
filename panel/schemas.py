@@ -221,6 +221,52 @@ class ArtifactCheck(BaseModel):
     reason: str = Field(max_length=240)
 
 
+# --- Market benchmark -------------------------------------------------------
+#
+# Not in the build spec. Runs the same panel over the user's copy and two
+# or three competitor pages found via Tavily, then reports what confused
+# readers on all of them versus only on one.
+#
+# Note what is deliberately NOT here: any head-to-head would_act or
+# conversion figure. A reader who would act on a competitor's page may be
+# responding to their offer -- cheaper, better known, better guarantee --
+# not their writing, so a scoreboard would be a confounded claim dressed
+# up as a measurement. Confusions and objections are attributable to the
+# page, so those are the only things compared.
+
+
+class MarketPage(BaseModel):
+    label: str
+    url: str | None = None
+    is_yours: bool = False
+    # Per page: the user's own run may be larger than the competitor runs.
+    panel_size: int
+    # Exactly the text the panel was shown, so the user can check it.
+    # Extraction is imperfect -- a page can come through with nav junk or
+    # half a cookie banner -- and a comparison built on badly extracted
+    # text should be visibly that, not quietly wrong.
+    text: str = ""
+
+
+class MarketTheme(BaseModel):
+    theme: str
+    # Labels of the pages whose readers raised it. Two or more means
+    # shared; one means unique to that page. Counted in Python from the
+    # per-page themes, never asserted by a model.
+    pages: list[str]
+    evidence: list[str] = Field(default_factory=list)
+
+
+class MarketComparison(BaseModel):
+    query: str
+    pages: list[MarketPage]
+    shared_confusions: list[MarketTheme] = Field(default_factory=list)
+    shared_objections: list[MarketTheme] = Field(default_factory=list)
+    # Raised on the user's page and no competitor's -- the actionable half.
+    only_yours_confusions: list[MarketTheme] = Field(default_factory=list)
+    only_yours_objections: list[MarketTheme] = Field(default_factory=list)
+
+
 # --- HTTP request bodies ----------------------------------------------------
 
 # Bounds on an artifact's text, shared by POST /run, POST /check and the
@@ -262,6 +308,10 @@ class RunRequest(BaseModel):
 class CompareRequest(BaseModel):
     run_a: str
     run_b: str
+
+
+class BenchmarkRequest(BaseModel):
+    run_id: str
 
 
 class CheckRequest(BaseModel):

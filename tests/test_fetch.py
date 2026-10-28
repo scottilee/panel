@@ -117,3 +117,33 @@ def test_an_unsafe_url_is_not_retried_without_tavily(monkeypatch):
     monkeypatch.setattr(F, "_fetch_via_readability", lambda url: _pytest.fail("must not fall back"))
     with _pytest.raises(F.UnsafeURLError):
         F.fetch_url_text("http://10.0.0.1")
+
+
+def test_unresolvable_hosts_are_fatal_for_the_direct_fetch_only():
+    """The direct fetch opens the connection itself, so it must prove the
+    host is public. The Tavily path does not: Tavily fetches the page, so
+    a host we cannot resolve is not a risk we are taking -- and failing
+    closed there would break any deployment with restricted egress DNS
+    that relies on Tavily, rejecting perfectly public pages."""
+    import pytest as _pytest
+
+    from panel.fetch import _assert_public_url
+
+    nowhere = "https://this-host-does-not-exist-panel-test.invalid/x"
+    with _pytest.raises(UnsafeURLError, match="could not resolve"):
+        _assert_public_url(nowhere)
+    # Permitted for the Tavily path.
+    _assert_public_url(nowhere, require_resolvable=False)
+
+
+def test_private_addresses_are_rejected_on_both_paths():
+    """Relaxing the resolvability requirement must not relax the actual
+    SSRF guard: a host that resolves to something private stays blocked
+    even when Tavily would be the one fetching it."""
+    import pytest as _pytest
+
+    from panel.fetch import _assert_public_url
+
+    for url in ("http://127.0.0.1/x", "http://10.0.0.1/x", "http://169.254.169.254/"):
+        with _pytest.raises(UnsafeURLError):
+            _assert_public_url(url, require_resolvable=False)

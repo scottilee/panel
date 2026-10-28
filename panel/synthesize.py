@@ -508,7 +508,7 @@ _THEME_STOPWORDS = frozenset(
 )
 
 
-def _theme_key(theme: str) -> str:
+def theme_key(theme: str) -> str:
     """Normalized identity for merging: lowercased, punctuation and
     stopwords dropped, remaining words sorted."""
     words = re.findall(r"[a-z0-9$%]+", theme.lower())
@@ -560,7 +560,7 @@ def _merge_themes(
         # One shard counts once toward a theme however it phrases it.
         seen_here: set[str] = set()
         for t in themes:
-            key = _theme_key(t.theme)
+            key = theme_key(t.theme)
             entry = merged.setdefault(key, {"labels": [], "shards": 0, "ids": []})
             entry["labels"].append(t.theme.strip())
             entry["ids"].extend(t.persona_ids)
@@ -616,6 +616,28 @@ def _format_digests(digests: list[tuple[int, _ShardDigest]]) -> str:
     lines.append("\nrepresentative quotes:")
     lines.extend(f"  {q}" for q in quotes[:MERGED_QUOTES])
     return "\n".join(lines)
+
+
+async def theme_breakdown(reactions: list[Reaction]) -> dict[str, list[tuple[str, int, list[str]]]]:
+    """Merged themes per category: the structured form of what
+    _format_digests renders as text.
+
+    Exists so panel/market.py can compare themes across several pages
+    without re-implementing the shard-and-merge pipeline, and so both
+    callers agree on what counts as one theme.
+    """
+    shards = [reactions[i : i + SHARD_SIZE] for i in range(0, len(reactions), SHARD_SIZE)]
+    sem = asyncio.Semaphore(SHARD_CONCURRENCY)
+    results = await asyncio.gather(*(_digest_shard(s, sem) for s in shards))
+    digests = [
+        _clean_digest(d, shard) for shard, d in zip(shards, results) if d is not None
+    ]
+    if not digests:
+        return {"confusions": [], "objections": [], "requested_changes": []}
+    return {
+        name: _merge_themes([getattr(d, name) for d in digests], MERGED_THEMES_PER_CATEGORY)
+        for name in ("confusions", "objections", "requested_changes")
+    }
 
 
 async def _digest_reactions(reactions: list[Reaction]) -> tuple[str, str]:
