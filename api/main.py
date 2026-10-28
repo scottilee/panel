@@ -161,6 +161,15 @@ class BenchmarkContext:
     spend: _Spend | None = None
     # Competitor-page reactions actually requested, for settling `spend`.
     personas_sent: int = 0
+    # Who started it, for the one-active-job-per-client rule.
+    client_ip: str = ""
+    # Pages the panel has finished reading, so a reconnecting stream can
+    # replay per-page progress rather than only the page list.
+    pages_done: list[str] = field(default_factory=list)
+
+
+# A benchmark still doing (and still paying for) work.
+BENCHMARK_ACTIVE_STATUSES = ("pending", "searching", "reading", "comparing")
 
 
 BENCHMARKS: dict[str, BenchmarkContext] = {}
@@ -537,7 +546,20 @@ def _cached_persona_count(example_stem: str) -> int | None:
 
 
 def _active_run_count() -> int:
-    return sum(1 for c in RUNS.values() if c.run.status in ACTIVE_STATUSES)
+    """Runs and market benchmarks in flight. A benchmark is three panel
+    reads at 50 concurrent calls each, so it takes a slot like a run."""
+    runs = sum(1 for c in RUNS.values() if c.run.status in ACTIVE_STATUSES)
+    benchmarks = sum(1 for b in BENCHMARKS.values() if b.status in BENCHMARK_ACTIVE_STATUSES)
+    return runs + benchmarks
+
+
+def _client_is_busy(client_ip: str) -> bool:
+    return any(
+        c.client_ip == client_ip and c.run.status in ACTIVE_STATUSES for c in RUNS.values()
+    ) or any(
+        b.client_ip == client_ip and b.status in BENCHMARK_ACTIVE_STATUSES
+        for b in BENCHMARKS.values()
+    )
 
 
 @app.post("/run")
@@ -556,9 +578,11 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
             await _cancel(previous)
     # One run at a time per client, so a single caller can't fill every
     # service-wide slot and lock everyone else out for minutes.
-    if any(c.client_ip == client_ip and c.run.status in ACTIVE_STATUSES for c in RUNS.values()):
+    if _client_is_busy(client_ip):
         raise HTTPException(
-            429, "you already have a run in progress; wait for it to finish or cancel it"
+            429,
+            "you already have a run or market comparison in progress; "
+            "wait for it to finish or cancel it",
         )
     # The run isn't registered until its page has been fetched, so the
     # rule above can't see a fetch in progress; without this one client
@@ -804,6 +828,13 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
             except Exception as e:  # noqa: BLE001 -- one bad page is not fatal
                 print(f"benchmark: skipping {candidate.url}: {type(e).__name__}: {e}")
                 continue
+            text = text.strip()
+            # Same floor as URL input. A script-rendered page extracts to a
+            # nav bar or nothing, and a panel reading that would report
+            # "the page is empty" as a confusion the market shares.
+            if len(text) < MIN_ARTIFACT_CHARS:
+                print(f"benchmark: skipping {candidate.url}: only {len(text)} characters of text")
+                continue
             page = MarketPage(
                 label=_host_label(candidate.url),
                 url=candidate.url,
@@ -831,13 +862,28 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
             r for r in parent.run.reactions if r.persona_id in {p.id for p in personas}
         ]
         breakdowns["Your page"] = await theme_breakdown(own_reactions)
-        await _broadcast_benchmark(ctx, "page_done", {"label": "Your page"})
+        await _benchmark_page_done(ctx, "Your page")
 
         for page, text in fetched:
             ctx.personas_sent += len(personas)
             reactions = await _panel_on_text(text, personas, f"{ctx.benchmark_id}:{page.label}")
-            breakdowns[page.label] = await theme_breakdown(reactions)
-            await _broadcast_benchmark(ctx, "page_done", {"label": page.label})
+            answered = len(usable(reactions))
+            if answered < len(personas) * MIN_USABLE_SHARE:
+                # Same rule as a run's report: themes from a handful of
+                # survivors would be compared as if they were the panel.
+                print(
+                    f"benchmark {ctx.benchmark_id}: dropping {page.label}, "
+                    f"only {answered} of {len(personas)} answered"
+                )
+                pages.remove(page)
+            else:
+                breakdowns[page.label] = await theme_breakdown(reactions)
+            await _benchmark_page_done(ctx, page.label)
+
+        if len(pages) < 2:
+            ctx.status = "no_pages"
+            await _broadcast_benchmark(ctx, "no_pages", {"query": market.query})
+            return
 
         ctx.status = "comparing"
         await _broadcast_benchmark(ctx, "comparing", {})
@@ -846,14 +892,20 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
         await _broadcast_benchmark(ctx, "comparison", ctx.comparison)
         await _broadcast_benchmark(ctx, "done", {})
     except asyncio.CancelledError:
-        ctx.status = "cancelled"
-        await _broadcast_benchmark(ctx, "cancelled", {})
+        if ctx.status != "cancelled":
+            ctx.status = "cancelled"
+            await _broadcast_benchmark(ctx, "cancelled", {})
         raise
     except Exception as e:  # noqa: BLE001
         print(f"benchmark {ctx.benchmark_id} failed: {type(e).__name__}: {e}", flush=True)
         ctx.status = "error"
         ctx.error_message = "the market comparison failed; see server logs"
         await _broadcast_benchmark(ctx, "error", {"message": ctx.error_message})
+
+
+async def _benchmark_page_done(ctx: BenchmarkContext, label: str) -> None:
+    ctx.pages_done.append(label)
+    await _broadcast_benchmark(ctx, "page_done", {"label": label})
 
 
 def _host_label(url: str) -> str:
@@ -881,6 +933,12 @@ async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
     if not parent.run.reactions:
         raise HTTPException(409, "that run has no reactions to compare")
     client_ip = _client_ip(request)
+    if _client_is_busy(client_ip):
+        raise HTTPException(
+            429,
+            "you already have a run or market comparison in progress; "
+            "wait for it to finish or cancel it",
+        )
     if _active_run_count() >= MAX_CONCURRENT_RUNS:
         raise HTTPException(429, "too many runs in flight; try again shortly")
     _check_rate_limit(client_ip)
@@ -894,15 +952,47 @@ async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
     # benchmark id is the only credential for reading the comparison,
     # which embeds the user's own copy's themes.
     benchmark_id = f"b_{secrets.token_urlsafe(16)}"
-    ctx = BenchmarkContext(benchmark_id=benchmark_id, run_id=req.run_id, spend=spend)
+    ctx = BenchmarkContext(
+        benchmark_id=benchmark_id, run_id=req.run_id, spend=spend, client_ip=client_ip
+    )
     BENCHMARKS[benchmark_id] = ctx
-    for stale in list(BENCHMARKS)[:-MAX_RETAINED_RUNS]:
-        BENCHMARKS.pop(stale, None)
+    _evict_old_benchmarks()
     ctx.task = asyncio.create_task(_execute_benchmark(ctx))
     ctx.task.add_done_callback(
         lambda _t: setattr(spend, "personas", min(spend.personas, ctx.personas_sent))
     )
     return {"benchmark_id": benchmark_id}
+
+
+def _evict_old_benchmarks() -> None:
+    """Oldest finished benchmarks first, as _evict_old_runs does for runs.
+    A running one is never dropped: BENCHMARKS holds the only strong
+    reference to its context, and with it the task's."""
+    removable = [
+        bid
+        for bid, b in BENCHMARKS.items()
+        if b.status not in BENCHMARK_ACTIVE_STATUSES and not b.subscribers
+    ]
+    for bid in removable[: max(0, len(BENCHMARKS) - MAX_RETAINED_RUNS)]:
+        del BENCHMARKS[bid]
+
+
+@app.post("/benchmark/{benchmark_id}/cancel")
+async def cancel_benchmark(benchmark_id: str) -> dict:
+    """Stops the server-side work, as POST /run/{id}/cancel does: closing
+    the stream alone leaves every remaining page read running."""
+    ctx = BENCHMARKS.get(benchmark_id)
+    if ctx is None:
+        raise HTTPException(404, "benchmark not found")
+    if ctx.status not in BENCHMARK_ACTIVE_STATUSES:
+        return {"benchmark_id": benchmark_id, "status": ctx.status, "cancelled": False}
+    if ctx.task is not None:
+        ctx.task.cancel()
+    # Marked here too, so the caller sees the new status while it unwinds.
+    if ctx.status != "cancelled":
+        ctx.status = "cancelled"
+        await _broadcast_benchmark(ctx, "cancelled", {})
+    return {"benchmark_id": benchmark_id, "status": ctx.status, "cancelled": True}
 
 
 @app.get("/benchmark/{benchmark_id}")
@@ -939,6 +1029,10 @@ async def stream_benchmark(benchmark_id: str) -> EventSourceResponse:
                 yield _sse_event(
                     "pages", {"pages": [p.model_dump(mode="json") for p in ctx.pages]}
                 )
+            for label in list(ctx.pages_done):
+                yield _sse_event("page_done", {"label": label})
+            if ctx.status == "comparing":
+                yield _sse_event("comparing", {})
             if ctx.comparison is not None:
                 yield _sse_event("comparison", ctx.comparison)
             if ctx.status in ("done", "error", "no_pages", "cancelled"):

@@ -513,8 +513,12 @@ export default function App() {
     [sortedByReaction, state.personas, gridReactionsById],
   )
 
+  // The server allows one run or market comparison per client at a time,
+  // so Run waits for a comparison in progress rather than being refused.
+  const marketBusy = ['pending', 'searching', 'reading', 'comparing'].includes(market?.status)
   const canRun =
     !isRunning &&
+    !marketBusy &&
     (state.inputMode === 'text'
       ? state.artifactText.trim().length >= MIN_TEXT_LENGTH && state.artifactText.length <= MAX_TEXT_LENGTH
       : state.artifactUrl.trim().length > 0)
@@ -605,6 +609,9 @@ export default function App() {
               <p className="run-note run-note-error" role="alert">
                 {state.error}
               </p>
+            )}
+            {marketBusy && !isRunning && (
+              <p className="run-note">The market comparison is still running. Stop it to run again now.</p>
             )}
             {confirmCheck && !isRunning && (
               <div className="check-confirm" role="alert">

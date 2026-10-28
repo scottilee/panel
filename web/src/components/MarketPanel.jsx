@@ -110,8 +110,9 @@ export default function MarketPanel({
             </h2>
           ) : null}
         </div>
+        {/* While it runs this also stops the server-side work (api.js). */}
         <button type="button" className="market-dismiss" onClick={onDismiss}>
-          Dismiss
+          {busy ? 'Stop' : 'Dismiss'}
         </button>
       </div>
 

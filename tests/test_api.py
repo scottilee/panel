@@ -898,3 +898,111 @@ def test_benchmark_is_charged_to_the_callers_daily_budget(monkeypatch):
     r = client.post("/benchmark", json={"run_id": "parent"})
     assert r.status_code == 429
     assert "daily allowance" in r.json()["detail"]
+
+
+def _benchmark_ctx(bid, status="reading", client_ip="testclient"):
+    from api.main import BenchmarkContext
+
+    return BenchmarkContext(benchmark_id=bid, run_id="parent", status=status, client_ip=client_ip)
+
+
+def test_a_running_benchmark_holds_the_clients_slot_and_a_service_slot():
+    """A benchmark is three panel reads at 50 concurrent calls each; before
+    this, any number could run alongside any number of runs."""
+    from api import main as M
+
+    M.BENCHMARKS["b1"] = _benchmark_ctx("b1")
+    try:
+        r = client.post("/run", json={"text": LONG_ENOUGH})
+        assert r.status_code == 429
+        assert "market comparison in progress" in r.json()["detail"]
+        assert M._active_run_count() == 1
+    finally:
+        M.BENCHMARKS.clear()
+
+
+def test_cancelling_a_benchmark_stops_its_task():
+    import asyncio
+
+    from api import main as M
+
+    async def scenario():
+        ctx = _benchmark_ctx("b2")
+        ctx.task = asyncio.create_task(asyncio.sleep(3600))
+        M.BENCHMARKS["b2"] = ctx
+        await asyncio.sleep(0)
+        out = await M.cancel_benchmark("b2")
+        await asyncio.gather(ctx.task, return_exceptions=True)
+        return ctx, out
+
+    try:
+        ctx, out = asyncio.run(scenario())
+        assert out["cancelled"] is True
+        assert ctx.status == "cancelled"
+        assert ctx.task.cancelled()
+    finally:
+        M.BENCHMARKS.clear()
+
+
+def test_benchmark_eviction_never_drops_a_running_one():
+    from api import main as M
+
+    try:
+        M.BENCHMARKS["running"] = _benchmark_ctx("running")
+        for i in range(M.MAX_RETAINED_RUNS + 5):
+            M.BENCHMARKS[f"done{i}"] = _benchmark_ctx(f"done{i}", status="done")
+        M._evict_old_benchmarks()
+        assert "running" in M.BENCHMARKS
+        assert len(M.BENCHMARKS) == M.MAX_RETAINED_RUNS
+    finally:
+        M.BENCHMARKS.clear()
+
+
+def test_benchmark_skips_thin_pages_and_pages_most_readers_failed(monkeypatch):
+    """A script-rendered page extracts to almost nothing, and a page whose
+    reads mostly failed has no panel behind its themes; neither may be
+    compared as if it were the market."""
+    import asyncio
+
+    from api import main as M
+    from panel.market import Candidate, MarketQuery
+    from panel.react import REACTION_FAILED
+
+    parent = _finished_ctx("parent")
+    parent.personas = PERSONA_POOL[:10]
+    RUNS["parent"] = parent
+    ctx = _benchmark_ctx("b3", status="pending")
+
+    async def derive(text):
+        return MarketQuery(category="thing", query="thing pricing")
+
+    async def pick(c, cat, n):
+        return [Candidate(url=f"https://{h}.example/", title=h) for h in ("thin", "broken")]
+
+    def fetch(url):
+        return "too short" if "thin" in url else "a real competitor page " * 10
+
+    async def panel(text, personas, run_id):
+        return [
+            M.Reaction(
+                persona_id=p.id, sentiment=0, would_act=False, gut_reaction="-",
+                top_confusion="-", top_objection="-", what_would_change_my_mind="-",
+                raw_error=REACTION_FAILED,
+            )
+            for p in personas
+        ]
+
+    async def breakdown(reactions):
+        return {"confusions": [], "objections": [], "requested_changes": []}
+
+    monkeypatch.setattr(M, "derive_query", derive)
+    monkeypatch.setattr(M, "search_candidates", lambda q, u: [])
+    monkeypatch.setattr(M, "pick_pages", pick)
+    monkeypatch.setattr(M, "fetch_url_text", fetch)
+    monkeypatch.setattr(M, "_panel_on_text", panel)
+    monkeypatch.setattr(M, "theme_breakdown", breakdown)
+    asyncio.run(M._execute_benchmark(ctx))
+    # The thin page is never read; the broken one is read and dropped.
+    assert ctx.status == "no_pages"
+    assert ctx.personas_sent == 10
+    assert [p.label for p in ctx.pages] == ["Your page"]

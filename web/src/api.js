@@ -421,9 +421,15 @@ export function startBenchmark({ runId, text, panelSize, onEvent }) {
   if (isMockMode()) return startMockBenchmark({ text, panelSize, onEvent })
   let cancelled = false
   let es = null
+  let benchmarkId = null
+
+  // Same reasoning as startRealRun's cancelOnServer: closing the stream
+  // alone leaves the server reading every remaining competitor page.
+  function cancelOnServer() {
+    fetch(`/benchmark/${encodeURIComponent(benchmarkId)}/cancel`, { method: 'POST' }).catch(() => {})
+  }
 
   ;(async () => {
-    let benchmarkId
     try {
       const res = await fetch('/benchmark', {
         method: 'POST',
@@ -440,7 +446,10 @@ export function startBenchmark({ runId, text, panelSize, onEvent }) {
       onEvent({ type: 'error', data: { message: String(e) } })
       return
     }
-    if (cancelled) return
+    if (cancelled) {
+      cancelOnServer()
+      return
+    }
     onEvent({ type: 'started', data: { benchmark_id: benchmarkId } })
 
     es = new EventSource(`/benchmark/${benchmarkId}/stream`)
@@ -465,8 +474,10 @@ export function startBenchmark({ runId, text, panelSize, onEvent }) {
 
   return {
     cancel() {
+      if (cancelled) return
       cancelled = true
       es?.close()
+      if (benchmarkId) cancelOnServer()
     },
   }
 }
