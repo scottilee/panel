@@ -1,8 +1,15 @@
 """Pydantic models for every data contract in the build spec, section 3.
 
-Field names must not change without updating the spec. The one deliberate
-addition beyond the spec's literal examples is `Finding.affected_segment_filter`
-(see note below) — everything else here is a direct transcription.
+Field names must not change without updating the spec. Deliberate additions
+beyond the spec's literal examples, both by explicit user request
+(2026-10-28), not silent decisions:
+- `Finding.affected_segment_filter` (see note below).
+- `tech_comfort`/`skepticism` widened from the spec's stated 1-5 to 1-100
+  for more variability.
+- Persona gained the Big Five / OCEAN traits (`openness`,
+  `conscientiousness`, `extraversion`, `agreeableness`, `neuroticism`),
+  also 1-100, not in the original section 3 schema at all.
+Everything else here is a direct transcription.
 """
 
 from __future__ import annotations
@@ -28,7 +35,18 @@ INCOME_BANDS = Literal["<25k", "25-40k", "40-75k", "75-150k", "150k+"]
 # Fields a Finding's affected_segment_filter may constrain. Deliberately
 # excludes free-text persona fields (occupation, household, values, ...)
 # since those can't be recounted as an exact segment match.
-SEGMENT_FIELDS = Literal["region", "age_band", "income_band", "tech_comfort", "skepticism"]
+SEGMENT_FIELDS = Literal[
+    "region",
+    "age_band",
+    "income_band",
+    "tech_comfort",
+    "skepticism",
+    "openness",
+    "conscientiousness",
+    "extraversion",
+    "agreeableness",
+    "neuroticism",
+]
 SEGMENT_OPS = Literal["==", "!=", "<=", ">=", "<", ">", "in"]
 
 AGE_BANDS = Literal["18-24", "25-34", "35-49", "50-64", "65+"]
@@ -44,11 +62,18 @@ class Persona(BaseModel):
     income_band: INCOME_BANDS
     occupation: str
     household: str
-    tech_comfort: int = Field(ge=1, le=5)
+    tech_comfort: int = Field(ge=1, le=100)
+    skepticism: int = Field(ge=1, le=100)
+    # Big Five / OCEAN, 1-100. Not in the spec's original schema -- added
+    # by explicit request for psychological grounding beyond skepticism.
+    openness: int = Field(ge=1, le=100)
+    conscientiousness: int = Field(ge=1, le=100)
+    extraversion: int = Field(ge=1, le=100)
+    agreeableness: int = Field(ge=1, le=100)
+    neuroticism: int = Field(ge=1, le=100)
     values: list[str]
     buying_triggers: list[str]
     pet_peeves: list[str]
-    skepticism: int = Field(ge=1, le=5)
     voice: str
 
 

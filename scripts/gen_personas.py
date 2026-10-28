@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 from panel.personas import (  # noqa: E402
     AGE_BANDS,
     DEFAULT_PATH,
+    age_band_for,
     build_slots,
     find_region_duplicates,
     generate_batch,
@@ -29,7 +30,7 @@ from panel.personas import (  # noqa: E402
     save_personas,
 )
 from panel.prompts import REACTION_SYSTEM, reaction_user  # noqa: E402
-from panel.react import REACTION_MAX_TOKENS  # noqa: E402
+from panel.react import REACTION_MAX_TOKENS, REACTION_TEMPERATURE  # noqa: E402
 from panel.schemas import Persona, Reaction  # noqa: E402
 from panel.tf_client import ChatJsonError, chat_json, env  # noqa: E402
 
@@ -48,18 +49,6 @@ MAX_SYCOPHANCY_ROUNDS = 3
 SKEPTICAL_BATCH_SIZE = 10
 
 
-def age_band_for(age: int) -> str:
-    if age <= 24:
-        return "18-24"
-    if age <= 34:
-        return "25-34"
-    if age <= 49:
-        return "35-49"
-    if age <= 64:
-        return "50-64"
-    return "65+"
-
-
 async def generate_all(n: int, start_id: int = 1) -> list[Persona]:
     if n % 10 != 0:
         raise ValueError("n must be a multiple of 10 (10 personas per Super call)")
@@ -69,7 +58,22 @@ async def generate_all(n: int, start_id: int = 1) -> list[Persona]:
     next_id = start_id
     for batch_num, batch_slots in enumerate(batches, start=1):
         print(f"  generating batch {batch_num}/{len(batches)}...", flush=True)
-        batch = await generate_batch(batch_slots)
+        # Measured (2026-10-28): Super occasionally returns a short list
+        # (e.g. 1 persona instead of 10) with finish_reason == "stop" --
+        # a real response, just not following the count instruction, so
+        # chat_json's own truncation/validation retries don't apply. One
+        # bad batch out of 10 shouldn't crash a whole 100-persona run.
+        batch = None
+        last_exc: ChatJsonError | None = None
+        for attempt in range(3):
+            try:
+                batch = await generate_batch(batch_slots)
+                break
+            except ChatJsonError as e:
+                last_exc = e
+                print(f"    batch {batch_num} attempt {attempt + 1} failed: {e}", flush=True)
+        if batch is None:
+            raise last_exc  # type: ignore[misc]
         for p, slot in zip(batch, batch_slots):
             p = p.model_copy(update={"id": f"p{next_id:03d}"})
             personas.append(p)
@@ -139,7 +143,7 @@ async def react_one(persona: Persona, artifact_text: str, sem: asyncio.Semaphore
                 system=REACTION_SYSTEM,
                 user=reaction_user(persona.model_dump_json(), artifact_text),
                 schema=Reaction,
-                temperature=0.7,
+                temperature=REACTION_TEMPERATURE,
                 seed=hash(persona.id) % (2**31),
                 max_tokens=REACTION_MAX_TOKENS,
             )
@@ -208,7 +212,7 @@ async def run_anti_sycophancy_check(personas: list[Persona]) -> tuple[bool, dict
         by_id = {p.id: p for p in personas}
         agreeableness: dict[str, float] = {}
         for p in personas:
-            if p.skepticism >= 5:
+            if p.skepticism >= 95:  # 1-100 scale; already near the ceiling
                 continue
             scores = [reactions_by_example[f][p.id].sentiment for f in EXAMPLE_FILES]
             acts = [reactions_by_example[f][p.id].would_act for f in EXAMPLE_FILES]

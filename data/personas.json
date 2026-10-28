@@ -1,850 +1,986 @@
 [
   {
     "id": "p001",
-    "name": "Maya Patel",
-    "age": 20,
-    "gender": "female",
+    "name": "Alex Martinez",
+    "age": 22,
+    "gender": "Male",
     "location": "Boston, MA",
     "region": "Northeast US",
     "income_band": "40-75k",
-    "occupation": "Barista",
-    "household": "Single, rents a studio apartment",
-    "tech_comfort": 4,
+    "occupation": "Graphic Designer",
+    "household": "Single, shares apartment with a roommate",
+    "tech_comfort": 78,
+    "skepticism": 65,
+    "openness": 85,
+    "conscientiousness": 60,
+    "extraversion": 55,
+    "agreeableness": 70,
+    "neuroticism": 45,
     "values": [
-      "likes trying new coffee brewing methods",
-      "values employee discount programs",
-      "prefers brands with sustainability badges"
+      "Creative expression",
+      "Work-life balance",
+      "Supporting local artists"
     ],
     "buying_triggers": [
-      "limited\u2011time flavor releases",
-      "free sample at checkout",
-      "loyalty points that expire soon"
+      "Limited-edition designs",
+      "Free shipping over $50",
+      "Seeing real user photos"
     ],
     "pet_peeves": [
-      "slow mobile payment processing",
-      "overly loud in\u2011store music",
-      "receipts printed on glossy paper"
+      "Pop-up ads that cover the whole screen",
+      "Emails with misleading subject lines"
     ],
-    "skepticism": 3,
-    "voice": "I usually glance at the first three words of a promo before deciding whether to read more."
+    "voice": "I usually ignore ads that don't show a clear benefit in the first glance."
   },
   {
     "id": "p002",
-    "name": "Jamal Wright",
-    "age": 28,
-    "gender": "male",
+    "name": "Maya Thompson",
+    "age": 30,
+    "gender": "Female",
     "location": "Atlanta, GA",
     "region": "Southeast US",
     "income_band": "<25k",
-    "occupation": "Freelance graphic designer",
-    "household": "Shares a two\u2011bedroom with a roommate",
-    "tech_comfort": 2,
+    "occupation": "Barista",
+    "household": "Living with parents",
+    "tech_comfort": 32,
+    "skepticism": 80,
+    "openness": 55,
+    "conscientiousness": 70,
+    "extraversion": 80,
+    "agreeableness": 78,
+    "neuroticism": 40,
     "values": [
-      "appreciates clear project briefs",
-      "enjoys flexible payment schedules",
-      "likes portfolio\u2011building opportunities"
+      "Helping others",
+      "Community involvement",
+      "Fair wages"
     ],
     "buying_triggers": [
-      "discount on software subscriptions",
-      "free trial period",
-      "referral bonus for peers"
+      "Buy-one-get-one-free offers",
+      "Loyalty stamps",
+      "Cashback apps"
     ],
     "pet_peeves": [
-      "clients who request endless revisions",
-      "hidden fees in invoices",
-      "platforms that require lengthy verification"
+      "Complicated coupon codes",
+      "Automatic subscriptions I didn\u2019t ask for"
     ],
-    "skepticism": 5,
-    "voice": "If an email looks like spam, I delete it without even opening the subject line."
+    "voice": "I pause whenever I see a flashy banner to verify the claim before proceeding."
   },
   {
     "id": "p003",
-    "name": "Elena Navarro",
+    "name": "Jordan Lee",
     "age": 42,
-    "gender": "female",
+    "gender": "Nonbinary",
     "location": "Chicago, IL",
     "region": "Midwest US",
     "income_band": "75-150k",
-    "occupation": "Mechanical engineer",
-    "household": "Married, owns a townhouse with spouse and two kids",
-    "tech_comfort": 5,
+    "occupation": "Software Engineer",
+    "household": "Married, two kids",
+    "tech_comfort": 55,
+    "skepticism": 40,
+    "openness": 70,
+    "conscientiousness": 80,
+    "extraversion": 45,
+    "agreeableness": 60,
+    "neuroticism": 35,
     "values": [
-      "values products with long\u2011term warranties",
-      "likes detailed spec sheets",
-      "prefers vendors offering on\u2011site support"
+      "Privacy protection",
+      "Open-source contribution",
+      "Continuous learning"
     ],
     "buying_triggers": [
-      "bundle deal with maintenance service",
-      "early\u2011access beta program",
-      "price match guarantee"
+      "Free trial periods",
+      "Transparent pricing",
+      "Developer-friendly documentation"
     ],
     "pet_peeves": [
-      "vague marketing claims",
-      "over\u2011engineered features nobody uses",
-      "slow response from technical support"
+      "Hidden fees in the checkout",
+      "Overly technical jargon without explanation"
     ],
-    "skepticism": 2,
-    "voice": "I trust reviews that specifically mention durability over flashy performance claims."
+    "voice": "I rarely trust a product claim unless I can verify it with a third\u2011party review."
   },
   {
     "id": "p004",
-    "name": "Derek Lowe",
-    "age": 57,
-    "gender": "male",
+    "name": "Sam Rivera",
+    "age": 58,
+    "gender": "Female",
     "location": "Phoenix, AZ",
     "region": "Southwest US",
     "income_band": "25-40k",
-    "occupation": "Retail store manager",
-    "household": "Divorced, lives alone with a cat",
-    "tech_comfort": 3,
+    "occupation": "Nursing Assistant",
+    "household": "Divorced, lives alone",
+    "tech_comfort": 20,
+    "skepticism": 75,
+    "openness": 45,
+    "conscientiousness": 80,
+    "extraversion": 30,
+    "agreeableness": 85,
+    "neuroticism": 50,
     "values": [
-      "likes shift\u2011flexible scheduling tools",
-      "values clear commission structures",
-      "enjoys team\u2011recognition programs"
+      "Patient care",
+      "Honest communication",
+      "Reliable transportation"
     ],
     "buying_triggers": [
-      "employee discount stacking",
-      "free training webinars",
-      "limited\u2011time overtime bonuses"
+      "Clear return policy",
+      "Discounts for healthcare workers",
+      "Easy-to-read instructions"
     ],
     "pet_peeves": [
-      "mandatory overtime without notice",
-      "payroll errors that take weeks to fix",
-      "break\u2011room supplies constantly out of stock"
+      "Robotic phone menus",
+      "Ads that promise miracle cures"
     ],
-    "skepticism": 4,
-    "voice": "When a promo promises \u2018easy returns\u2019, I check the fine print for restocking fees first."
+    "voice": "If an advertisement feels pushy, I mute it and look for a straightforward fact sheet instead."
   },
   {
     "id": "p005",
-    "name": "Aaron Kim",
-    "age": 68,
-    "gender": "male",
-    "location": "Seattle, WA",
+    "name": "Taylor Chen",
+    "age": 70,
+    "gender": "Male",
+    "location": "San Francisco, CA",
     "region": "West US",
     "income_band": "150k+",
-    "occupation": "Software architect",
-    "household": "Married, owns a house with spouse, adult child visits weekends",
-    "tech_comfort": 4,
+    "occupation": "Financial Analyst",
+    "household": "Married, empty nest",
+    "tech_comfort": 90,
+    "skepticism": 30,
+    "openness": 60,
+    "conscientiousness": 85,
+    "extraversion": 50,
+    "agreeableness": 55,
+    "neuroticism": 30,
     "values": [
-      "prefers platforms with strong API documentation",
-      "likes transparent roadmap updates",
-      "values robust security certifications"
+      "Financial security",
+      "Ethical investing",
+      "Family legacy"
     ],
     "buying_triggers": [
-      "early adopter pricing",
-      "complimentary consulting hours",
-      "integration with existing stack"
+      "Low expense ratios",
+      "Transparent performance data",
+      "Referral bonuses"
     ],
     "pet_peeves": [
-      "vendors that lock data behind proprietary formats",
-      "marketing that overstates AI capabilities",
-      "long sales cycles without clear milestones"
+      "Fine print that hides fees",
+      "Unsolicited cold calls"
     ],
-    "skepticism": 1,
-    "voice": "I usually skip any ad that mentions \u2018revolutionary\u2019 unless it links to a peer\u2011reviewed case study."
+    "voice": "When I get a promotional email, I file it away for later review rather than acting immediately."
   },
   {
     "id": "p006",
-    "name": "Sofia Becker",
-    "age": 22,
-    "gender": "female",
+    "name": "Riley Bennett",
+    "age": 20,
+    "gender": "Female",
     "location": "Berlin, Germany",
     "region": "Western Europe",
     "income_band": "40-75k",
-    "occupation": "University lecturer",
-    "household": "Single, lives in a shared flat near campus",
-    "tech_comfort": 3,
+    "occupation": "Undergraduate Student",
+    "household": "Lives in dorm with two roommates",
+    "tech_comfort": 60,
+    "skepticism": 50,
+    "openness": 80,
+    "conscientiousness": 55,
+    "extraversion": 70,
+    "agreeableness": 65,
+    "neuroticism": 40,
     "values": [
-      "likes open\u2011access resources",
-      "values student feedback loops",
-      "prefers eco\u2011friendly office supplies"
+      "Exploring new cultures",
+      "Environmental sustainability",
+      "Social justice"
     ],
     "buying_triggers": [
-      "discount for academic licenses",
-      "free workshop access",
-      "extended trial for semester length"
+      "Student discounts",
+      "Free samples",
+      "Peer recommendations"
     ],
     "pet_peeves": [
-      "pop\u2011up ads during lecture prep",
-      "software requiring yearly re\u2011licensing",
-      "support tickets routed through overseas call centers"
+      "Long registration forms",
+      "Ads that interrupt study videos"
     ],
-    "skepticism": 4,
-    "voice": "If a banner flashes \u2018sale ends tonight\u2019, I set a timer to revisit it tomorrow morning."
+    "voice": "I only click on an ad if it offers something I can use in my next class project."
   },
   {
     "id": "p007",
-    "name": "Kenji Tanaka",
-    "age": 30,
-    "gender": "male",
+    "name": "Casey Evans",
+    "age": 28,
+    "gender": "Male",
     "location": "Tokyo, Japan",
     "region": "Asia-Pacific",
     "income_band": "<25k",
-    "occupation": "Ride\u2011share driver",
-    "household": "Lives with parents, contributes to household bills",
-    "tech_comfort": 2,
+    "occupation": "Retail Cashier",
+    "household": "Shares small apartment with partner",
+    "tech_comfort": 40,
+    "skepticism": 70,
+    "openness": 50,
+    "conscientiousness": 60,
+    "extraversion": 55,
+    "agreeableness": 45,
+    "neuroticism": 50,
     "values": [
-      "appreciates instant payout options",
-      "likes clear rating explanations",
-      "values fuel\u2011efficiency tips"
+      "Stable income",
+      "Workplace respect",
+      "Time for hobbies"
     ],
     "buying_triggers": [
-      "surge\u2011price notifications",
-      "referral cash for new drivers",
-      "maintenance voucher after 50 trips"
+      "Shift differential pay",
+      "Breakfast vouchers",
+      "Employee discount programs"
     ],
     "pet_peeves": [
-      "passengers who refuse to wear masks",
-      "app glitches that miss fares",
-      "unexplained deactivations"
+      "Being upsold at checkout",
+      "Intrusive tracker pop-ups"
     ],
-    "skepticism": 5,
-    "voice": "Whenever I see a pop\u2011up offering \u2018instant bonus\u2019, I first check if it requires a minimum trip count."
+    "voice": "Unless a deal saves me at least $5, I ignore the promotion entirely."
   },
   {
     "id": "p008",
-    "name": "Isabella Santos",
+    "name": "Quinn Morales",
     "age": 45,
-    "gender": "female",
+    "gender": "Female",
     "location": "S\u00e3o Paulo, Brazil",
     "region": "Latin America",
     "income_band": "75-150k",
-    "occupation": "Marketing director",
-    "household": "Married, owns apartment with spouse and teenage daughter",
-    "tech_comfort": 5,
+    "occupation": "Small Business Owner",
+    "household": "Married, one child",
+    "tech_comfort": 85,
+    "skepticism": 25,
+    "openness": 75,
+    "conscientiousness": 70,
+    "extraversion": 65,
+    "agreeableness": 55,
+    "neuroticism": 30,
     "values": [
-      "likes data\u2011driven campaign tools",
-      "values creative freedom within brand guidelines",
-      "prefers vendors with local language support"
+      "Customer satisfaction",
+      "Innovation",
+      "Community growth"
     ],
     "buying_triggers": [
-      "free A/B testing credits",
-      "invitation to exclusive industry event",
-      "performance\u2011based pricing model"
+      "Bulk order discounts",
+      "Free marketing consultation",
+      "Fast delivery options"
     ],
     "pet_peeves": [
-      "vendors that hide cancellation clauses",
-      "reports lacking actionable insights",
-      "platforms that change UI without notice"
+      "Delayed payment platforms",
+      "Generic ad copy that ignores my niche"
     ],
-    "skepticism": 3,
-    "voice": "I only open promotional emails that have a personalized subject line referencing my recent campaign."
+    "voice": "I give every new offer a quick skim, but I act only if the ROI numbers are clear."
   },
   {
     "id": "p009",
-    "name": "Tomas Ruiz",
-    "age": 58,
-    "gender": "male",
-    "location": "Providence, RI",
+    "name": "Avery Patel",
+    "age": 55,
+    "gender": "Male",
+    "location": "Newark, NJ",
     "region": "Northeast US",
     "income_band": "25-40k",
-    "occupation": "Nursing assistant",
-    "household": "Single, lives with aging parent in a rented duplex",
-    "tech_comfort": 1,
+    "occupation": "Construction Foreman",
+    "household": "Living with spouse",
+    "tech_comfort": 15,
+    "skepticism": 55,
+    "openness": 40,
+    "conscientiousness": 75,
+    "extraversion": 45,
+    "agreeableness": 50,
+    "neuroticism": 45,
     "values": [
-      "likes comfortable, easy\u2011to\u2011clean scrubs",
-      "values shift differential pay",
-      "appreciates employer\u2011provided continuing education"
+      "Job safety",
+      "Fair wages",
+      "Reliable equipment"
     ],
     "buying_triggers": [
-      "discount on bulk uniform orders",
-      "free CEU webinar access",
-      "referral bonus for hiring peers"
+      "Tool rebates",
+      "Same-day delivery",
+      "Bulk pricing"
     ],
     "pet_peeves": [
-      "uniforms that shrink after one wash",
-      "scheduling changes posted less than 2 hours ahead",
-      "break rooms lacking microwave"
+      "Fluctuating material prices without notice",
+      "Clickbait headlines"
     ],
-    "skepticism": 4,
-    "voice": "If a flyer advertises a \u2018limited\u2011time offer\u2019, I call the number listed to confirm it\u2019s still valid before leaving home."
+    "voice": "If an ad mentions a warranty, I read the details before considering the purchase."
   },
   {
     "id": "p010",
-    "name": "Evelyn Morgan",
-    "age": 70,
-    "gender": "female",
+    "name": "Harper Simmons",
+    "age": 68,
+    "gender": "Female",
     "location": "Miami, FL",
     "region": "Southeast US",
     "income_band": "150k+",
-    "occupation": "Retired lawyer",
-    "household": "Widowed, lives alone in a condo, volunteers at legal aid clinic",
-    "tech_comfort": 2,
+    "occupation": "Retired Teacher",
+    "household": "Living alone",
+    "tech_comfort": 70,
+    "skepticism": 60,
+    "openness": 55,
+    "conscientiousness": 80,
+    "extraversion": 40,
+    "agreeableness": 70,
+    "neuroticism": 35,
     "values": [
-      "prefers straightforward contracts with plain language",
-      "likes services that offer home visits",
-      "values senior\u2011discount programs"
+      "Lifelong learning",
+      "Health and wellness",
+      "Staying connected with family"
     ],
     "buying_triggers": [
-      "free legal\u2011document review",
-      "complimentary transportation to appointments",
-      "annual membership with rollover benefits"
+      "Senior discounts",
+      "Free trial periods",
+      "Easy cancellation"
     ],
     "pet_peeves": [
-      "jargon\u2011heavy explanations",
-      "automated phone menus with no human option",
-      "services that require frequent in\u2011person drop\u2011offs"
+      "Auto-renewal traps",
+      "Ads that use fear tactics"
     ],
-    "skepticism": 4,
-    "voice": "I always read the return policy twice before clicking \u2018buy now\u2019, because I dislike surprises later."
+    "voice": "I tend to trust a brand more when I see a familiar face in their commercials."
   },
   {
     "id": "p011",
-    "name": "Jordan Lee",
-    "age": 21,
-    "gender": "Male",
+    "name": "Mia",
+    "age": 20,
+    "gender": "female",
     "location": "Columbus, Ohio",
     "region": "Midwest US",
     "income_band": "40-75k",
-    "occupation": "Campus library student worker",
-    "household": "Shared apartment with two roommates",
-    "tech_comfort": 4,
+    "occupation": "Nurse",
+    "household": "Shared off-campus apartment with two roommates",
+    "tech_comfort": 85,
+    "skepticism": 55,
+    "openness": 80,
+    "conscientiousness": 60,
+    "extraversion": 55,
+    "agreeableness": 70,
+    "neuroticism": 40,
     "values": [
-      "earning extra cash for textbooks",
-      "flexible work hours",
-      "studying environmental science"
+      "reducing plastic waste by choosing reusable products",
+      "saving money for a down payment on a reliable car",
+      "volunteering monthly at the local food bank"
     ],
     "buying_triggers": [
-      "discount on school supplies",
-      "free coffee with purchase",
-      "bundle deal for notebooks"
+      "seeing a limited\u2011time discount on eco\u2011friendly items",
+      "a friend\u2019s Instagram story showing the product in use",
+      "free shipping when the cart reaches $50"
     ],
     "pet_peeves": [
-      "long checkout lines",
-      "ads that interrupt study videos",
-      "prices that change without notice"
+      "pop\u2011up ads that obscure the entire webpage",
+      "\u2018sale\u2019 tags that don\u2019t actually lower the price",
+      "slow loading times on mobile sites"
     ],
-    "skepticism": 3,
-    "voice": "When a promo email lands in my inbox, I first glance at the subject line for the word \u2018student\u2019. If it\u2019s missing, I swipe it away without opening."
+    "voice": "I usually skim the first line of an ad; if it doesn\u2019t state a clear benefit or price, I keep scrolling.\nI trust a product more when I see a real customer photo rather than a staged model shot."
   },
   {
     "id": "p012",
     "name": "Maria Gomez",
     "age": 28,
-    "gender": "Female",
+    "gender": "female",
     "location": "Phoenix, Arizona",
     "region": "Southwest US",
     "income_band": "<25k",
-    "occupation": "Rideshare driver part-time",
-    "household": "Living with parents to save on rent",
-    "tech_comfort": 2,
+    "occupation": "Retail cashier",
+    "household": "Lives with parents",
+    "tech_comfort": 42,
+    "skepticism": 30,
+    "openness": 62,
+    "conscientiousness": 55,
+    "extraversion": 48,
+    "agreeableness": 70,
+    "neuroticism": 40,
     "values": [
-      "making ends meet each month",
-      "helping younger siblings with school fees"
+      "Helping family financially",
+      "Finding stable work"
     ],
     "buying_triggers": [
-      "cash-back on fuel purchases",
-      "referral bonus for new drivers",
-      "discount on car maintenance"
+      "Buy\u2011one\u2011get\u2011one free deals",
+      "Coupons sent via text"
     ],
     "pet_peeves": [
-      "surge pricing that isn\u2019t clearly explained",
-      "passengers who leave trash in the car",
-      "app glitches during a ride"
+      "Long lines at checkout",
+      "Being asked for personal info up front"
     ],
-    "skepticism": 4,
-    "voice": "I treat any push notification from the rideshare app as urgent, so I open it immediately regardless of the wording. Flashy banners that promise huge bonuses get ignored after the first line because I check the fine print first."
+    "voice": "I check the subject line for \u2018SALE\u2019 or \u2018FREE\u2019; if it\u2019s missing, I ignore the message entirely."
   },
   {
     "id": "p013",
-    "name": "Ethan Patel",
+    "name": "Alex Chen",
     "age": 42,
-    "gender": "Male",
+    "gender": "male",
     "location": "Seattle, Washington",
     "region": "West US",
     "income_band": "75-150k",
-    "occupation": "Senior software engineer at a renewable energy startup",
+    "occupation": "Software engineer",
     "household": "Owns a condo with partner",
-    "tech_comfort": 5,
+    "tech_comfort": 85,
+    "skepticism": 55,
+    "openness": 78,
+    "conscientiousness": 70,
+    "extraversion": 45,
+    "agreeableness": 50,
+    "neuroticism": 30,
     "values": [
-      "working on clean\u2011energy projects",
-      "continuous learning",
-      "outdoor weekend hikes"
+      "Continuous learning",
+      "Environmental sustainability"
     ],
     "buying_triggers": [
-      "early\u2011access to beta software tools",
-      "discount on home office ergonomic gear",
-      "invitation to exclusive tech talks"
+      "Early\u2011access beta invites",
+      "Discounts on bundled software"
     ],
     "pet_peeves": [
-      "vendors that hide renewal fees in fine print",
-      "meetings that could have been an email",
-      "software updates that reset custom settings"
+      "Mandatory account creation before trial",
+      "Vague renewal terms"
     ],
-    "skepticism": 2,
-    "voice": "If the subject line contains \u2018beta\u2019 or \u2018API\u2019, I open the email right away; otherwise, I archive it after scanning the first sentence. I also favor short in\u2011app alerts over lengthy newsletters."
+    "voice": "I read the feature list first; if the email highlights compatibility with my current stack, I\u2019ll click through, otherwise I archive it."
   },
   {
     "id": "p014",
     "name": "Sophie Dubois",
     "age": 58,
-    "gender": "Female",
+    "gender": "female",
     "location": "Lyon, France",
     "region": "Western Europe",
     "income_band": "25-40k",
-    "occupation": "Registered nurse at a public hospital",
-    "household": "Owns a small house with spouse",
-    "tech_comfort": 3,
+    "occupation": "Secondary school teacher",
+    "household": "Married, two teenage kids",
+    "tech_comfort": 50,
+    "skepticism": 73,
+    "openness": 45,
+    "conscientiousness": 60,
+    "extraversion": 40,
+    "agreeableness": 55,
+    "neuroticism": 42,
     "values": [
-      "providing compassionate care",
-      "stable income for family",
-      "continuing education credits"
+      "Job security",
+      "Quality education for kids"
     ],
     "buying_triggers": [
-      "discount on medical scrubs",
-      "free CEU webinar with purchase",
-      "loyalty points for hospital supply store"
+      "Discounts on educational supplies",
+      "Free shipping on bulk orders"
     ],
     "pet_peeves": [
-      "complicated insurance forms that delay reimbursement",
-      "pushy sales reps calling during shifts",
-      "products that claim \u2018miracle\u2019 results without evidence"
+      "Pop\u2011up ads that cover content",
+      "Emails sent late at night"
     ],
-    "skepticism": 3,
-    "voice": "I look at the headline of a hospital\u2011supply flyer to see whether it offers a continuing\u2011education credit; if it doesn\u2019t, I recycle it after a quick skim. Before buying anything online, I always verify the return policy."
+    "voice": "I always look for a clear unsubscribe link at the bottom; if it\u2019s hidden, I mark the sender as spam."
   },
   {
     "id": "p015",
-    "name": "Haruko",
-    "age": 71,
-    "gender": "Female",
-    "location": "Kyoto, Japan",
+    "name": "Kenji Tanaka",
+    "age": 70,
+    "gender": "male",
+    "location": "Tokyo, Japan",
     "region": "Asia-Pacific",
     "income_band": "150k+",
-    "occupation": "Freelance translator",
-    "household": "Lives alone with a cat",
-    "tech_comfort": 3,
+    "occupation": "Corporate lawyer",
+    "household": "Living alone, adult children abroad",
+    "tech_comfort": 60,
+    "skepticism": 80,
+    "openness": 55,
+    "conscientiousness": 85,
+    "extraversion": 35,
+    "agreeableness": 40,
+    "neuroticism": 25,
     "values": [
-      "Maintaining family traditions",
-      "Supporting local arts",
-      "Staying physically active",
-      "Lifelong learning"
+      "Maintaining professional reputation",
+      "Financial independence"
     ],
     "buying_triggers": [
-      "Free shipping on orders over $100",
-      "Limited-time discount for seniors",
-      "Product demo videos showing ease of use",
-      "Personalized recommendations based on past purchases"
+      "Invitations to exclusive webinars",
+      "Referral bonuses"
     ],
     "pet_peeves": [
-      "Pop-up ads that obscure content",
-      "Unsolicited phone calls during dinner",
-      "Websites with tiny font sizes",
-      "Checkout processes requiring account creation"
+      "Overly casual tone in formal offers",
+      "Requests for unnecessary personal data"
     ],
-    "skepticism": 4,
-    "voice": "I usually skim the headline and only read further if the first sentence mentions a clear benefit for my age group. I ignore ads that use slang I don\u2019t understand."
+    "voice": "I scan for any mention of confidentiality or data protection; if absent, I treat the message as suspect."
   },
   {
     "id": "p016",
-    "name": "Luciana Mendes",
-    "age": 22,
+    "name": "Isabela Santos",
+    "age": 20,
     "gender": "female",
     "location": "S\u00e3o Paulo, Brazil",
     "region": "Latin America",
     "income_band": "40-75k",
-    "occupation": "Freelance Graphic Designer",
-    "household": "Shares a two\u2011bedroom apartment with two roommates",
-    "tech_comfort": 4,
+    "occupation": "University student (biology)",
+    "household": "Shares a rented house with three friends",
+    "tech_comfort": 55,
+    "skepticism": 40,
+    "openness": 70,
+    "conscientiousness": 48,
+    "extraversion": 62,
+    "agreeableness": 58,
+    "neuroticism": 45,
     "values": [
-      "Creativity",
-      "Environmental responsibility",
-      "Community support"
+      "Experiencing new cultures",
+      "Saving for graduate school"
     ],
     "buying_triggers": [
-      "Limited\u2011edition designs",
-      "Transparent pricing",
-      "Social proof from peers"
+      "Student discounts verified with .edu email",
+      "Free trial periods"
     ],
     "pet_peeves": [
-      "Overly promotional emails",
-      "Hidden subscription fees",
-      "Slow website load times"
+      "Being tagged in unrelated promotional posts",
+      "Autoplay videos in emails"
     ],
-    "skepticism": 3,
-    "voice": "I usually skim ads until I see a clear price tag; if the cost isn\u2019t upfront I scroll past. I trust a brand more when I can see real customer photos rather than staged shots."
+    "voice": "If the subject line has an emoji, I\u2019m more likely to open it; plain text gets ignored."
   },
   {
     "id": "p017",
-    "name": "Liam O'Connor",
-    "age": 30,
-    "gender": "Male",
+    "name": "Daniel Brooks",
+    "age": 31,
+    "gender": "male",
     "location": "Boston, Massachusetts",
     "region": "Northeast US",
     "income_band": "<25k",
-    "occupation": "Food truck owner",
-    "household": "Rents a studio apartment near the commissary",
-    "tech_comfort": 3,
+    "occupation": "Freelance graphic designer",
+    "household": "Rents a studio apartment",
+    "tech_comfort": 78,
+    "skepticism": 22,
+    "openness": 65,
+    "conscientiousness": 40,
+    "extraversion": 55,
+    "agreeableness": 48,
+    "neuroticism": 50,
     "values": [
-      "serving fresh, locally sourced ingredients",
-      "experimenting with new menu items each month",
-      "building a loyal neighborhood following"
+      "Creative freedom",
+      "Timely payments"
     ],
     "buying_triggers": [
-      "bulk discount on produce from the farmer\u2019s market",
-      "free social\u2011media ad boost for first\u2011time vendors",
-      "early access to festival booking slots"
+      "Limited\u2011edition asset packs",
+      "Early access to new tools"
     ],
     "pet_peeves": [
-      "unexpected permit fees that appear mid\u2011season",
-      "customers who complain about waiting times despite visible line",
-      "suppliers who substitute ingredients without notice"
+      "Watermarked previews that block usage",
+      "Complex licensing language"
     ],
-    "skepticism": 4,
-    "voice": "I check the opening line of a supplier email for a price lock or discount; if it\u2019s just a newsletter, I mark it as read and move on. I prefer SMS alerts for urgent updates instead of long emails."
+    "voice": "I hover over links to see the actual URL before clicking; misleading URLs get reported."
   },
   {
     "id": "p018",
-    "name": "Maya Rodriguez",
+    "name": "Olivia Martinez",
     "age": 45,
-    "gender": "Female",
+    "gender": "female",
     "location": "Atlanta, Georgia",
     "region": "Southeast US",
     "income_band": "75-150k",
-    "occupation": "Marketing manager at a regional retailer",
-    "household": "Owns a suburban house with spouse and two kids",
-    "tech_comfort": 4,
+    "occupation": "Registered nurse",
+    "household": "Married, one child, lives in suburb",
+    "tech_comfort": 48,
+    "skepticism": 60,
+    "openness": 52,
+    "conscientiousness": 73,
+    "extraversion": 38,
+    "agreeableness": 62,
+    "neuroticism": 40,
     "values": [
-      "driving measurable ROI on campaigns",
-      "mentoring junior marketers",
-      "staying ahead of platform algorithm changes"
+      "Patient care quality",
+      "Work\u2011life balance"
     ],
     "buying_triggers": [
-      "early preview of upcoming holiday inventory",
-      "discount on marketing analytics software",
-      "invitation to a vendor\u2011only workshop"
+      "Hospital\u2011approved continuing education discounts",
+      "Free wellness webinars"
     ],
     "pet_peeves": [
-      "agencies that overpromise lift without data",
-      "internal meetings that lack clear objectives",
-      "tools that require constant re\u2011training"
+      "Unsolicited calls during shift",
+      "Emails that mimic internal memos"
     ],
-    "skepticism": 3,
-    "voice": "I only open promotional emails when the subject line shows a specific figure like \u201820% off\u2019 or \u2018$10 credit\u2019; vague offers are archived after the first glance. I also set a rule to skip any email longer than three paragraphs."
+    "voice": "I delete any message that asks for my Social Security number up front; legitimate requests never do that."
   },
   {
     "id": "p019",
-    "name": "Darren Clark",
-    "age": 60,
-    "gender": "Male",
+    "name": "Ryan Clark",
+    "age": 55,
+    "gender": "male",
     "location": "Indianapolis, Indiana",
     "region": "Midwest US",
     "income_band": "25-40k",
-    "occupation": "High school history teacher",
-    "household": "Owns a modest home with spouse",
-    "tech_comfort": 2,
+    "occupation": "Warehouse supervisor",
+    "household": "Owns a home with spouse",
+    "tech_comfort": 35,
+    "skepticism": 71,
+    "openness": 42,
+    "conscientiousness": 58,
+    "extraversion": 44,
+    "agreeableness": 50,
+    "neuroticism": 48,
     "values": [
-      "engaging students with primary\u2011source documents",
-      "summer travel to historic sites",
-      "continuing professional development"
+      "Reliable income",
+      "Safety at work"
     ],
     "buying_triggers": [
-      "discount on classroom sets of books",
-      "free access to an online archive with purchase",
-      "bundle that includes lesson plans"
+      "Overtime pay bonuses",
+      "Discounted safety gear"
     ],
     "pet_peeves": [
-      "outdated textbooks that are still required",
-      "last\u2011minute curriculum changes from the district",
-      "fundraisers that take away instructional time"
+      "Shift change notices sent after hours",
+      "Mandatory training with no pay"
     ],
-    "skepticism": 2,
-    "voice": "I read the heading of any educational\u2011product flyer to confirm it matches my state standards; if it doesn\u2019t, I recycle it after a brief scan. I like suppliers that send a sample chapter before asking for a purchase."
+    "voice": "I check the timestamp; if an offer arrives after 8\u202fp.m., I assume it\u2019s low priority and wait until morning."
   },
   {
     "id": "p020",
-    "name": "Rosa Martinez",
+    "name": "Fatima Hassan",
     "age": 68,
-    "gender": "Female",
-    "location": "Dallas, Texas",
+    "gender": "female",
+    "location": "Austin, Texas",
     "region": "Southwest US",
     "income_band": "150k+",
-    "occupation": "Retired corporate executive, now volunteer mentor",
-    "household": "Lives in a gated community with spouse",
-    "tech_comfort": 5,
+    "occupation": "Renewable energy consultant",
+    "household": "Owns a ranch-style home with spouse",
+    "tech_comfort": 92,
+    "skepticism": 18,
+    "openness": 80,
+    "conscientiousness": 45,
+    "extraversion": 50,
+    "agreeableness": 55,
+    "neuroticism": 30,
     "values": [
-      "guiding emerging leaders in nonprofit work",
-      "maintaining an active lifestyle through golf",
-      "preserving family wealth for future generations"
+      "Environmental stewardship",
+      "Innovative solutions"
     ],
     "buying_triggers": [
-      "invitation to an exclusive leadership retreat",
-      "discount on wealth\u2011management advisory services",
-      "access to a private networking event with purchase"
+      "Pilot programs with measurable ROI",
+      "Tax credit incentives"
     ],
     "pet_peeves": [
-      "vague impact claims from charitable organizations",
-      "unsolicited calls that pretend to be from a bank",
-      "luxury ads that ignore practical usefulness"
+      "Vague claims about 'green' benefits",
+      "Lengthy contracts without clear exit clauses"
     ],
-    "skepticism": 5,
-    "voice": "I look for a bullet\u2011point summary at the top of an investment email; if it\u2019s buried in paragraphs, I delete it. I only open messages that cite a specific date or deadline for an opportunity, and I mark as spam any email that uses all caps in the subject line."
+    "voice": "I give a new offer a quick skim; if it outlines concrete metrics and a pilot timeline, I\u2019ll schedule a follow\u2011up call."
   },
   {
     "id": "p021",
-    "name": "Maya Lopez",
-    "age": 22,
-    "gender": "Female",
-    "location": "Portland, OR, USA",
+    "name": "Jordan Lee",
+    "age": 21,
+    "gender": "Male",
+    "location": "Portland, OR",
     "region": "West US",
     "income_band": "40-75k",
-    "occupation": "Graphic designer",
-    "household": "Roommate share",
-    "tech_comfort": 4,
+    "occupation": "Junior UX Designer",
+    "household": "Rents a studio apartment with a roommate",
+    "tech_comfort": 85,
+    "skepticism": 30,
+    "openness": 78,
+    "conscientiousness": 62,
+    "extraversion": 55,
+    "agreeableness": 70,
+    "neuroticism": 40,
     "values": [
-      "Supports local artists",
-      "Chooses reusable tote bags"
+      "Sustainability",
+      "Creative expression",
+      "Community involvement"
     ],
     "buying_triggers": [
-      "Limited-edition drops announced on Instagram",
-      "Friend tags me in a product post"
+      "Free trial period",
+      "Eco-friendly packaging",
+      "Peer recommendations"
     ],
     "pet_peeves": [
-      "Pop-up ads that cover article text",
-      "Autoplay videos with sound"
+      "Overly aggressive upsells",
+      "Hidden subscription fees",
+      "Slow website load times"
     ],
-    "skepticism": 2,
-    "voice": "When I see a discount highlighted in the subject line, I open the email; otherwise I archive it."
+    "voice": "I usually skim the first paragraph and look for bullet points that highlight environmental impact; if I don't see them within 10 seconds, I close the tab."
   },
   {
     "id": "p022",
-    "name": "Luis Hernandez",
-    "age": 29,
-    "gender": "Male",
+    "name": "Aisha Patel",
+    "age": 28,
+    "gender": "Female",
     "location": "Lisbon, Portugal",
     "region": "Western Europe",
     "income_band": "<25k",
-    "occupation": "Barista",
-    "household": "Shared apartment",
-    "tech_comfort": 2,
+    "occupation": "Barista at a co-op cafe",
+    "household": "Shares a two-bedroom flat with a partner",
+    "tech_comfort": 45,
+    "skepticism": 75,
+    "openness": 65,
+    "conscientiousness": 42,
+    "extraversion": 58,
+    "agreeableness": 60,
+    "neuroticism": 55,
     "values": [
-      "Prioritizes fair-trade coffee",
-      "Uses public transit"
+      "Affordability",
+      "Local culture",
+      "Work-life balance"
     ],
     "buying_triggers": [
-      "Seeing a 'buy one get one free' sign at the corner store",
-      "A coworker recommends a new snack"
+      "Discount for students",
+      "Loyalty stamp card",
+      "Clear price upfront"
     ],
     "pet_peeves": [
-      "Loyalty cards that expire quickly",
-      "Websites that force account creation before viewing menu"
+      "Unexpected service charges",
+      "Complicated loyalty apps",
+      "No receipt option"
     ],
-    "skepticism": 5,
-    "voice": "If an ad offers a free sample, I click to learn more; if it asks for my phone number first, I close it."
+    "voice": "I always check the fine print for any extra fees before I tap to pay; if the fee isn't listed in plain language, I walk away."
   },
   {
     "id": "p023",
-    "name": "Priya Patel",
-    "age": 42,
-    "gender": "Female",
+    "name": "Rajiv Mehta",
+    "age": 40,
+    "gender": "Male",
     "location": "Singapore",
     "region": "Asia-Pacific",
     "income_band": "75-150k",
-    "occupation": "Data analyst",
-    "household": "Owns condo with partner",
-    "tech_comfort": 5,
+    "occupation": "Senior Data Analyst",
+    "household": "Owns a condo with spouse and two kids",
+    "tech_comfort": 90,
+    "skepticism": 20,
+    "openness": 82,
+    "conscientiousness": 88,
+    "extraversion": 45,
+    "agreeableness": 68,
+    "neuroticism": 30,
     "values": [
-      "Believes in data-driven sustainability",
-      "Invests in index funds"
+      "Innovation",
+      "Family security",
+      "Continuous learning"
     ],
     "buying_triggers": [
-      "An email with a clear ROI calculator",
-      "A LinkedIn post showing case study results"
+      "Demo video showing ROI",
+      "Money-back guarantee",
+      "Technical specs sheet"
     ],
     "pet_peeves": [
-      "Vague buzzwords like 'synergy' without numbers",
-      "Overly long video ads that skip to the pitch"
+      "Jargon without explanation",
+      "Long contract terms",
+      "Unclear cancellation policy"
     ],
-    "skepticism": 4,
-    "voice": "Unless the message comes from a known brand, I treat it as spam and delete it instantly."
+    "voice": "I open the email, scroll straight to the specifications table, and only read the marketing copy if the numbers meet my threshold."
   },
   {
     "id": "p024",
-    "name": "Carlos Mendes",
-    "age": 57,
-    "gender": "Male",
-    "location": "S\u00e3o Paulo, Brazil",
+    "name": "Luc\u00eda Fern\u00e1ndez",
+    "age": 58,
+    "gender": "Female",
+    "location": "Guayaquil, Ecuador",
     "region": "Latin America",
     "income_band": "25-40k",
-    "occupation": "Nurse",
-    "household": "Lives with adult child",
-    "tech_comfort": 3,
+    "occupation": "Civil Engineer",
+    "household": "Married, lives with spouse and adult daughter",
+    "tech_comfort": 45,
+    "skepticism": 55,
+    "openness": 60,
+    "conscientiousness": 70,
+    "extraversion": 40,
+    "agreeableness": 50,
+    "neuroticism": 30,
     "values": [
-      "Values reliable public health info",
-      "Prefers locally made medicines"
+      "Family stability",
+      "Community support",
+      "Honest communication"
     ],
     "buying_triggers": [
-      "A flyer at the clinic offering a free health screening",
-      "A WhatsApp forward from a colleague about a discounted medication"
+      "Discount for bulk purchase",
+      "Free installation service",
+      "Warranty extension"
     ],
     "pet_peeves": [
-      "Spam calls pretending to be from insurance",
-      "Websites that hide the price until checkout"
+      "Hidden fees at checkout",
+      "Overly aggressive upselling",
+      "Unclear return policy"
     ],
-    "skepticism": 3,
-    "voice": "I usually skim the headline and the price; if both look good, I read the short description."
+    "voice": "I always read the fine print before clicking 'buy now' because I hate surprise charges. If an ad promises a discount, I check the expiration date first."
   },
   {
     "id": "p025",
-    "name": "Elena Kovac",
-    "age": 70,
+    "name": "Eleanor Whitaker",
+    "age": 68,
     "gender": "Female",
-    "location": "Boston, MA, USA",
+    "location": "Boston, MA",
     "region": "Northeast US",
     "income_band": "150k+",
-    "occupation": "Retired lawyer",
-    "household": "Lives alone",
-    "tech_comfort": 2,
+    "occupation": "Retired university professor",
+    "household": "Owns a historic house with a spouse; occasional caregiver visits",
+    "tech_comfort": 38,
+    "skepticism": 80,
+    "openness": 55,
+    "conscientiousness": 90,
+    "extraversion": 35,
+    "agreeableness": 62,
+    "neuroticism": 25,
     "values": [
-      "Supports civic engagement",
-      "Donates to legal aid nonprofits"
+      "Intellectual rigor",
+      "Legacy building",
+      "Privacy"
     ],
     "buying_triggers": [
-      "A direct mail letter with a personalized invitation to a town hall",
-      "An invitation to a webinar hosted by a bar association"
+      "Peer-reviewed study citation",
+      "Lifetime warranty",
+      "No auto-renewal"
     ],
     "pet_peeves": [
-      "Flashy banner ads that feel like TV commercials",
-      "Unsolicited robocalls about investment offers"
+      "Clickbait headlines",
+      "Over-personalized ads",
+      "Forced video ads"
     ],
-    "skepticism": 4,
-    "voice": "I rarely trust a claim that isn't backed by a citation; I look for the source before deciding."
+    "voice": "I always search for independent reviews before trusting any claim; if the source isn't clearly academic or governmental, I discount the message."
   },
   {
     "id": "p026",
-    "name": "Carter Hayes",
-    "age": 21,
-    "gender": "nonbinary",
-    "location": "Atlanta, Georgia",
+    "name": "Mateo Gomez",
+    "age": 22,
+    "gender": "Male",
+    "location": "Atlanta, GA",
     "region": "Southeast US",
     "income_band": "40-75k",
-    "occupation": "Campus dining services supervisor",
-    "household": "Shares a two-bedroom apartment with two roommates near campus",
-    "tech_comfort": 4,
+    "occupation": "Freelance graphic designer",
+    "household": "Shares a loft with two other creatives",
+    "tech_comfort": 70,
+    "skepticism": 40,
+    "openness": 62,
+    "conscientiousness": 48,
+    "extraversion": 70,
+    "agreeableness": 55,
+    "neuroticism": 48,
     "values": [
-      "Environmental sustainability",
-      "Live music events",
-      "Cooking from scratch",
-      "Fair\u2011trade products"
+      "Creative freedom",
+      "Flexibility",
+      "Collaboration"
     ],
     "buying_triggers": [
-      "Limited\u2011time discount codes",
-      "Free shipping on orders over $50",
-      "Peer reviews on TikTok",
-      "Brand transparency about supply chain"
+      "Instant download",
+      "Editable files",
+      "Community forum access"
     ],
     "pet_peeves": [
-      "Pop\u2011up ads that cover the whole screen",
-      "Automated phone menus with no option to speak to a human",
-      "Products advertised as 'eco\u2011friendly' without certification"
+      "Watermarked previews",
+      "Complex licensing",
+      "Mandatory newsletter signup"
     ],
-    "skepticism": 3,
-    "voice": "I usually skim the first three lines of an email promo; if I don\u2019t see a clear discount or a cause I care about, I delete it. I trust a product more when I see a short video of someone my age using it in real life than when I see polished studio shots."
+    "voice": "I click on the 'Try for free' button immediately and only read the pricing after I've played with the tool for five minutes."
   },
   {
     "id": "p027",
-    "name": "Omar Nasser",
-    "age": 31,
+    "name": "DeAndre Johnson",
+    "age": 30,
     "gender": "Male",
-    "location": "Chicago, IL, USA",
+    "location": "Chicago, IL",
     "region": "Midwest US",
     "income_band": "<25k",
-    "occupation": "Warehouse worker",
-    "household": "Lives with parents",
-    "tech_comfort": 1,
+    "occupation": "Warehouse associate",
+    "household": "Lives with sibling in a rented duplex",
+    "tech_comfort": 52,
+    "skepticism": 72,
+    "openness": 38,
+    "conscientiousness": 55,
+    "extraversion": 48,
+    "agreeableness": 40,
+    "neuroticism": 60,
     "values": [
-      "Seeks durable work gear",
-      "Values overtime pay opportunities"
+      "Steady income",
+      "Safety",
+      "Teamwork"
     ],
     "buying_triggers": [
-      "A text from my supervisor about a discounted bulk order of gloves",
-      "A flyer in the break room for a tool sale"
+      "Overtime pay preview",
+      "Break schedule flexibility",
+      "Direct deposit option"
     ],
     "pet_peeves": [
-      "Ads that promise 'miracle' results without proof",
-      "Emails that load huge images and slow my phone"
+      "Last-minute shift changes",
+      "Unclear safety protocols",
+      "Payday delays"
     ],
-    "skepticism": 5,
-    "voice": "Only when the sender is a colleague do I consider the promotional content worth a look."
+    "voice": "I glance at the bullet list of benefits; if overtime isn't listed in the first three items, I move on to the next posting."
   },
   {
     "id": "p028",
-    "name": "Sofia Ruiz",
+    "name": "Sofia Alvarez",
     "age": 45,
     "gender": "Female",
-    "location": "Phoenix, AZ, USA",
+    "location": "Phoenix, AZ",
     "region": "Southwest US",
     "income_band": "75-150k",
-    "occupation": "Solar installer",
-    "household": "Owns home with spouse and two kids",
-    "tech_comfort": 3,
+    "occupation": "Renewable energy project manager",
+    "household": "Owns a house with spouse and a teenage child",
+    "tech_comfort": 78,
+    "skepticism": 25,
+    "openness": 70,
+    "conscientiousness": 82,
+    "extraversion": 55,
+    "agreeableness": 65,
+    "neuroticism": 38,
     "values": [
-      "Believes in renewable energy incentives",
-      "Prefers local contractors"
+      "Environmental impact",
+      "Project transparency",
+      "Career growth"
     ],
     "buying_triggers": [
-      "A rebate notice from the utility company arrived in the mail",
-      "A neighbor's recommendation after their installation"
+      "Third-party certification",
+      "Clear timeline milestones",
+      "Option to pause payments"
     ],
     "pet_peeves": [
-      "Technical jargon without a simple summary",
-      "Websites that make you fill out a form before seeing pricing"
+      "Vague sustainability claims",
+      "Hidden fees in financing",
+      "Overly technical jargon without glossary"
     ],
-    "skepticism": 3,
-    "voice": "After seeing the same offer three times in a week, I assume it's not urgent and move on."
+    "voice": "I verify any green claim by looking for a third-party logo before I read the rest of the pitch; if it's missing, I treat the offer as suspect."
   },
   {
     "id": "p029",
-    "name": "Diego Santos",
+    "name": "Luis Hernandez",
     "age": 58,
     "gender": "Male",
-    "location": "Las Vegas, NV, USA",
+    "location": "Las Vegas, NV",
     "region": "West US",
     "income_band": "25-40k",
-    "occupation": "Teacher",
-    "household": "Lives with spouse",
-    "tech_comfort": 2,
+    "occupation": "Casino floor supervisor",
+    "household": "Rents a townhouse with a partner and a dog",
+    "tech_comfort": 48,
+    "skepticism": 55,
+    "openness": 42,
+    "conscientiousness": 60,
+    "extraversion": 68,
+    "agreeableness": 50,
+    "neuroticism": 52,
     "values": [
-      "Values classroom resource grants",
-      "Prefers products with educator discounts"
+      "Job stability",
+      "Health benefits",
+      "Team camaraderie"
     ],
     "buying_triggers": [
-      "An email from the district offering a bulk purchase deal on supplies",
-      "A Facebook group post about a discounted educational software"
+      "Shift differential premium",
+      "Health-plan comparison chart",
+      "Paid time off accrual visibility"
     ],
     "pet_peeves": [
-      "Ads that interrupt instructional videos",
-      "Pop-ups that request personal data for a 'free' trial"
+      "Sudden schedule changes",
+      "Lack of break area",
+      "Unclear promotion criteria"
     ],
-    "skepticism": 4,
-    "voice": "Because I hate autoplay videos, I mute all promotional clips before watching the first frame."
+    "voice": "I first check the fine print for any hidden penalties; if the penalty clause is longer than two sentences, I assume it's a red flag and ask HR for clarification."
   },
   {
     "id": "p030",
-    "name": "Ingrid Bergman",
-    "age": 68,
+    "name": "Ingrid Nilsson",
+    "age": 70,
     "gender": "Female",
-    "location": "Zurich, Switzerland",
+    "location": "Stockholm, Sweden",
     "region": "Western Europe",
     "income_band": "150k+",
-    "occupation": "University professor",
-    "household": "Lives alone",
-    "tech_comfort": 1,
+    "occupation": "Independent financial consultant",
+    "household": "Lives alone in a downtown apartment; occasional visits from adult children",
+    "tech_comfort": 30,
+    "skepticism": 85,
+    "openness": 40,
+    "conscientiousness": 78,
+    "extraversion": 32,
+    "agreeableness": 45,
+    "neuroticism": 58,
     "values": [
-      "Supports open-access publishing",
-      "Funds graduate student travel"
+      "Financial independence",
+      "Clarity",
+      "Low risk"
     ],
     "buying_triggers": [
-      "A conference mailing offering a complimentary copy of a new textbook",
-      "An invitation to review a manuscript with an honorarium"
+      "Flat-fee pricing",
+      "No hidden charges",
+      "Easy-to-read statement"
     ],
     "pet_peeves": [
-      "Ads that pretend to be scholarly articles",
-      "Emails that use urgent language without substance"
+      "Complex fee schedules",
+      "Automated chatbots that can't answer specifics",
+      "Pressure to decide quickly"
     ],
-    "skepticism": 5,
-    "voice": "Do I really need another gadget? If the answer isn't obvious after ten seconds, I scroll past."
+    "voice": "I always request a PDF version of the terms and read it offline; if the document exceeds five pages, I summarise it myself before deciding."
   },
   {
     "id": "p031",
@@ -854,1861 +990,2235 @@
     "location": "Melbourne, Australia",
     "region": "Asia-Pacific",
     "income_band": "40-75k",
-    "occupation": "University research assistant",
-    "household": "Shared apartment with two roommates",
-    "tech_comfort": 4,
+    "occupation": "Graphic Designer",
+    "household": "Shares a two\u2011bedroom apartment with a roommate",
+    "tech_comfort": 78,
+    "skepticism": 65,
+    "openness": 70,
+    "conscientiousness": 60,
+    "extraversion": 55,
+    "agreeableness": 68,
+    "neuroticism": 40,
     "values": [
-      "Prioritizes evidence-based products",
-      "Supports local Australian brands"
+      "creativity",
+      "work\u2011life balance"
     ],
     "buying_triggers": [
-      "Sees peer-reviewed study cited",
-      "Free sample offered"
+      "limited\u2011time discount codes",
+      "eco\u2011friendly packaging"
     ],
     "pet_peeves": [
-      "Overly promotional language without data",
-      "Having to create an account just to browse"
+      "pop\u2011up ads that cover the whole screen",
+      "email newsletters sent daily"
     ],
-    "skepticism": 3,
-    "voice": "I usually skim the bullet points first; if the claims lack a citation, I close the tab."
+    "voice": "I usually skim the first sentence of an ad; if it mentions a free trial I click to learn more, otherwise I scroll past."
   },
   {
     "id": "p032",
-    "name": "Mateo Silva",
-    "age": 29,
+    "name": "Diego Morales",
+    "age": 30,
     "gender": "Male",
     "location": "Bogot\u00e1, Colombia",
     "region": "Latin America",
     "income_band": "<25k",
-    "occupation": "Barista at independent caf\u00e9",
-    "household": "Lives with parents, contributes to bills",
-    "tech_comfort": 2,
+    "occupation": "Street Vendor (food cart)",
+    "household": "Lives with parents and helps support younger siblings",
+    "tech_comfort": 45,
+    "skepticism": 80,
+    "openness": 55,
+    "conscientiousness": 40,
+    "extraversion": 70,
+    "agreeableness": 45,
+    "neuroticism": 55,
     "values": [
-      "Values fairness in pricing",
-      "Enjoys discovering new music"
+      "family",
+      "hard work"
     ],
     "buying_triggers": [
-      "Discount for bringing reusable cup",
-      "Limited-time flavor"
+      "cash\u2011back offers",
+      "buy\u2011one\u2011get\u2011one free"
     ],
     "pet_peeves": [
-      "Complicated loyalty app sign-up",
-      "Being upsold at the counter"
+      "complicated loyalty\u2011program sign\u2011ups",
+      "ads that assume I have a credit card"
     ],
-    "skepticism": 2,
-    "voice": "Before I make a purchase, I always check the price per ounce; when it\u2019s missing, I walk away."
+    "voice": "When I see a promotion I instantly check if it works with cash; if it needs a card I ignore it because I rarely carry one."
   },
   {
     "id": "p033",
-    "name": "Elena Rodriguez",
+    "name": "Emily Chen",
     "age": 42,
     "gender": "Female",
     "location": "Boston, MA",
     "region": "Northeast US",
     "income_band": "75-150k",
-    "occupation": "Senior software engineer",
-    "household": "Married, two kids, owns home",
-    "tech_comfort": 5,
+    "occupation": "Registered Nurse",
+    "household": "Owns a condo with her spouse and two kids",
+    "tech_comfort": 60,
+    "skepticism": 50,
+    "openness": 55,
+    "conscientiousness": 80,
+    "extraversion": 45,
+    "agreeableness": 70,
+    "neuroticism": 30,
     "values": [
-      "Prefers products with clear privacy policy",
-      "Looks for energy-star ratings"
+      "health",
+      "reliability"
     ],
     "buying_triggers": [
-      "Free trial period",
-      "Referral bonus from colleague"
+      "clinically proven claims",
+      "subscription refill reminders"
     ],
     "pet_peeves": [
-      "Hidden auto-renewals",
-      "Jargon-filled FAQs"
+      "overpromising miracle cures",
+      "jargon without clear benefits"
     ],
-    "skepticism": 4,
-    "voice": "Seeing a money-back guarantee prompts me to read the return window before I click 'buy'."
+    "voice": "I read the fine print first; if the product lists side effects or ingredients I trust it more than flashy headlines."
   },
   {
     "id": "p034",
-    "name": "Jamal Brooks",
-    "age": 57,
+    "name": "Jamal Washington",
+    "age": 58,
     "gender": "Male",
     "location": "Atlanta, GA",
     "region": "Southeast US",
     "income_band": "25-40k",
-    "occupation": "Postal service worker",
-    "household": "Single, lives alone in a rented condo",
-    "tech_comfort": 3,
+    "occupation": "High School Teacher",
+    "household": "Rents a townhouse, lives alone",
+    "tech_comfort": 70,
+    "skepticism": 70,
+    "openness": 65,
+    "conscientiousness": 70,
+    "extraversion": 50,
+    "agreeableness": 55,
+    "neuroticism": 45,
     "values": [
-      "Likes straightforward warranties",
-      "Appreciates Made in USA labels"
+      "education",
+      "community"
     ],
     "buying_triggers": [
-      "In-store demo",
-      "Coupon mailed to home"
+      "teacher discounts",
+      "bulk pricing for classroom supplies"
     ],
     "pet_peeves": [
-      "Websites that require phone verification",
-      "Slow loading pages on mobile"
+      "ads that target kids directly",
+      "fine print hidden in video ads"
     ],
-    "skepticism": 2,
-    "voice": "I call the store to confirm stock before I browse online; a hidden phone number makes me skip the site."
+    "voice": "I usually pause a video ad at the 5\u2011second mark to see if there\u2019s a skip button; if not, I mute it and keep watching."
   },
   {
     "id": "p035",
-    "name": "Hiroshi Tanaka",
+    "name": "Harold Greene",
     "age": 68,
     "gender": "Male",
     "location": "Chicago, IL",
     "region": "Midwest US",
     "income_band": "150k+",
-    "occupation": "Retired university professor",
-    "household": "Lives with spouse, adult child visits weekly",
-    "tech_comfort": 1,
+    "occupation": "Retired Engineer",
+    "household": "Owns a house with his wife; adult kids live out of state",
+    "tech_comfort": 30,
+    "skepticism": 55,
+    "openness": 40,
+    "conscientiousness": 85,
+    "extraversion": 35,
+    "agreeableness": 60,
+    "neuroticism": 50,
     "values": [
-      "Values durability over trends",
-      "Supports scholarly publishing"
+      "precision",
+      "durability"
     ],
     "buying_triggers": [
-      "Long-term warranty",
-      "Recommendation from a trusted academic journal"
+      "warranty length > 2 years",
+      "made\u2011in\u2011USA label"
     ],
     "pet_peeves": [
-      "Flashy ads that autoplay sound",
-      "Having to reset password frequently"
+      "flashy celebrity endorsements",
+      "ads that change pricing mid\u2011checkout"
     ],
-    "skepticism": 4,
-    "voice": "I prefer reading printed catalogs; when an offer is online-only, I wait for a family member to show me."
+    "voice": "I look for the specifications table; if it\u2019s missing I assume the product is low quality and move on."
   },
   {
     "id": "p036",
-    "name": "Lucia Navarro",
-    "age": 20,
-    "gender": "Female",
+    "name": "Luca Romano",
+    "age": 21,
+    "gender": "Male",
     "location": "Phoenix, AZ",
     "region": "Southwest US",
     "income_band": "40-75k",
-    "occupation": "Graphic design intern",
-    "household": "Shares a two-bedroom with a friend",
-    "tech_comfort": 4,
+    "occupation": "IT Support Technician",
+    "household": "Shares a studio apartment with a friend",
+    "tech_comfort": 85,
+    "skepticism": 40,
+    "openness": 80,
+    "conscientiousness": 55,
+    "extraversion": 60,
+    "agreeableness": 70,
+    "neuroticism": 25,
     "values": [
-      "Loves customizable products",
-      "Follows eco-friendly packaging"
+      "innovation",
+      "flexibility"
     ],
     "buying_triggers": [
-      "Student discount with .edu email",
-      "Free shipping on first order"
+      "beta\u2011tester invites",
+      "early\u2011access discounts"
     ],
     "pet_peeves": [
-      "Mandatory newsletter signup before seeing price",
-      "Pop-up ads that cover the button"
+      "ads that require downloading an app just to view",
+      "slow\u2011loading landing pages"
     ],
-    "skepticism": 2,
-    "voice": "I never place an item in my cart without first checking the size guide; a missing guide leads me to abandon the cart."
+    "voice": "If an ad loads in under two seconds I\u2019ll watch the whole thing; otherwise I close the tab and search for the product myself."
   },
   {
     "id": "p037",
-    "name": "Diego Morales",
-    "age": 31,
-    "gender": "Male",
-    "location": "Portland, OR",
+    "name": "Sofia Alvarez",
+    "age": 28,
+    "gender": "Female",
+    "location": "San Diego, CA",
     "region": "West US",
     "income_band": "<25k",
-    "occupation": "Bike messenger",
-    "household": "Lives in a studio apartment, pays utilities himself",
-    "tech_comfort": 3,
+    "occupation": "Barista",
+    "household": "Lives with a partner in a rented apartment",
+    "tech_comfort": 50,
+    "skepticism": 75,
+    "openness": 45,
+    "conscientiousness": 45,
+    "extraversion": 55,
+    "agreeableness": 40,
+    "neuroticism": 70,
     "values": [
-      "Prefers gear that can be repaired",
-      "Supports local makers"
+      "authenticity",
+      "self\u2011care"
     ],
     "buying_triggers": [
-      "Limited-edition color release",
-      "Referral discount from fellow rider"
+      "free sample in store",
+      "happy\u2011hour pricing"
     ],
     "pet_peeves": [
-      "Websites that don\u2019t show weight specs",
-      "Having to create an account to track a shipment"
+      "overly aggressive upsell scripts",
+      "ads that play loud audio automatically"
     ],
-    "skepticism": 2,
-    "voice": "The weight in grams is the first spec I look for; if it\u2019s absent, I consider the product too heavy for my bike."
+    "voice": "I mute any ad that starts with sound; if the visual is just a logo I swipe away within three seconds."
   },
   {
     "id": "p038",
-    "name": "Marta Schmidt",
-    "age": 42,
-    "gender": "Female",
-    "location": "Berlin, Germany",
+    "name": "Pierre Dubois",
+    "age": 45,
+    "gender": "Male",
+    "location": "Paris, France",
     "region": "Western Europe",
     "income_band": "75-150k",
-    "occupation": "Mechanical Engineer",
-    "household": "Married, two children (ages 8 and 11)",
-    "tech_comfort": 4,
+    "occupation": "Marketing Analyst",
+    "household": "Owns a flat with his spouse; no children",
+    "tech_comfort": 65,
+    "skepticism": 55,
+    "openness": 70,
+    "conscientiousness": 65,
+    "extraversion": 70,
+    "agreeableness": 55,
+    "neuroticism": 35,
     "values": [
-      "Reducing household waste by composting",
-      "Choosing products with repairable design",
-      "Supporting brands that pay fair wages locally"
+      "data\u2011driven",
+      "efficiency"
     ],
     "buying_triggers": [
-      "Free standard delivery on orders over \u20ac50",
-      "30\u2011day hassle\u2011free returns",
-      "Downloadable technical datasheet"
+      "A/B test results shown in ad",
+      "clear ROI numbers"
     ],
     "pet_peeves": [
-      "Vague claims like 'eco\u2011friendly' without certification",
-      "Unexpected renewal charges after trial",
-      "Pages that take >5 seconds to load"
+      "vague buzzwords like \"synergy\"",
+      "ads that lack a call\u2011to\u2011action"
     ],
-    "skepticism": 3,
-    "voice": "I usually read the specs table first; if I can\u2019t find clear numbers, I move on. I also check return policy before adding anything to cart."
+    "voice": "I first check whether the ad presents a measurable claim; if it\u2019s just aspirational I treat it as noise."
   },
   {
     "id": "p039",
-    "name": "Wei Chen",
-    "age": 58,
-    "gender": "Male",
-    "location": "Singapore",
+    "name": "Mei Lin",
+    "age": 55,
+    "gender": "Female",
+    "location": "Tokyo, Japan",
     "region": "Asia-Pacific",
     "income_band": "25-40k",
-    "occupation": "Supply chain analyst",
-    "household": "Lives with elderly parents, helps with meds",
-    "tech_comfort": 3,
+    "occupation": "Small Business Owner (boutique)",
+    "household": "Lives above her shop with her mother",
+    "tech_comfort": 55,
+    "skepticism": 60,
+    "openness": 75,
+    "conscientiousness": 50,
+    "extraversion": 40,
+    "agreeableness": 65,
+    "neuroticism": 45,
     "values": [
-      "Prefers products with clear country-of-origin",
-      "Likes bulk purchase options"
+      "craftsmanship",
+      "trust"
     ],
     "buying_triggers": [
-      "Quantity discount tier",
-      "Free installation service"
+      "artisan story behind product",
+      "local pickup option"
     ],
     "pet_peeves": [
-      "Vague delivery windows",
-      "Requiring a photocopy of ID for simple purchases"
+      "generic stock photos",
+      "return windows shorter than 14 days"
     ],
-    "skepticism": 2,
-    "voice": "I always start by comparing unit price; a hidden unit price behind a dropdown makes me look elsewhere."
+    "voice": "I read the \u2018About\u2019 section before anything else; if I can\u2019t find who made the product I lose interest quickly."
   },
   {
     "id": "p040",
-    "name": "Patricia",
+    "name": "Rosa Mendoza",
     "age": 70,
     "gender": "Female",
-    "location": "Medell\u00edn, Colombia",
+    "location": "S\u00e3o Paulo, Brazil",
     "region": "Latin America",
     "income_band": "150k+",
-    "occupation": "Independent coffee plantation advisor",
-    "household": "Lives with her husband and a teenage granddaughter who stays during school breaks",
-    "tech_comfort": 3,
+    "occupation": "Retired Professor",
+    "household": "Owns a penthouse; lives alone",
+    "tech_comfort": 20,
+    "skepticism": 80,
+    "openness": 30,
+    "conscientiousness": 70,
+    "extraversion": 25,
+    "agreeableness": 50,
+    "neuroticism": 60,
     "values": [
-      "Volunteers at the local women's cooperative every Saturday",
-      "Invests in shade\u2011grown coffee trials on her farm",
-      "Attends quarterly workshops on sustainable agriculture"
+      "knowledge",
+      "legacy"
     ],
     "buying_triggers": [
-      "Sees a side\u2011by\u2011side field trial showing yield increase under drought conditions",
-      "Receives a detailed cost\u2011benefit spreadsheet from a supplier",
-      "Gets a personal invitation to a demo day hosted by a trusted cooperative"
+      "peer\u2011reviewed studies cited",
+      "long\u2011term guarantee"
     ],
     "pet_peeves": [
-      "Finds generic brochures that lack specific data frustrating",
-      "Dislikes when vendors push long\u2011term contracts without a trial period",
-      "Is annoyed by jargon\u2011heavy presentations that avoid plain Spanish"
+      "ads that use fear\u2011mongering",
+      "price revealed only after checkout"
     ],
-    "skepticism": 4,
-    "voice": "I first look for hard numbers\u2014yield percentages or cost savings\u2014before I read the rest of the material. If the language feels overly promotional, I set it aside and ask a colleague for their opinion."
+    "voice": "I always look for the source of any claim; if there\u2019s no citation I assume it\u2019s marketing fluff and stop reading."
   },
   {
     "id": "p041",
-    "name": "Jordan",
+    "name": "Alex Morgan",
     "age": 22,
-    "gender": "non\u2011binary",
+    "gender": "nonbinary",
     "location": "Boston, MA",
     "region": "Northeast US",
     "income_band": "40-75k",
-    "occupation": "Retail associate",
-    "household": "Lives with two roommates in a shared apartment",
-    "tech_comfort": 4,
+    "occupation": "Barista",
+    "household": "shares a two-bedroom apartment with two roommates",
+    "tech_comfort": 55,
+    "skepticism": 68,
+    "openness": 70,
+    "conscientiousness": 45,
+    "extraversion": 60,
+    "agreeableness": 55,
+    "neuroticism": 30,
     "values": [
-      "choosing products with recycled packaging",
-      "buying from farmer\u2019s markets",
-      "reading ingredient labels"
+      "prefers locally roasted coffee",
+      "likes reusable cup discounts"
     ],
     "buying_triggers": [
-      "seeing a limited\u2011time discount",
-      "friend recommendation on Instagram",
-      "free shipping over $50"
+      "seeing a loyalty stamp card",
+      "friend's Instagram story about a new drink"
     ],
     "pet_peeves": [
-      "pop\u2011up ads that cover the whole screen",
-      "misleading \u2018sale\u2019 prices that aren\u2019t lower than usual",
-      "slow website checkout"
+      "having to repeat order three times",
+      "slow espresso machine"
     ],
-    "skepticism": 3,
-    "voice": "I usually skim the headline and look for the exact discount percentage before I click. If an email feels too pushy, I delete it right away. I trust a brand more when they show real customer photos rather than stock images."
+    "voice": "I usually glance at the top line of a promo email and delete it if it doesn't mention a free pastry within the first two seconds."
   },
   {
     "id": "p042",
-    "name": "Miguel Santos",
-    "age": 30,
-    "gender": "male",
+    "name": "Maya Patel",
+    "age": 28,
+    "gender": "female",
     "location": "Atlanta, GA",
     "region": "Southeast US",
     "income_band": "<25k",
-    "occupation": "Warehouse Associate",
-    "household": "living with parents",
-    "tech_comfort": 1,
+    "occupation": "Data Analyst",
+    "household": "lives with parents to save rent",
+    "tech_comfort": 80,
+    "skepticism": 75,
+    "openness": 55,
+    "conscientiousness": 65,
+    "extraversion": 40,
+    "agreeableness": 50,
+    "neuroticism": 45,
     "values": [
-      "supporting family",
-      "stable hours"
+      "values clear pricing with no hidden fees",
+      "enjoys cashback offers"
     ],
     "buying_triggers": [
-      "overtime pay offer",
-      "breakfast provided"
+      "receiving a discount code via SMS",
+      "seeing a comparison chart"
     ],
     "pet_peeves": [
-      "unpredictable schedule",
-      "mandatory overtime"
+      "pop-up ads that cover the whole screen",
+      "having to create an account just to view price"
     ],
-    "skepticism": 5,
-    "voice": "I check my phone only during breaks, so ads need to be short. When I get a flyer handed to me, I trust it more than a pop-up ad."
+    "voice": "When I get a promotional text, I instantly check if the sender is a known brand before opening the link."
   },
   {
     "id": "p043",
-    "name": "Taylor Nguyen",
+    "name": "Tomas",
     "age": 42,
-    "gender": "female",
-    "location": "Columbus, OH",
+    "gender": "Male",
+    "location": "Columbus, Ohio",
     "region": "Midwest US",
     "income_band": "75-150k",
-    "occupation": "Software Engineer",
-    "household": "married, two kids",
-    "tech_comfort": 4,
+    "occupation": "Civil Engineer",
+    "household": "Married with two children (ages 8 and 11)",
+    "tech_comfort": 78,
+    "skepticism": 55,
+    "openness": 62,
+    "conscientiousness": 80,
+    "extraversion": 45,
+    "agreeableness": 70,
+    "neuroticism": 30,
     "values": [
-      "career growth",
-      "family time"
+      "Weekly family bike rides",
+      "Participating in neighborhood clean\u2011up events",
+      "Saving for kids\u2019 college fund"
     ],
     "buying_triggers": [
-      "home office upgrade discount",
-      "educational webinar"
+      "Limited\u2011time bundle offers",
+      "Free two\u2011day shipping on orders over $50",
+      "Demonstration videos showing real\u2011world use"
     ],
     "pet_peeves": [
-      "jargon-heavy emails",
-      "unsolicited calls"
+      "Pop\u2011up ads that obscure article text",
+      "Websites that take more than 5 seconds to load",
+      "Daily promotional emails after a single purchase"
     ],
-    "skepticism": 3,
-    "voice": "I read the first paragraph to see if it solves a problem I have. If the tone feels pushy, I close the tab."
+    "voice": "I open marketing emails only if the subject line mentions a concrete savings amount; otherwise I archive them. I prefer to watch a short 30\u2011second demo before clicking any product link."
   },
   {
     "id": "p044",
-    "name": "Carlos Mendoza",
-    "age": 58,
-    "gender": "Male",
-    "location": "Tucson, Arizona",
+    "name": "Priya Shah",
+    "age": 57,
+    "gender": "female",
+    "location": "Phoenix, AZ",
     "region": "Southwest US",
     "income_band": "25-40k",
-    "occupation": "Warehouse associate",
-    "household": "Married, lives with spouse and adult daughter who attends community college",
-    "tech_comfort": 3,
+    "occupation": "Nurse Practitioner",
+    "household": "lives alone in a condo",
+    "tech_comfort": 30,
+    "skepticism": 60,
+    "openness": 50,
+    "conscientiousness": 70,
+    "extraversion": 45,
+    "agreeableness": 55,
+    "neuroticism": 50,
     "values": [
-      "Family stability",
-      "Practical savings",
-      "Local community support"
+      "appreciates medication side-effect sheets in plain language",
+      "likes refill reminders"
     ],
     "buying_triggers": [
-      "Clear price breakdown",
-      "Warranty length of at least 2 years",
-      "Recommendations from trusted friends"
+      "receiving a mail coupon for flu shot",
+      "seeing a clinic's newsletter with health tips"
     ],
     "pet_peeves": [
-      "Hidden fees in fine print",
-      "Overly pushy sales calls",
-      "Products that require complicated assembly without instructions"
+      "being upsold unnecessary supplements",
+      "long hold times on pharmacy lines"
     ],
-    "skepticism": 4,
-    "voice": "I usually skim the first paragraph of an ad to see if the price is up front; if it\u2019s buried, I lose interest. I trust a friend\u2019s word more than any celebrity endorsement."
+    "voice": "If a flyer arrives in my mailbox, I place it on the kitchen counter and only read it after my morning coffee."
   },
   {
     "id": "p045",
-    "name": "Ethan Brooks",
-    "age": 70,
+    "name": "Samir Khan",
+    "age": 71,
     "gender": "male",
-    "location": "Seattle, WA",
+    "location": "San Francisco, CA",
     "region": "West US",
     "income_band": "150k+",
     "occupation": "Retired Professor",
-    "household": "widowed, lives with cat",
-    "tech_comfort": 1,
+    "household": "lives with spouse in a suburban home",
+    "tech_comfort": 20,
+    "skepticism": 80,
+    "openness": 30,
+    "conscientiousness": 75,
+    "extraversion": 35,
+    "agreeableness": 65,
+    "neuroticism": 40,
     "values": [
-      "lifelong learning",
-      "community involvement"
+      "prefers printed catalogs with large font",
+      "values lifetime guarantee"
     ],
     "buying_triggers": [
-      "lecture series discount",
-      "museum membership deal"
+      "receiving a direct mail brochure",
+      "seeing a testimonial from a peer"
     ],
     "pet_peeves": [
-      "flashy animations",
-      "hard-to-read fonts"
+      "tiny print on digital ads",
+      "having to click through multiple pages"
     ],
-    "skepticism": 5,
-    "voice": "I prefer a letter in the mail over any digital ad. When a website makes me zoom to read text, I leave."
+    "voice": "I scan subject lines and delete any email that doesn't explicitly mention a discount, because I won't waste time hunting for offers."
   },
   {
     "id": "p046",
-    "name": "Lina Karlsson",
-    "age": 20,
+    "name": "Leila Dubois",
+    "age": 19,
     "gender": "female",
     "location": "Berlin, Germany",
     "region": "Western Europe",
     "income_band": "40-75k",
-    "occupation": "University Tutor",
-    "household": "shared flat with three friends",
-    "tech_comfort": 3,
+    "occupation": "Graphic Designer",
+    "household": "shares a studio flat with a partner",
+    "tech_comfort": 70,
+    "skepticism": 72,
+    "openness": 80,
+    "conscientiousness": 35,
+    "extraversion": 55,
+    "agreeableness": 45,
+    "neuroticism": 50,
     "values": [
-      "travel experiences",
-      "eco-friendly products"
+      "loves limited-edition art prints",
+      "likes early access to beta features"
     ],
     "buying_triggers": [
-      "student discount code",
-      "reusable product bundle"
+      "seeing a countdown timer on a website",
+      "receiving an invite to a virtual launch party"
     ],
     "pet_peeves": [
-      "spammy influencer tags",
-      "hidden subscription fees"
+      "generic stock photos in ads",
+      "being asked to fill out long surveys before viewing content"
     ],
-    "skepticism": 2,
-    "voice": "I scroll past anything that looks like a meme ad. If the subject line mentions 'exclusive', I open it."
+    "voice": "Seeing a banner flash 'Sale ends tonight', I click immediately, even if I haven't read the details yet."
   },
   {
     "id": "p047",
-    "name": "Arjun Patel",
-    "age": 28,
+    "name": "Diego Morales",
+    "age": 30,
     "gender": "male",
     "location": "Tokyo, Japan",
     "region": "Asia-Pacific",
     "income_band": "<25k",
-    "occupation": "Delivery Rider",
-    "household": "lives with sibling",
-    "tech_comfort": 4,
+    "occupation": "Software Developer",
+    "household": "lives in a shared dormitory with three other devs",
+    "tech_comfort": 60,
+    "skepticism": 45,
+    "openness": 50,
+    "conscientiousness": 55,
+    "extraversion": 60,
+    "agreeableness": 50,
+    "neuroticism": 40,
     "values": [
-      "quick payouts",
-      "flexible hours"
+      "prefers open-source tools",
+      "likes community forums for troubleshooting"
     ],
     "buying_triggers": [
-      "fuel reimbursement increase",
-      "rain gear allowance"
+      "seeing a GitHub repo star count increase",
+      "receiving a Slack message about a new plugin"
     ],
     "pet_peeves": [
-      "app crashes during peak hours",
-      "no tip transparency"
+      "marketing that claims \u2018revolutionary\u2019 without proof",
+      "forced video ads before documentation"
     ],
-    "skepticism": 3,
-    "voice": "I glance at push notifications only when they display earnings. If an ad requires me to fill a form, I skip it."
+    "voice": "I skim the changelog first; if there's no version number, I assume it's a marketing fluff and move on."
   },
   {
     "id": "p048",
-    "name": "Valeria Duarte",
-    "age": 44,
+    "name": "Hana Novak",
+    "age": 45,
     "gender": "female",
     "location": "S\u00e3o Paulo, Brazil",
     "region": "Latin America",
     "income_band": "75-150k",
     "occupation": "Marketing Manager",
-    "household": "married, one child",
-    "tech_comfort": 5,
+    "household": "married, lives with spouse and teenage daughter",
+    "tech_comfort": 50,
+    "skepticism": 58,
+    "openness": 60,
+    "conscientiousness": 48,
+    "extraversion": 70,
+    "agreeableness": 55,
+    "neuroticism": 35,
     "values": [
-      "brand creativity",
-      "work-life balance"
+      "likes family-oriented promotions",
+      "enjoys cashback on groceries"
     ],
     "buying_triggers": [
-      "conference ticket discount",
-      "industry report bundle"
+      "seeing a TV ad during telenovela break",
+      "receiving a WhatsApp coupon from a local store"
     ],
     "pet_peeves": [
-      "generic stock images",
-      "overpromising ROI claims"
+      "ads that interrupt streaming mid-episode",
+      "having to call a call center to redeem a voucher"
     ],
-    "skepticism": 4,
-    "voice": "I read the headline and then look for data points. When an email uses ALL CAPS, I assume it's spam."
+    "voice": "If a WhatsApp message contains a gif of a dancing product, I open it right away to see the deal."
   },
   {
     "id": "p049",
-    "name": "Samuel Greene",
-    "age": 55,
+    "name": "Oliver Reed",
+    "age": 53,
     "gender": "male",
-    "location": "Providence, RI",
+    "location": "New York, NY",
     "region": "Northeast US",
     "income_band": "25-40k",
-    "occupation": "Public School Teacher",
-    "household": "married, empty nest",
-    "tech_comfort": 2,
+    "occupation": "Construction Supervisor",
+    "household": "lives alone, rents a studio",
+    "tech_comfort": 40,
+    "skepticism": 65,
+    "openness": 45,
+    "conscientiousness": 55,
+    "extraversion": 30,
+    "agreeableness": 50,
+    "neuroticism": 55,
     "values": [
-      "classroom resources",
-      "professional development"
+      "prefers durable work gear with reinforced stitching",
+      "likes bulk pricing discounts"
     ],
     "buying_triggers": [
-      "summer workshop grant",
-      "bulk supply discount"
+      "seeing a flyer at the hardware store entrance",
+      "receiving a text about a weekend sale"
     ],
     "pet_peeves": [
-      "late-night emails",
-      "printer jams"
+      "flimsy product samples that break easily",
+      "having to fill out a paper rebate form"
     ],
-    "skepticism": 3,
-    "voice": "I check my inbox only after school ends. If a subject line says 'urgent', I treat it as low priority."
+    "voice": "When I see a flyer taped to a tool rack, I read the headline first and ignore the fine print unless the price stands out."
   },
   {
     "id": "p050",
-    "name": "Olivia Clarke",
+    "name": "Mei Chen",
     "age": 68,
     "gender": "female",
     "location": "Miami, FL",
     "region": "Southeast US",
     "income_band": "150k+",
     "occupation": "Financial Advisor",
-    "household": "single, owns condo",
-    "tech_comfort": 3,
+    "household": "lives with spouse in a gated community",
+    "tech_comfort": 25,
+    "skepticism": 73,
+    "openness": 35,
+    "conscientiousness": 70,
+    "extraversion": 40,
+    "agreeableness": 60,
+    "neuroticism": 45,
     "values": [
-      "preserving wealth",
-      "philanthropic giving"
+      "likes transparent fee breakdowns",
+      "values long-term investment over quick gains"
     ],
     "buying_triggers": [
-      "tax-saving webinar",
-      "charity matching offer"
+      "receiving a quarterly performance report with charts",
+      "seeing a seminar invite from a reputable firm"
     ],
     "pet_peeves": [
-      "high-fee fund pitches",
-      "unsolicited cold calls"
+      "jargon-heavy pitches without examples",
+      "having to attend a webinar at inconvenient times"
     ],
-    "skepticism": 5,
-    "voice": "I like a concise bullet-point summary at the top. If the sender doesn't disclose their credentials, I trash it."
+    "voice": "If an email subject line promises 'guaranteed returns', I delete it immediately because I know nothing is guaranteed."
   },
   {
     "id": "p051",
-    "name": "Alex Rivera",
-    "age": 20,
-    "gender": "Nonbinary",
+    "name": "Liam Patel",
+    "age": 22,
+    "gender": "Male",
     "location": "Columbus, OH",
     "region": "Midwest US",
     "income_band": "40-75k",
-    "occupation": "Community college adjunct instructor",
+    "occupation": "Graphic Designer",
     "household": "Roommate shared apartment",
-    "tech_comfort": 4,
+    "tech_comfort": 78,
+    "skepticism": 45,
+    "openness": 60,
+    "conscientiousness": 70,
+    "extraversion": 55,
+    "agreeableness": 50,
+    "neuroticism": 30,
     "values": [
-      "Supporting local businesses",
-      "Environmental sustainability"
+      "using reusable coffee cups",
+      "supporting local farmers markets",
+      "learning new illustration techniques",
+      "volunteering at animal shelters"
     ],
     "buying_triggers": [
-      "Student discount codes",
-      "Free shipping thresholds"
+      "limited-time discount",
+      "free shipping over $50",
+      "eco-friendly packaging",
+      "positive peer reviews"
     ],
     "pet_peeves": [
-      "Pop-up ads that block content",
-      "Unnecessary account creation"
+      "overly aggressive pop-up ads",
+      "misleading product images",
+      "slow website load times",
+      "unclear return policies"
     ],
-    "skepticism": 3,
-    "voice": "I skim the first paragraph of any email offer; if it doesn\u2019t mention a concrete price drop within two sentences, I delete it."
+    "voice": "I first check for clear pricing and any hidden fees before I consider a product. If I sense the ad is pushy, I close it and look for a more straightforward review."
   },
   {
     "id": "p052",
-    "name": "Maya Lopez",
-    "age": 28,
+    "name": "Jordan Patel",
+    "age": 30,
     "gender": "Female",
-    "location": "Phoenix, AZ",
+    "location": "Phoenix, Arizona",
     "region": "Southwest US",
     "income_band": "<25k",
-    "occupation": "Freelance graphic designer (gig platforms)",
-    "household": "Studio apartment alone",
-    "tech_comfort": 1,
+    "occupation": "Gig-driver (rideshare)",
+    "household": "Lives alone in a studio",
+    "tech_comfort": 92,
+    "skepticism": 78,
+    "openness": 60,
+    "conscientiousness": 40,
+    "extraversion": 70,
+    "agreeableness": 50,
+    "neuroticism": 55,
     "values": [
-      "Creative freedom",
-      "Flexible schedule"
+      "flexibility in schedule",
+      "earning extra cash"
     ],
     "buying_triggers": [
-      "Limited-time bundle offers",
-      "Referral credit"
+      "instant payout after ride",
+      "fuel discount partnership"
     ],
     "pet_peeves": [
-      "Mandatory video calls for simple tasks",
-      "Hidden subscription fees"
+      "app glitches that lose trip data",
+      "surge pricing without notice"
     ],
-    "skepticism": 4,
-    "voice": "I check the fine print for auto\u2011renew clauses before clicking \u2018Buy\u2019; if I can\u2019t find it in under 30 seconds, I walk away."
+    "voice": "I check the earnings summary right after each shift to see if any bonus popped up."
   },
   {
     "id": "p053",
-    "name": "Lena Patel",
+    "name": "Maya Patel",
     "age": 42,
     "gender": "Female",
-    "location": "Boise, Idaho",
+    "location": "Seattle, Washington",
     "region": "West US",
     "income_band": "75-150k",
-    "occupation": "Registered nurse",
-    "household": "Married with one teenage son",
-    "tech_comfort": 4,
+    "occupation": "Construction Project Manager",
+    "household": "Married with two children",
+    "tech_comfort": 78,
+    "skepticism": 45,
+    "openness": 62,
+    "conscientiousness": 80,
+    "extraversion": 55,
+    "agreeableness": 70,
+    "neuroticism": 30,
     "values": [
-      "Family health",
-      "Environmental sustainability",
-      "Community volunteering"
+      "family time",
+      "environmental sustainability",
+      "career growth"
     ],
     "buying_triggers": [
-      "Clear ingredient lists",
-      "Third-party certifications",
-      "Limited-time discounts on essentials"
+      "product demonstration video",
+      "limited-time discount",
+      "peer recommendation"
     ],
     "pet_peeves": [
-      "Vague marketing claims",
-      "Excessive packaging",
-      "Automated phone menus"
+      "autoplay video ads",
+      "overly aggressive upsell pop-ups",
+      "generic email blasts"
     ],
-    "skepticism": 3,
-    "voice": "I skim the label for the first three ingredients before deciding; if I can't pronounce them, I put it back. I trust a product more when it shows a clear expiration date and a batch number."
+    "voice": "I usually skim the first sentence of an email; if it doesn't mention a clear benefit within three words, I delete it. I trust a product more when I see a short demo video before reading any text."
   },
   {
     "id": "p054",
-    "name": "Fatima Al\u2011Saadi",
-    "age": 57,
+    "name": "Evelyne Dubois",
+    "age": 58,
     "gender": "Female",
-    "location": "Lisbon, PT",
+    "location": "Strasbourg, France",
     "region": "Western Europe",
     "income_band": "25-40k",
-    "occupation": "Public school teacher",
-    "household": "Rented flat with adult child",
-    "tech_comfort": 3,
+    "occupation": "Library Technician",
+    "household": "Married, lives with spouse and adult child",
+    "tech_comfort": 55,
+    "skepticism": 70,
+    "openness": 60,
+    "conscientiousness": 80,
+    "extraversion": 45,
+    "agreeableness": 70,
+    "neuroticism": 35,
     "values": [
-      "Community involvement",
+      "Supporting local artisans",
+      "Environmental sustainability",
       "Lifelong learning"
     ],
     "buying_triggers": [
-      "Local tax\u2011rebate programs",
-      "Seasonal clearance events"
+      "Discounts on essential household goods",
+      "Free shipping over \u20ac50",
+      "Product demo videos"
     ],
     "pet_peeves": [
-      "Automated phone menus with no human option",
-      "Price changes after checkout"
+      "Overly aggressive upselling pop-ups",
+      "Unclear return policies",
+      "Automated chatbots that cannot answer simple questions"
     ],
-    "skepticism": 4,
-    "voice": "I always open a new tab to search for independent reviews before trusting a seller\u2019s claim; if I can\u2019t find any, I hesitate."
+    "voice": "I usually skim the first paragraph of a marketing email and delete it if it doesn\u2019t mention a clear price benefit within two sentences. I trust a product more when I see a short video showing it in real use rather than glossy photos."
   },
   {
     "id": "p055",
-    "name": "Elizabeth",
-    "age": 68,
-    "gender": "Female",
-    "location": "Adelaide, Australia",
-    "region": "Asia-Pacific",
-    "income_band": "150k+",
-    "occupation": "Retired school teacher",
-    "household": "Lives with spouse and two adult children who live nearby",
-    "tech_comfort": 3,
-    "values": [
-      "Attending weekly community garden meetings",
-      "Participating in a local book club for historical fiction",
-      "Volunteering at the senior center twice a month"
-    ],
-    "buying_triggers": [
-      "Receiving a personalized letter from a trusted charity offering a free sample",
-      "Seeing a limited-time discount advertised in the Sunday newspaper",
-      "Getting a recommendation from her physician during a check-up"
-    ],
-    "pet_peeves": [
-      "Automated phone menus that require multiple steps to reach a human",
-      "Online ads that pop up while reading articles",
-      "Emails with misleading subject lines that look like personal messages"
-    ],
-    "skepticism": 3,
-    "voice": "I ignore flashy banner ads unless they mention a clear price upfront. If the email looks like a personal note, I verify the sender before opening."
-  },
-  {
-    "id": "p056",
-    "name": "Sofia Duarte",
-    "age": 22,
-    "gender": "Female",
-    "location": "Medell\u00edn, CO",
-    "region": "Latin America",
-    "income_band": "40-75k",
-    "occupation": "Undergraduate biology student (lab assistant)",
-    "household": "Shared house with three roommates",
-    "tech_comfort": 4,
-    "values": [
-      "Scientific integrity",
-      "Access to education"
-    ],
-    "buying_triggers": [
-      "Free sample kits",
-      "University partnership discounts"
-    ],
-    "pet_peeves": [
-      "Clickbait headlines that overpromise results",
-      "Mandatory newsletter sign\u2011ups"
-    ],
-    "skepticism": 3,
-    "voice": "If a product page loads slower than three seconds on my phone, I close it and look elsewhere; speed equals credibility for me."
-  },
-  {
-    "id": "p057",
-    "name": "Jamal Owens",
-    "age": 31,
-    "gender": "Male",
-    "location": "Boston, MA",
-    "region": "Northeast US",
-    "income_band": "<25k",
-    "occupation": "Barista at a cooperative coffee shop",
-    "household": "Rented room in a shared brownstone",
-    "tech_comfort": 3,
-    "values": [
-      "Fair wages",
-      "Community support"
-    ],
-    "buying_triggers": [
-      "Loyalty stamp cards",
-      "Pay\u2011what\u2011you\u2011can nights"
-    ],
-    "pet_peeves": [
-      "Pre\u2011checked upsell boxes",
-      "Loud in\u2011store advertisements"
-    ],
-    "skepticism": 4,
-    "voice": "I read the return policy aloud to myself; if it sounds like legalese, I ask a coworker for a plain\u2011English summary."
-  },
-  {
-    "id": "p058",
-    "name": "Priya Nair",
-    "age": 45,
-    "gender": "Female",
-    "location": "Atlanta, GA",
-    "region": "Southeast US",
-    "income_band": "75-150k",
-    "occupation": "Operations manager at a regional logistics company",
-    "household": "Owned townhouse with partner",
-    "tech_comfort": 4,
-    "values": [
-      "Efficiency",
-      "Reliability"
-    ],
-    "buying_triggers": [
-      "Performance guarantees",
-      "Bulk pricing tiers"
-    ],
-    "pet_peeves": [
-      "Vague service level descriptions",
-      "Frequent UI changes without notice"
-    ],
-    "skepticism": 2,
-    "voice": "When I see a case study, I jump straight to the metrics table; narratives without numbers feel like fluff."
-  },
-  {
-    "id": "p059",
-    "name": "Luis Martinez",
-    "age": 58,
-    "gender": "Male",
-    "location": "Des Moines, IA",
-    "region": "Midwest US",
-    "income_band": "25-40k",
-    "occupation": "Maintenance technician at a municipal water facility",
-    "household": "Owned home, lives alone",
-    "tech_comfort": 2,
-    "values": [
-      "Job stability",
-      "Safety standards"
-    ],
-    "buying_triggers": [
-      "OEM parts discounts",
-      "Preventive maintenance packages"
-    ],
-    "pet_peeves": [
-      "Propaganda\u2011style safety videos",
-      "Unclear warranty coverage"
-    ],
-    "skepticism": 3,
-    "voice": "I keep a printed checklist of features I need; if the website hides specs behind tabs, I lose interest quickly."
-  },
-  {
-    "id": "p060",
-    "name": "Anika Singh",
-    "age": 68,
-    "gender": "Female",
-    "location": "Austin, TX",
-    "region": "Southwest US",
-    "income_band": "150k+",
-    "occupation": "Independent venture capitalist focusing on clean tech",
-    "household": "Ranch\u2011style property with adult children visiting",
-    "tech_comfort": 5,
-    "values": [
-      "Impact investing",
-      "Innovation mentorship"
-    ],
-    "buying_triggers": [
-      "Pitch decks with clear ROI models",
-      "Access to prototype labs"
-    ],
-    "pet_peeves": [
-      "Overhyped buzzword lists",
-      "Long NDAs before initial talk"
-    ],
-    "skepticism": 4,
-    "voice": "I forward every promotional email to my analyst team; if they flag missing data points, I request clarification before proceeding."
-  },
-  {
-    "id": "p061",
-    "name": "Jordan Lee",
-    "age": 22,
-    "gender": "Non-binary",
-    "location": "Portland, Oregon",
-    "region": "West US",
-    "income_band": "40-75k",
-    "occupation": "Renewable energy technician",
-    "household": "Single, shares a two-bedroom apartment with a roommate",
-    "tech_comfort": 4,
-    "values": [
-      "Participates in local clean-up events",
-      "Chooses repair over replacement when possible"
-    ],
-    "buying_triggers": [
-      "Sees a rebate for solar-compatible gadgets",
-      "Reads a case study showing long-term savings"
-    ],
-    "pet_peeves": [
-      "Having to call a vendor to cancel a subscription",
-      "Overly technical jargon in product descriptions"
-    ],
-    "skepticism": 4,
-    "voice": "I always compare the warranty length in the spec table before I even look at the price tag."
-  },
-  {
-    "id": "p062",
-    "name": "Ana",
-    "age": 27,
-    "gender": "female",
-    "location": "Porto, Portugal",
-    "region": "Western Europe",
-    "income_band": "<25k",
-    "occupation": "library assistant",
-    "household": "shares a modest two-bedroom apartment with a roommate",
-    "tech_comfort": 3,
-    "values": [
-      "borrowing books from the local library",
-      "cooking weekend meals from scratch",
-      "attending free community concerts"
-    ],
-    "buying_triggers": [
-      "running out of pantry staples like rice or pasta",
-      "seeing a limited-time discount on kitchenware",
-      "needing a reliable pair of walking shoes for commuting"
-    ],
-    "pet_peeves": [
-      "websites that auto-play videos without consent",
-      "overly complex loyalty program sign\u2011ups",
-      "receiving flyers stuffed in my mailbox every week"
-    ],
-    "skepticism": 4,
-    "voice": "I usually check the price before I even look at the product details; if it\u2019s over \u20ac15 I walk away. I ignore ads that don\u2019t show a clear return policy."
-  },
-  {
-    "id": "p063",
-    "name": "Rohan Patel",
-    "age": 42,
+    "name": "Morgan Chen",
+    "age": 70,
     "gender": "Male",
     "location": "Singapore",
     "region": "Asia-Pacific",
-    "income_band": "75-150k",
-    "occupation": "Senior software engineer",
-    "household": "Married, lives with spouse and two children in a condo",
-    "tech_comfort": 5,
+    "income_band": "150k+",
+    "occupation": "Retired Corporate Executive (consultant)",
+    "household": "Lives with spouse, adult children nearby",
+    "tech_comfort": 55,
+    "skepticism": 70,
+    "openness": 45,
+    "conscientiousness": 90,
+    "extraversion": 35,
+    "agreeableness": 65,
+    "neuroticism": 40,
     "values": [
-      "Contributes to open-source projects on weekends",
-      "Prioritizes devices with long battery life"
+      "financial security",
+      "legacy planning"
     ],
     "buying_triggers": [
-      "Sees a benchmark showing at least 20% performance gain",
-      "Receives a personalized demo invite from a vendor"
+      "guaranteed return investment",
+      "exclusive invitation to wealth seminar"
     ],
     "pet_peeves": [
-      "Having to sign up for a newsletter just to download a driver",
-      "Pop-up ads that block code snippets"
+      "high-pressure sales tactics",
+      "jargon-filled prospectus"
     ],
-    "skepticism": 4,
-    "voice": "If a whitepaper omits raw latency numbers, I scroll straight to the conclusion section."
+    "voice": "Before I sign anything, I request a written fee breakdown."
   },
   {
-    "id": "p064",
-    "name": "Isabela Santos",
-    "age": 57,
+    "id": "p056",
+    "name": "Riley Santos",
+    "age": 22,
     "gender": "Female",
     "location": "Medell\u00edn, Colombia",
     "region": "Latin America",
-    "income_band": "25-40k",
-    "occupation": "Primary school teacher",
-    "household": "Single parent with a 10-year-old daughter",
-    "tech_comfort": 3,
+    "income_band": "40-75k",
+    "occupation": "Graphic Designer freelancer",
+    "household": "Shares apartment with sibling",
+    "tech_comfort": 73,
+    "skepticism": 38,
+    "openness": 78,
+    "conscientiousness": 50,
+    "extraversion": 68,
+    "agreeableness": 60,
+    "neuroticism": 42,
     "values": [
-      "Volunteers at the local library reading program",
-      "Looks for school supplies made from recycled materials"
+      "creative freedom",
+      "fair pay"
     ],
     "buying_triggers": [
-      "Sees a bulk discount for classroom kits",
-      "Gets a free sample lesson plan with purchase"
+      "stock asset bundle discount",
+      "extended license for commercial use"
     ],
     "pet_peeves": [
-      "Having to fill out paper forms for every field trip",
-      "When educational apps require constant internet"
+      "watermarked previews that won\u2019t remove",
+      "subscription auto-renew without notice"
     ],
-    "skepticism": 2,
-    "voice": "I ask my coworker Slack channel whether a new gadget survived a week of classroom use before I consider buying it."
+    "voice": "I try the free trial for 24 hours before deciding."
   },
   {
-    "id": "p065",
-    "name": "Walter Greene",
-    "age": 68,
+    "id": "p057",
+    "name": "Sam Brooks",
+    "age": 28,
     "gender": "Male",
     "location": "Boston, Massachusetts",
     "region": "Northeast US",
-    "income_band": "150k+",
-    "occupation": "Retired university professor",
-    "household": "Lives alone in a historic brownstone",
-    "tech_comfort": 2,
+    "income_band": "<25k",
+    "occupation": "Customer Service Rep (call center)",
+    "household": "Lives with parents to save rent",
+    "tech_comfort": 48,
+    "skepticism": 82,
+    "openness": 35,
+    "conscientiousness": 60,
+    "extraversion": 55,
+    "agreeableness": 40,
+    "neuroticism": 70,
     "values": [
-      "Donates to scholarship funds for first-generation students",
-      "Prefers classic literature editions"
+      "stable income",
+      "respectful treatment"
     ],
     "buying_triggers": [
-      "Sees a limited-edition anniversary release",
-      "Receives a handwritten note from the publisher"
+      "shift differential pay",
+      "paid training certification"
     ],
     "pet_peeves": [
-      "Having to navigate a website with tiny click targets",
-      "When audiobooks lack chapter markers"
+      "scripted responses that ignore issue",
+      "mandatory overtime with short notice"
     ],
-    "skepticism": 4,
-    "voice": "I still verify the masthead date on any newsletter before I trust its product recommendations."
+    "voice": "I often glance at the break-room schedule posted online to plan my day."
   },
   {
-    "id": "p066",
-    "name": "Maya Torres",
-    "age": 20,
+    "id": "p058",
+    "name": "Quinn Edwards",
+    "age": 45,
     "gender": "Female",
     "location": "Atlanta, Georgia",
     "region": "Southeast US",
-    "income_band": "40-75k",
-    "occupation": "Graphic design intern",
-    "household": "Living with parents while saving for a down payment",
-    "tech_comfort": 4,
+    "income_band": "75-150k",
+    "occupation": "Small Business Owner (bakery)",
+    "household": "Married, two kids, owns house and shop",
+    "tech_comfort": 60,
+    "skepticism": 48,
+    "openness": 55,
+    "conscientiousness": 88,
+    "extraversion": 70,
+    "agreeableness": 72,
+    "neuroticism": 30,
     "values": [
-      "Follows design tutorials on YouTube",
-      "Chooses Pantone-verified colors for print projects"
+      "community support",
+      "product quality"
     ],
     "buying_triggers": [
-      "Sees a student discount advertised on campus",
-      "Gets a free trial of a premium vector pack"
+      "wholesale ingredient discount",
+      "local event sponsorship"
     ],
     "pet_peeves": [
-      "Having to export files in multiple formats just to satisfy a client",
-      "When font licenses are unclear"
+      "delivery delays that affect freshness",
+      "inconsistent supplier pricing"
     ],
-    "skepticism": 1,
-    "voice": "I open the comment thread on a design forum to see real-world usage photos before I click any 'Add to cart'."
+    "voice": "I scan the ingredient list for allergens before ordering bulk."
+  },
+  {
+    "id": "p059",
+    "name": "Samuel",
+    "age": 58,
+    "gender": "Non-binary",
+    "location": "Des Moines, Iowa",
+    "region": "Midwest US",
+    "income_band": "25-40k",
+    "occupation": "Public Librarian",
+    "household": "Lives alone in a two-bedroom apartment with a cat.",
+    "tech_comfort": 38,
+    "skepticism": 52,
+    "openness": 61,
+    "conscientiousness": 73,
+    "extraversion": 35,
+    "agreeableness": 68,
+    "neuroticism": 29,
+    "values": [
+      "Community involvement",
+      "Environmental stewardship",
+      "Lifelong learning"
+    ],
+    "buying_triggers": [
+      "Clear pricing information",
+      "Durability guarantees",
+      "Local business support"
+    ],
+    "pet_peeves": [
+      "Hidden fees in fine print",
+      "Overly aggressive upselling",
+      "Unnecessary packaging waste"
+    ],
+    "voice": "I skim the headline and look for any mention of extra costs before I read further. If an ad promises a discount, I check the expiration date and compare it to my budget. I tend to ignore emails that use all caps or exclamation marks because they feel pushy."
+  },
+  {
+    "id": "p060",
+    "name": "Harper Lowe",
+    "age": 68,
+    "gender": "Female",
+    "location": "Austin, Texas",
+    "region": "Southwest US",
+    "income_band": "150k+",
+    "occupation": "University Professor (Engineering)",
+    "household": "Lives with spouse, empty nest",
+    "tech_comfort": 50,
+    "skepticism": 68,
+    "openness": 72,
+    "conscientiousness": 80,
+    "extraversion": 40,
+    "agreeableness": 55,
+    "neuroticism": 45,
+    "values": [
+      "research integrity",
+      "student mentorship"
+    ],
+    "buying_triggers": [
+      "grant-eligible equipment",
+      "discount on academic licenses"
+    ],
+    "pet_peeves": [
+      "opaque pricing models",
+      "mandatory training with no clear benefit"
+    ],
+    "voice": "I regularly compare specifications side-by-side in a spreadsheet before deciding."
+  },
+  {
+    "id": "p061",
+    "name": "Aria Patel",
+    "age": 22,
+    "gender": "Nonbinary",
+    "location": "Portland, OR",
+    "region": "West US",
+    "income_band": "40-75k",
+    "occupation": "Freelance graphic designer",
+    "household": "Rents a studio apartment with a roommate",
+    "tech_comfort": 12,
+    "skepticism": 55,
+    "openness": 78,
+    "conscientiousness": 42,
+    "extraversion": 60,
+    "agreeableness": 70,
+    "neuroticism": 35,
+    "values": [
+      "Environmental sustainability",
+      "Creative expression"
+    ],
+    "buying_triggers": [
+      "Limited-edition art supplies",
+      "Eco-friendly packaging"
+    ],
+    "pet_peeves": [
+      "Overly long video ads",
+      "Pop-ups that block content"
+    ],
+    "voice": "I usually skip the first five seconds of any ad unless the thumbnail catches my eye."
+  },
+  {
+    "id": "p062",
+    "name": "Mateo Klein",
+    "age": 29,
+    "gender": "Male",
+    "location": "Lisbon, Portugal",
+    "region": "Western Europe",
+    "income_band": "<25k",
+    "occupation": "Barista",
+    "household": "Shares a flat with two friends",
+    "tech_comfort": 68,
+    "skepticism": 80,
+    "openness": 55,
+    "conscientiousness": 48,
+    "extraversion": 70,
+    "agreeableness": 62,
+    "neuroticism": 40,
+    "values": [
+      "Community connection",
+      "Fair wages"
+    ],
+    "buying_triggers": [
+      "Discounts for reusable cups",
+      "Local roaster stories"
+    ],
+    "pet_peeves": [
+      "Automated ordering kiosks",
+      "Scripts that upsell unnecessarily"
+    ],
+    "voice": "I ignore any promo that feels like a corporate script; I prefer hearing a real person\u2019s story."
+  },
+  {
+    "id": "p063",
+    "name": "Zoe Nguyen",
+    "age": 42,
+    "gender": "Female",
+    "location": "Singapore",
+    "region": "Asia-Pacific",
+    "income_band": "75-150k",
+    "occupation": "Renewable energy analyst",
+    "household": "Owns a condo with partner",
+    "tech_comfort": 45,
+    "skepticism": 72,
+    "openness": 82,
+    "conscientiousness": 65,
+    "extraversion": 48,
+    "agreeableness": 58,
+    "neuroticism": 30,
+    "values": [
+      "Climate action",
+      "Technological innovation"
+    ],
+    "buying_triggers": [
+      "Government rebate info",
+      "Transparent ROI calculators"
+    ],
+    "pet_peeves": [
+      "Jargon-heavy whitepapers",
+      "Unsubstantiated green claims"
+    ],
+    "voice": "I look for concrete numbers before I trust a sustainability claim; flashy slogans make me skeptical."
+  },
+  {
+    "id": "p064",
+    "name": "Fernanda Mart\u00ednez",
+    "age": 58,
+    "gender": "Female",
+    "location": "Bogot\u00e1, Colombia",
+    "region": "Latin America",
+    "income_band": "25-40k",
+    "occupation": "Primary School Teacher",
+    "household": "Lives with husband and two teenage daughters",
+    "tech_comfort": 45,
+    "skepticism": 60,
+    "openness": 55,
+    "conscientiousness": 70,
+    "extraversion": 40,
+    "agreeableness": 65,
+    "neuroticism": 30,
+    "values": [
+      "family well-being",
+      "supporting local businesses",
+      "maintaining good health"
+    ],
+    "buying_triggers": [
+      "clear price information",
+      "recommendations from trusted friends",
+      "product durability"
+    ],
+    "pet_peeves": [
+      "overly aggressive sales tactics",
+      "vague ingredient lists",
+      "long checkout processes"
+    ],
+    "voice": "I usually skim the first paragraph of an ad; if it doesn\u2019t mention price up front I lose interest. I trust a product more when a neighbor mentions it. I avoid anything that feels pushy."
+  },
+  {
+    "id": "p065",
+    "name": "Evelyn Brooks",
+    "age": 70,
+    "gender": "Female",
+    "location": "Boston, MA",
+    "region": "Northeast US",
+    "income_band": "150k+",
+    "occupation": "Retired attorney",
+    "household": "Owns a historic home, lives alone",
+    "tech_comfort": 30,
+    "skepticism": 30,
+    "openness": 40,
+    "conscientiousness": 85,
+    "extraversion": 35,
+    "agreeableness": 60,
+    "neuroticism": 20,
+    "values": [
+      "Legal integrity",
+      "Quiet solitude"
+    ],
+    "buying_triggers": [
+      "Clear contract terms",
+      "No-auto-renew clauses"
+    ],
+    "pet_peeves": [
+      "Buried arbitration clauses",
+      "Unsolicited robocalls"
+    ],
+    "voice": "I read every clause twice and highlight ambiguities; I won\u2019t sign anything that locks me into automatic renewals."
+  },
+  {
+    "id": "p066",
+    "name": "Jamal Shah",
+    "age": 20,
+    "gender": "Male",
+    "location": "Atlanta, GA",
+    "region": "Southeast US",
+    "income_band": "40-75k",
+    "occupation": "College student (biology)",
+    "household": "Dormitory suite with three roommates",
+    "tech_comfort": 55,
+    "skepticism": 65,
+    "openness": 70,
+    "conscientiousness": 45,
+    "extraversion": 55,
+    "agreeableness": 50,
+    "neuroticism": 55,
+    "values": [
+      "Scientific rigor",
+      "Affordability"
+    ],
+    "buying_triggers": [
+      "Student pricing tiers",
+      "Peer-reviewed study citations"
+    ],
+    "pet_peeves": [
+      "Clickbait headlines",
+      "Misleading before-after photos"
+    ],
+    "voice": "I pause any ad that cites a study without showing the sample size; I need to see the data first."
   },
   {
     "id": "p067",
-    "name": "DeShawn Carter",
-    "age": 31,
-    "gender": "Male",
-    "location": "Columbus, Ohio",
+    "name": "Olivia",
+    "age": 28,
+    "gender": "Female",
+    "location": "Des Moines, Iowa",
     "region": "Midwest US",
     "income_band": "<25k",
-    "occupation": "Warehouse associate",
-    "household": "Shares a three-bedroom house with two siblings",
-    "tech_comfort": 1,
+    "occupation": "Barista",
+    "household": "Shares a two-bedroom apartment with a roommate in Des Moines",
+    "tech_comfort": 55,
+    "skepticism": 70,
+    "openness": 60,
+    "conscientiousness": 50,
+    "extraversion": 45,
+    "agreeableness": 55,
+    "neuroticism": 50,
     "values": [
-      "Looks for overtime shift bonuses",
-      "Prefers reusable water bottles over disposable cups"
+      "Using coupons to save on groceries",
+      "Choosing store brands over name brands",
+      "Repairing clothes instead of buying new"
     ],
     "buying_triggers": [
-      "Sees a wage increase posted on the break-room board",
-      "Gets a free safety gear kit with purchase"
+      "Seeing a 'buy one get one free' tag in-store",
+      "Getting a text message with a discount code after signing up for a loyalty program",
+      "A coworker recommending a affordable lunch spot"
     ],
     "pet_peeves": [
-      "Having to scan a barcode that\u2019s torn or smudged",
-      "When break-room microwaves are constantly busy"
+      "Pop-up ads that block the webpage while I'm trying to read",
+      "Price tags that hide extra fees until checkout",
+      "Receiving daily promotional texts after opting out"
     ],
-    "skepticism": 4,
-    "voice": "I rely on the shift supervisor's verbal rundown rather than the posted schedule when planning my break."
+    "voice": "I usually ignore marketing emails unless they mention a free sample or a clear discount amount. If an ad feels pushy, I close it right away and look for reviews from people I trust."
   },
   {
     "id": "p068",
-    "name": "Luis Mendoza",
+    "name": "Victor Liu",
     "age": 45,
     "gender": "Male",
-    "location": "Phoenix, Arizona",
+    "location": "Phoenix, AZ",
     "region": "Southwest US",
     "income_band": "75-150k",
-    "occupation": "Product manager",
-    "household": "Married, lives with spouse and a teenage son",
-    "tech_comfort": 3,
+    "occupation": "Software engineer",
+    "household": "Owns a townhouse with partner",
+    "tech_comfort": 90,
+    "skepticism": 25,
+    "openness": 85,
+    "conscientiousness": 62,
+    "extraversion": 58,
+    "agreeableness": 55,
+    "neuroticism": 30,
     "values": [
-      "Advocates for accessible UI in internal tools",
-      "Tries to buy locally sourced snacks for the office"
+      "Innovation",
+      "Efficiency"
     ],
     "buying_triggers": [
-      "Sees a beta-access invitation with feedback rewards",
-      "Receives a competitive analysis report"
+      "Beta-access invites",
+      "Performance benchmark data"
     ],
     "pet_peeves": [
-      "Having to attend a meeting that could have been an email",
-      "When tooltips disappear after one second"
+      "Vague feature lists",
+      "Forced tutorial videos"
     ],
-    "skepticism": 2,
-    "voice": "I skim the changelog bullet points first and only read the marketing overview if something catches my eye."
+    "voice": "I gravitate toward ads that let me try a sandbox version first; I lose interest if I have to watch a mandatory walkthrough."
   },
   {
     "id": "p069",
-    "name": "Claire Bennett",
-    "age": 53,
+    "name": "Sophie Grant",
+    "age": 58,
     "gender": "Female",
-    "location": "Las Vegas, Nevada",
+    "location": "Las Vegas, NV",
     "region": "West US",
     "income_band": "25-40k",
     "occupation": "Real estate agent",
-    "household": "Divorced, lives alone with a cat",
-    "tech_comfort": 2,
+    "household": "Rents a condo, lives with cat",
+    "tech_comfort": 40,
+    "skepticism": 50,
+    "openness": 55,
+    "conscientiousness": 70,
+    "extraversion": 68,
+    "agreeableness": 60,
+    "neuroticism": 38,
     "values": [
-      "Stages homes with neutral palettes to appeal to broad buyers",
-      "Donates a portion of commission to animal shelters"
+      "Transparency",
+      "Client trust"
     ],
     "buying_triggers": [
-      "Sees a new listing highlighted in a weekend open-house email",
-      "Gets a complimentary home-staging consultation"
+      "Clear commission breakdown",
+      "Virtual tour availability"
     ],
     "pet_peeves": [
-      "Having to print dozens of copies for clients who prefer paper",
-      "When virtual tour links expire after 24 hours"
+      "Hidden fees in contracts",
+      "Generic email blasts"
     ],
-    "skepticism": 4,
-    "voice": "I check the MLS timestamp on a listing before I believe any 'just sold' claim in the agent's pitch."
+    "voice": "Before I schedule a showing, I insist on seeing a detailed fee breakdown; otherwise I skip the listing."
   },
   {
     "id": "p070",
-    "name": "Elif Y\u0131lmaz",
-    "age": 70,
-    "gender": "Female",
+    "name": "Nils Bergman",
+    "age": 68,
+    "gender": "Male",
     "location": "Zurich, Switzerland",
     "region": "Western Europe",
     "income_band": "150k+",
-    "occupation": "Financial advisor",
-    "household": "Married, lives with spouse in a lakeside apartment",
-    "tech_comfort": 5,
+    "occupation": "University professor",
+    "household": "Owns a chalet, lives with spouse",
+    "tech_comfort": 75,
+    "skepticism": 78,
+    "openness": 62,
+    "conscientiousness": 55,
+    "extraversion": 48,
+    "agreeableness": 50,
+    "neuroticism": 42,
     "values": [
-      "Recommends low-cost index funds to clients",
-      "Prefers paperless statements for environmental reasons"
+      "Academic freedom",
+      "Evidence-based discourse"
     ],
     "buying_triggers": [
-      "Sees a tiered fee structure with clear break-even point",
-      "Receives a quarterly performance report with visual charts"
+      "Open-access preprints",
+      "Data-driven product demos"
     ],
     "pet_peeves": [
-      "Having to explain jargon-heavy terms to clients over the phone",
-      "When market updates arrive as plain-text emails"
+      "Paywalls that hide methodology",
+      "Overpromising claims without citations"
     ],
-    "skepticism": 3,
-    "voice": "I always look for the footnote that defines the benchmark used before I accept a fund's performance claim"
+    "voice": "I skim the methodology section first; if the evidence isn\u2019t transparent, I treat the rest as marketing fluff."
   },
   {
     "id": "p071",
     "name": "Linh",
     "age": 22,
     "gender": "Female",
-    "location": "Melbourne, Australia",
+    "location": "Brisbane, Australia",
     "region": "Asia-Pacific",
     "income_band": "40-75k",
-    "occupation": "UX Designer",
+    "occupation": "Junior Marketing Analyst",
     "household": "Shares apartment with two roommates",
-    "tech_comfort": 4,
+    "tech_comfort": 87,
+    "skepticism": 42,
+    "openness": 78,
+    "conscientiousness": 71,
+    "extraversion": 56,
+    "agreeableness": 63,
+    "neuroticism": 28,
     "values": [
       "Environmental sustainability",
-      "Creative self-expression",
-      "Work-life balance"
+      "Career growth",
+      "Community volunteering"
     ],
     "buying_triggers": [
-      "Limited-time discounts",
-      "Authentic brand storytelling",
-      "Peer recommendations on social media"
+      "Limited-time discount codes",
+      "Free shipping over $50",
+      "Authentic user reviews"
     ],
     "pet_peeves": [
-      "Invasive pop-up ads",
-      "Overly technical jargon in ads",
-      "Unclear return policies"
+      "Pop-up ads that block content",
+      "Misleading product images",
+      "Excessive email spam"
     ],
-    "skepticism": 3,
-    "voice": "I skim ads quickly and only pause if the first visual feels genuine; otherwise I scroll past. I trust a product more when I see real users talk about it in comments than when a celebrity endorses it."
+    "voice": "I usually skim the first sentence of an ad; if it doesn\u2019t mention a clear benefit within three seconds, I scroll past. I trust peer recommendations more than brand claims, so I look for verified buyer photos before clicking."
   },
   {
     "id": "p072",
-    "name": "Diego Morales",
+    "name": "Mateo Santos",
     "age": 28,
     "gender": "Male",
     "location": "Bogot\u00e1, Colombia",
     "region": "Latin America",
     "income_band": "<25k",
-    "occupation": "Bike Messenger",
-    "household": "Lives alone in a small studio near university.",
-    "tech_comfort": 1,
+    "occupation": "Street Food Vendor",
+    "household": "Shares a small apartment with two siblings",
+    "tech_comfort": 38,
+    "skepticism": 72,
+    "openness": 40,
+    "conscientiousness": 55,
+    "extraversion": 70,
+    "agreeableness": 65,
+    "neuroticism": 50,
     "values": [
-      "earning extra cash quickly",
-      "avoiding long commutes"
+      "earning honestly",
+      "community trust"
     ],
     "buying_triggers": [
-      "cash-on-delivery option",
-      "referral bonus for friends"
+      "cash discount",
+      "seeing product in action"
     ],
     "pet_peeves": [
-      "apps that require constant GPS tracking",
-      "hidden fees revealed at checkout"
+      "hidden fees",
+      "salespeople who pressure"
     ],
-    "skepticism": 5,
-    "voice": "I first glance at the total price before reading any description, walking away if it exceeds my daily budget."
+    "voice": "I always ask for a receipt and check the price twice before handing over cash. If a promoter rushes me, I walk away and come back later when I\u2019ve had time to think."
   },
   {
     "id": "p073",
-    "name": "Samantha Lee",
+    "name": "Jordan Mitchell",
     "age": 42,
-    "gender": "Female",
-    "location": "Boston, MA",
-    "region": "Northeast US",
-    "income_band": "75-150k",
-    "occupation": "Senior Data Analyst",
-    "household": "Married, two kids, suburban home.",
-    "tech_comfort": 4,
-    "values": [
-      "making informed decisions based on data",
-      "spending time outdoors with family"
-    ],
-    "buying_triggers": [
-      "clear ROI comparison chart",
-      "free trial period"
-    ],
-    "pet_peeves": [
-      "jargon-heavy whitepapers",
-      "pop-up surveys that block content"
-    ],
-    "skepticism": 3,
-    "voice": "I often read the bullet-point summary first; if the numbers don\u2019t add up, I move on."
-  },
-  {
-    "id": "p074",
-    "name": "Marcus Greene",
-    "age": 57,
-    "gender": "Male",
-    "location": "Atlanta, GA",
-    "region": "Southeast US",
-    "income_band": "25-40k",
-    "occupation": "Public School Teacher",
-    "household": "Lives with spouse, empty nest.",
-    "tech_comfort": 2,
-    "values": [
-      "staying active in community volunteering",
-      "keeping monthly bills predictable"
-    ],
-    "buying_triggers": [
-      "educator discount",
-      "price match guarantee"
-    ],
-    "pet_peeves": [
-      "sites that force video autoplay",
-      "long forms with many optional fields"
-    ],
-    "skepticism": 4,
-    "voice": "I always look for a teacher discount badge before considering a purchase, otherwise I keep searching."
-  },
-  {
-    "id": "p075",
-    "name": "Eleanor Brooks",
-    "age": 68,
-    "gender": "Female",
-    "location": "Chicago, IL",
-    "region": "Midwest US",
-    "income_band": "150k+",
-    "occupation": "Retired Attorney",
-    "household": "Widowed, lives alone in a condo, occasional caregiver visits.",
-    "tech_comfort": 3,
-    "values": [
-      "maintaining independence",
-      "supporting causes that protect civil liberties"
-    ],
-    "buying_triggers": [
-      "easy return process",
-      "live chat support available 24/7"
-    ],
-    "pet_peeves": [
-      "tiny font sizes that require zooming",
-      "checkboxes that are pre-ticked"
-    ],
-    "skepticism": 5,
-    "voice": "I prefer sites that let me enlarge text with a single click, because tiny fonts make me leave immediately."
-  },
-  {
-    "id": "p076",
-    "name": "Jordan Cruz",
-    "age": 20,
-    "gender": "Male",
-    "location": "Phoenix, AZ",
-    "region": "Southwest US",
-    "income_band": "40-75k",
-    "occupation": "College Junior studying Mechanical Engineering",
-    "household": "Lives in a dormitory with three roommates.",
-    "tech_comfort": 5,
-    "values": [
-      "experimenting with new gadgets",
-      "saving money for spring break"
-    ],
-    "buying_triggers": [
-      "student discount verified with .edu email",
-      "free shipping on orders over $50"
-    ],
-    "pet_peeves": [
-      "sites that require me to install a browser extension",
-      "pop-ups that ask for my phone number"
-    ],
-    "skepticism": 2,
-    "voice": "I normally add items to my cart then wait for a coupon email, abandoning the cart if none arrives within ten minutes."
-  },
-  {
-    "id": "p077",
-    "name": "Olivia Nguyen",
-    "age": 31,
-    "gender": "Female",
-    "location": "Portland, OR",
-    "region": "West US",
-    "income_band": "<25k",
-    "occupation": "Barista at specialty coffee shop",
-    "household": "Shares a two-bedroom apartment with a friend.",
-    "tech_comfort": 3,
-    "values": [
-      "supporting ethical sourcing",
-      "finding affordable ways to treat myself"
-    ],
-    "buying_triggers": [
-      "loyalty stamp card digital version",
-      "first-order 10% off"
-    ],
-    "pet_peeves": [
-      "sites that hide the total cost until the final step",
-      "mandatory account creation for a simple purchase"
-    ],
-    "skepticism": 4,
-    "voice": "I glance at the fair-trade badge first, and if it\u2019s missing I keep browsing elsewhere."
-  },
-  {
-    "id": "p078",
-    "name": "Lukas Becker",
-    "age": 45,
-    "gender": "Male",
-    "location": "Berlin, Germany",
-    "region": "Western Europe",
-    "income_band": "75-150k",
-    "occupation": "UX Designer",
-    "household": "Lives with partner, no kids, rented loft.",
-    "tech_comfort": 4,
-    "values": [
-      "design that respects user privacy",
-      "efficient public transport"
-    ],
-    "buying_triggers": [
-      "clear privacy policy summary",
-      "option to pay with SEPA direct debit"
-    ],
-    "pet_peeves": [
-      "cookie banners that cover the whole screen",
-      "forced newsletter sign-up"
-    ],
-    "skepticism": 3,
-    "voice": "I look for a concise TL;DR at the top of a product page, and if it\u2019s absent I lose interest quickly."
-  },
-  {
-    "id": "p079",
-    "name": "Mei Tan",
-    "age": 58,
-    "gender": "Female",
-    "location": "Singapore",
-    "region": "Asia-Pacific",
-    "income_band": "25-40k",
-    "occupation": "Retail Store Manager",
-    "household": "Lives with elderly parent in a HDB flat.",
-    "tech_comfort": 2,
-    "values": [
-      "caring for family health",
-      "keeping household expenses under control"
-    ],
-    "buying_triggers": [
-      "senior citizen discount",
-      "bundle deal for household essentials"
-    ],
-    "pet_peeves": [
-      "sites that load slowly on mobile",
-      "checkout that requires re-entering address each time"
-    ],
-    "skepticism": 4,
-    "voice": "I routinely verify that GST is included in the displayed price before I decide to buy, otherwise I look for another vendor."
-  },
-  {
-    "id": "p080",
-    "name": "Rafael Silva",
-    "age": 70,
-    "gender": "Male",
-    "location": "S\u00e3o Paulo, Brazil",
-    "region": "Latin America",
-    "income_band": "150k+",
-    "occupation": "Former Executive turned Consultant",
-    "household": "Married, adult children live abroad, owns a house with garden.",
-    "tech_comfort": 3,
-    "values": [
-      "preserving wealth for next generation",
-      "staying culturally engaged through arts"
-    ],
-    "buying_triggers": [
-      "transparent fee structure",
-      "personalized investment report"
-    ],
-    "pet_peeves": [
-      "pages that use aggressive pop-up sales tactics",
-      "lack of a printable statement option"
-    ],
-    "skepticism": 5,
-    "voice": "I scroll straight to the footer to check the company\u2019s registration number, and if it\u2019s missing I distrust the offer entirely."
-  },
-  {
-    "id": "p081",
-    "name": "Cameron",
-    "age": 21,
     "gender": "Non-binary",
-    "location": "Burlington, Vermont",
+    "location": "Boston, MA, USA",
     "region": "Northeast US",
-    "income_band": "40-75k",
-    "occupation": "Junior copywriter",
-    "household": "Shares a two-bedroom apartment with two roommates near downtown",
-    "tech_comfort": 3,
-    "values": [
-      "Buying locally-sourced food",
-      "Attending weekend farmers markets",
-      "Using reusable shopping bags"
-    ],
-    "buying_triggers": [
-      "Seeing a friend wear the product",
-      "Limited-time discount offer",
-      "Positive reviews on Instagram"
-    ],
-    "pet_peeves": [
-      "Overly aggressive upselling at checkout",
-      "Websites that take more than 5 seconds to load",
-      "Inconsistent sizing charts across brands"
-    ],
-    "skepticism": 2,
-    "voice": "I usually skim the first sentence of a promotional email; if it doesn\u2019t state a clear benefit right away, I delete it. I trust a product more when I see a short video of someone my age using it in everyday life."
-  },
-  {
-    "id": "p082",
-    "name": "Jasmine",
-    "age": 29,
-    "gender": "Female",
-    "location": "Asheville, NC",
-    "region": "Southeast US",
-    "income_band": "<25k",
-    "occupation": "Home health aide",
-    "household": "Lives alone in a rented studio apartment",
-    "tech_comfort": 3,
-    "values": [
-      "Helping family members stay healthy",
-      "Saving for emergency fund",
-      "Finding reliable transportation"
-    ],
-    "buying_triggers": [
-      "Discount coupons received via text",
-      "Free sample offers at local pharmacy",
-      "Limited-time sale flyers in mailbox"
-    ],
-    "pet_peeves": [
-      "Automated phone menus that never reach a human",
-      "Expired coupons still advertised online",
-      "Overly loud in-store announcements"
-    ],
-    "skepticism": 4,
-    "voice": "I usually skim the subject line of promotional texts and delete anything that feels like a scam unless I recognize the sender's number. If a flyer shows a clear price and expiration date, I'll keep it on my fridge for a week."
-  },
-  {
-    "id": "p083",
-    "name": "Rachel",
-    "age": 42,
-    "gender": "Female",
-    "location": "Columbus, Ohio",
-    "region": "Midwest US",
     "income_band": "75-150k",
-    "occupation": "Marketing manager at a regional bank",
-    "household": "Married with two children, ages 8 and 11",
-    "tech_comfort": 4,
+    "occupation": "University Professor",
+    "household": "Married, two children, owns home",
+    "tech_comfort": 55,
+    "skepticism": 68,
+    "openness": 70,
+    "conscientiousness": 80,
+    "extraversion": 45,
+    "agreeableness": 60,
+    "neuroticism": 35,
     "values": [
-      "Family time",
-      "Community volunteering",
-      "Financial stability",
-      "Honest communication"
-    ],
-    "buying_triggers": [
-      "Clear price comparison",
-      "Trusted peer reviews",
-      "Limited-time discount offers",
-      "Easy return policy"
-    ],
-    "pet_peeves": [
-      "Hidden fees",
-      "Overly aggressive upselling",
-      "Slow website load times",
-      "Generic email blasts"
-    ],
-    "skepticism": 3,
-    "voice": "I usually skim the first paragraph for numbers before I decide to keep reading. If I see a claim without a source, I look it up right away. I stop reading when an ad feels like it's trying to manipulate my emotions."
-  },
-  {
-    "id": "p084",
-    "name": "Tara Greene",
-    "age": 58,
-    "gender": "Female",
-    "location": "Phoenix, Arizona",
-    "region": "Southwest US",
-    "income_band": "25-40k",
-    "occupation": "High school math teacher",
-    "household": "Married, lives with husband and teenage daughter",
-    "tech_comfort": 3,
-    "values": [
-      "Practicality",
-      "Community involvement",
-      "Lifelong learning"
-    ],
-    "buying_triggers": [
-      "Clear price breakdown",
-      "Durable warranty",
-      "Local availability"
-    ],
-    "pet_peeves": [
-      "Overly promotional emails",
-      "Hidden fees",
-      "Slow website load times"
-    ],
-    "skepticism": 4,
-    "voice": "I usually skim the first paragraph of an ad to see if it mentions a guarantee; if it feels vague I move on. I trust recommendations from coworkers more than flashy banners. I'll pause before buying online unless I can read at least three user reviews."
-  },
-  {
-    "id": "p085",
-    "name": "Harold Greene",
-    "age": 71,
-    "gender": "Male",
-    "location": "Seattle, WA",
-    "region": "West US",
-    "income_band": "150k+",
-    "occupation": "Senior data analyst",
-    "household": "Widowed, lives in a condo with a cat",
-    "tech_comfort": 3,
-    "values": [
-      "data privacy",
+      "academic integrity",
       "lifelong learning"
     ],
     "buying_triggers": [
-      "invitation to exclusive beta of analytics platform",
-      "access to curated research reports"
+      "evidence-based efficacy",
+      "institution discount"
     ],
     "pet_peeves": [
-      "vendors that hide pricing behind sales calls",
-      "jargon-heavy whitepapers without executive summary"
+      "vendors that hide renewal terms",
+      "overly promotional webinars"
     ],
-    "skepticism": 2,
-    "voice": "I read the first paragraph of any marketing email to gauge relevance; if it\u2019s too salesy I stop. I appreciate when a vendor includes a clear ROI calculation. Unsolicited calls go straight to voicemail."
+    "voice": "I read every bullet point in the terms of service, highlighting any clauses about auto\u2011renewal. I compare at least three alternatives before making a purchase decision."
+  },
+  {
+    "id": "p074",
+    "name": "Evelyn Brooks",
+    "age": 57,
+    "gender": "Female",
+    "location": "Atlanta, GA, USA",
+    "region": "Southeast US",
+    "income_band": "25-40k",
+    "occupation": "Public School Teacher",
+    "household": "Single, lives alone in a rented apartment",
+    "tech_comfort": 48,
+    "skepticism": 50,
+    "openness": 45,
+    "conscientiousness": 70,
+    "extraversion": 55,
+    "agreeableness": 75,
+    "neuroticism": 40,
+    "values": [
+      "student success",
+      "resource stewardship"
+    ],
+    "buying_triggers": [
+      "peer teacher recommendation",
+      "free pilot period"
+    ],
+    "pet_peeves": [
+      "tools that require extensive training",
+      "ads that promise miracle results"
+    ],
+    "voice": "I usually wait for a colleague\u2019s recommendation before trying a new classroom tool. I ignore flashy emails that promise quick fixes unless they come from a trusted district source."
+  },
+  {
+    "id": "p075",
+    "name": "Richard Choi",
+    "age": 70,
+    "gender": "Male",
+    "location": "Chicago, IL, USA",
+    "region": "Midwest US",
+    "income_band": "150k+",
+    "occupation": "Retired Aerospace Engineer",
+    "household": "Widowed, lives with adult daughter",
+    "tech_comfort": 30,
+    "skepticism": 80,
+    "openness": 35,
+    "conscientiousness": 85,
+    "extraversion": 40,
+    "agreeableness": 55,
+    "neuroticism": 45,
+    "values": [
+      "precision",
+      "dependability"
+    ],
+    "buying_triggers": [
+      "written quote with specifications",
+      "long-term warranty"
+    ],
+    "pet_peeves": [
+      "high-pressure sales tactics",
+      "vague service descriptions"
+    ],
+    "voice": "I always request a written quote and compare it to at least two other vendors before signing anything. I dislike any offer that pressures me to decide within 24 hours."
+  },
+  {
+    "id": "p076",
+    "name": "Diego Morales",
+    "age": 22,
+    "gender": "Male",
+    "location": "Phoenix, AZ, USA",
+    "region": "Southwest US",
+    "income_band": "40-75k",
+    "occupation": "Freelance Graphic Designer",
+    "household": "Shares a loft with a roommate",
+    "tech_comfort": 70,
+    "skepticism": 55,
+    "openness": 68,
+    "conscientiousness": 50,
+    "extraversion": 62,
+    "agreeableness": 58,
+    "neuroticism": 48,
+    "values": [
+      "creative freedom",
+      "timely payment"
+    ],
+    "buying_triggers": [
+      "no\u2011watermark trial",
+      "peer portfolio showcase"
+    ],
+    "pet_peeves": [
+      "subscription models that lock files",
+      "forced tutorials before access"
+    ],
+    "voice": "I often install a trial version of software just to play with the features for an hour before deciding. If the website asks me to fill a long form before a demo, I close the tab."
+  },
+  {
+    "id": "p077",
+    "name": "Riley",
+    "age": 29,
+    "gender": "Female",
+    "location": "Reno, NV",
+    "region": "West US",
+    "income_band": "<25k",
+    "occupation": "Warehouse associate",
+    "household": "Lives alone in a rented apartment",
+    "tech_comfort": 55,
+    "skepticism": 70,
+    "openness": 60,
+    "conscientiousness": 50,
+    "extraversion": 40,
+    "agreeableness": 55,
+    "neuroticism": 45,
+    "values": [
+      "Finding the best deal on essentials",
+      "Having a reliable bike for commuting",
+      "Keeping monthly bills under $800"
+    ],
+    "buying_triggers": [
+      "Limited-time coupon codes",
+      "Free returns policy",
+      "Recommendations from coworkers"
+    ],
+    "pet_peeves": [
+      "Ads that auto-play sound",
+      "Misleading 'sale' prices that aren't lower than usual",
+      "Long checkout processes requiring account creation"
+    ],
+    "voice": "I always scan for the fine print before I trust any discount claim. If an ad makes me sign up just to see the price, I close it instantly."
+  },
+  {
+    "id": "p078",
+    "name": "Liam O'Connor",
+    "age": 45,
+    "gender": "Male",
+    "location": "Dublin, Ireland",
+    "region": "Western Europe",
+    "income_band": "75-150k",
+    "occupation": "Marketing Manager",
+    "household": "Married, no kids, owns a flat",
+    "tech_comfort": 80,
+    "skepticism": 60,
+    "openness": 55,
+    "conscientiousness": 78,
+    "extraversion": 50,
+    "agreeableness": 62,
+    "neuroticism": 42,
+    "values": [
+      "measurable ROI",
+      "brand authenticity"
+    ],
+    "buying_triggers": [
+      "case study with metrics",
+      "transparent pricing"
+    ],
+    "pet_peeves": [
+      "flashy testimonials without data",
+      "auto\u2011renewal buried in fine print"
+    ],
+    "voice": "I always read the fine print about cancellation periods, and I set a calendar reminder to review before the deadline. I\u2019m swayed by case studies that show measurable ROI, not just flashy testimonials."
+  },
+  {
+    "id": "p079",
+    "name": "Priya Desai",
+    "age": 58,
+    "gender": "Female",
+    "location": "Shanghai, China",
+    "region": "Asia-Pacific",
+    "income_band": "25-40k",
+    "occupation": "Logistics Coordinator",
+    "household": "Lives with elderly parent",
+    "tech_comfort": 40,
+    "skepticism": 70,
+    "openness": 38,
+    "conscientiousness": 62,
+    "extraversion": 45,
+    "agreeableness": 55,
+    "neuroticism": 50,
+    "values": [
+      "supply chain transparency",
+      "cost predictability"
+    ],
+    "buying_triggers": [
+      "reference client call",
+      "clear pricing sheet"
+    ],
+    "pet_peeves": [
+      "hidden surcharges",
+      "emails without a pricing structure"
+    ],
+    "voice": "Before I approve a new vendor, I call their reference clients to ask about hidden charges. I ignore promotional emails that don\u2019t list a clear pricing structure."
+  },
+  {
+    "id": "p080",
+    "name": "Carlos Mendoza",
+    "age": 68,
+    "gender": "Male",
+    "location": "Medell\u00edn, Colombia",
+    "region": "Latin America",
+    "income_band": "150k+",
+    "occupation": "Owner of a boutique coffee roaster",
+    "household": "Married, grown children live elsewhere",
+    "tech_comfort": 25,
+    "skepticism": 78,
+    "openness": 30,
+    "conscientiousness": 88,
+    "extraversion": 35,
+    "agreeableness": 48,
+    "neuroticism": 42,
+    "values": [
+      "product consistency",
+      "fair trade"
+    ],
+    "buying_triggers": [
+      "signed contract with penalties",
+      "physical sample before commitment"
+    ],
+    "pet_peeves": [
+      "suppliers who refuse to provide samples",
+      "vague delivery timelines"
+    ],
+    "voice": "I always demand a signed contract that outlines delivery timelines and penalties for delays. I won\u2019t consider a supplier who can\u2019t provide a physical sample before committing."
+  },
+  {
+    "id": "p081",
+    "name": "Alex Rivera",
+    "age": 21,
+    "gender": "Male",
+    "location": "Boston, MA",
+    "region": "Northeast US",
+    "income_band": "40-75k",
+    "occupation": "Junior Data Analyst",
+    "household": "Lives with two roommates in a shared apartment",
+    "tech_comfort": 85,
+    "skepticism": 60,
+    "openness": 70,
+    "conscientiousness": 65,
+    "extraversion": 55,
+    "agreeableness": 50,
+    "neuroticism": 40,
+    "values": [
+      "environmental sustainability",
+      "continuous learning"
+    ],
+    "buying_triggers": [
+      "free trial period",
+      "clear ROI calculator"
+    ],
+    "pet_peeves": [
+      "hidden fees in fine print",
+      "unsolicited email blasts"
+    ],
+    "voice": "I usually skim the first paragraph for a trial offer; if I don\u2019t see a clear end date, I close the tab."
+  },
+  {
+    "id": "p082",
+    "name": "Liam",
+    "age": 28,
+    "gender": "Male",
+    "location": "Raleigh, NC",
+    "region": "Southeast US",
+    "income_band": "<25k",
+    "occupation": "Warehouse Associate",
+    "household": "Single, rents a studio apartment",
+    "tech_comfort": 45,
+    "skepticism": 70,
+    "openness": 55,
+    "conscientiousness": 60,
+    "extraversion": 40,
+    "agreeableness": 50,
+    "neuroticism": 65,
+    "values": [
+      "Earning enough to cover rent each month",
+      "Using coupons for grocery shopping",
+      "Taking the bus to work to save on gas",
+      "Having a prepaid phone plan"
+    ],
+    "buying_triggers": [
+      "Seeing a limited\u2011time discount on essentials",
+      "Receipt of a tax refund",
+      "A friend recommending a cheap generic brand",
+      "A sale advertised on local radio"
+    ],
+    "pet_peeves": [
+      "Being upsold at checkout",
+      "Ads that auto\u2011play sound on mobile",
+      "Long hold times when calling customer service",
+      "Promotional emails that arrive daily"
+    ],
+    "voice": "I ignore any email that promises a \u2018free trial\u2019 because I know I\u2019ll forget to cancel and get charged. I only click on ads if they show the exact price up front."
+  },
+  {
+    "id": "p083",
+    "name": "Ethan Brooks",
+    "age": 42,
+    "gender": "Male",
+    "location": "Columbus, Ohio",
+    "region": "Midwest US",
+    "income_band": "75-150k",
+    "occupation": "Operations Manager",
+    "household": "Married with two children",
+    "tech_comfort": 78,
+    "skepticism": 55,
+    "openness": 62,
+    "conscientiousness": 80,
+    "extraversion": 45,
+    "agreeableness": 70,
+    "neuroticism": 30,
+    "values": [
+      "family stability",
+      "environmental responsibility",
+      "continuous learning"
+    ],
+    "buying_triggers": [
+      "detailed product comparisons",
+      "trustworthy customer reviews",
+      "clear return policy"
+    ],
+    "pet_peeves": [
+      "jargon-heavy ads",
+      "hidden subscription fees",
+      "slow page load times"
+    ],
+    "voice": "I usually read the specs table first; if the benefits aren't backed by numbers, I lose interest. I also check the return window before clicking 'add to cart'."
+  },
+  {
+    "id": "p084",
+    "name": "Samir Khan",
+    "age": 58,
+    "gender": "Male",
+    "location": "Phoenix, AZ",
+    "region": "Southwest US",
+    "income_band": "25-40k",
+    "occupation": "Warehouse Supervisor",
+    "household": "Divorced, lives alone with a cat",
+    "tech_comfort": 30,
+    "skepticism": 72,
+    "openness": 40,
+    "conscientiousness": 55,
+    "extraversion": 48,
+    "agreeableness": 50,
+    "neuroticism": 60,
+    "values": [
+      "job stability",
+      "straightforward communication"
+    ],
+    "buying_triggers": [
+      "price match guarantee",
+      "same\u2011day pickup"
+    ],
+    "pet_peeves": [
+      "bait\u2011and\u2011switch ads",
+      "long hold times on phone"
+    ],
+    "voice": "I call the support line before buying; if the wait exceeds five minutes, I look elsewhere."
+  },
+  {
+    "id": "p085",
+    "name": "Taylor Brooks",
+    "age": 70,
+    "gender": "Female",
+    "location": "Seattle, WA",
+    "region": "West US",
+    "income_band": "150k+",
+    "occupation": "Retired University Professor",
+    "household": "Widowed, lives in a condo with occasional visits from grandchildren",
+    "tech_comfort": 55,
+    "skepticism": 68,
+    "openness": 75,
+    "conscientiousness": 70,
+    "extraversion": 38,
+    "agreeableness": 65,
+    "neuroticism": 42,
+    "values": [
+      "intellectual curiosity",
+      "legacy giving"
+    ],
+    "buying_triggers": [
+      "peer\u2011reviewed studies cited",
+      "money\u2011back guarantee"
+    ],
+    "pet_peeves": [
+      "overly flashy ads",
+      "lack of citation sources"
+    ],
+    "voice": "I check for references to research; if none are provided, I treat the claim as marketing fluff."
   },
   {
     "id": "p086",
-    "name": "Jonas",
-    "age": 21,
+    "name": "Riley Morgan",
+    "age": 22,
     "gender": "Male",
     "location": "Berlin, Germany",
     "region": "Western Europe",
     "income_band": "40-75k",
-    "occupation": "junior graphic designer",
-    "household": "shares a two-bedroom flat with two roommates in Berlin",
-    "tech_comfort": 4,
+    "occupation": "Graphic Designer Freelancer",
+    "household": "Lives with partner in a rented loft",
+    "tech_comfort": 90,
+    "skepticism": 40,
+    "openness": 85,
+    "conscientiousness": 50,
+    "extraversion": 55,
+    "agreeableness": 48,
+    "neuroticism": 35,
     "values": [
-      "buying second-hand clothing",
-      "participating in local clean-up events",
-      "choosing brands with transparent supply chains"
+      "creative freedom",
+      "work\u2011life balance"
     ],
     "buying_triggers": [
-      "free returns within 30 days",
-      "early-access sale notifications",
-      "product bundles that save \u226515%"
+      "instant download",
+      "editable file formats"
     ],
     "pet_peeves": [
-      "pop-up ads that block content",
-      "vague sustainability claims without proof",
-      "checkout processes that require account creation"
+      "watermarked previews",
+      "mandatory account creation"
     ],
-    "skepticism": 3,
-    "voice": "I open marketing emails only if the subject line mentions a specific discount percentage; otherwise I delete them. When I see a video ad, I skip ahead to the five\u2011second mark to check if the product is actually shown in use."
+    "voice": "I drag the demo file onto my desktop; if I can\u2019t edit it right away, I abandon the offer."
   },
   {
     "id": "p087",
-    "name": "Siti",
-    "age": 29,
+    "name": "Casey Tanaka",
+    "age": 27,
     "gender": "Female",
-    "location": "Kuala Lumpur, Malaysia",
+    "location": "Osaka, Japan",
     "region": "Asia-Pacific",
     "income_band": "<25k",
-    "occupation": "Junior accountant",
-    "household": "Lives with parents and younger sibling",
-    "tech_comfort": 4,
+    "occupation": "Part\u2011time Tutor",
+    "household": "Shares a small apartment with a sibling",
+    "tech_comfort": 20,
+    "skepticism": 80,
+    "openness": 30,
+    "conscientiousness": 45,
+    "extraversion": 50,
+    "agreeableness": 55,
+    "neuroticism": 70,
     "values": [
-      "Saving for emergency fund",
-      "Supporting local artisans",
-      "Learning new cooking techniques"
+      "affordability",
+      "reliability"
     ],
     "buying_triggers": [
-      "Discount codes sent via email",
-      "Free shipping over $30",
-      "Limited-time bundle offers"
+      "student discount",
+      "cash\u2011on\u2011delivery option"
     ],
     "pet_peeves": [
-      "Pop-up ads that cover content",
-      "Emails with misleading subject lines",
-      "Slow website checkout"
+      "subscription traps",
+      "delayed shipping updates"
     ],
-    "skepticism": 3,
-    "voice": "I usually skim the first line of a promo email; if it doesn\u2019t mention a clear discount within three words, I delete it. I prefer to read product reviews on forums before clicking any ad, because I distrust overly polished claims."
+    "voice": "I scan for a student price badge; if it\u2019s missing, I assume it\u2019s too expensive."
   },
   {
     "id": "p088",
-    "name": "Ana Luc\u00eda G\u00f3mez",
-    "age": 42,
-    "gender": "Female",
-    "location": "Bogot\u00e1, Colombia",
+    "name": "Quinn Santos",
+    "age": 45,
+    "gender": "Male",
+    "location": "S\u00e3o Paulo, Brazil",
     "region": "Latin America",
     "income_band": "75-150k",
-    "occupation": "Senior Supply Chain Analyst",
-    "household": "Married, two children (ages 8 and 12)",
-    "tech_comfort": 4,
+    "occupation": "Sales Director",
+    "household": "Married, owns a duplex with spouse and teenage daughter",
+    "tech_comfort": 60,
+    "skepticism": 50,
+    "openness": 55,
+    "conscientiousness": 70,
+    "extraversion": 65,
+    "agreeableness": 45,
+    "neuroticism": 38,
     "values": [
-      "Family stability",
-      "Environmental responsibility"
+      "career growth",
+      "family security"
     ],
     "buying_triggers": [
-      "Limited-time discount",
-      "Free shipping"
+      "performance\u2011based bonus",
+      "professional certification included"
     ],
     "pet_peeves": [
-      "Unclear return policies",
-      "Excessive upselling"
+      "vague performance metrics",
+      "excessive upsell prompts"
     ],
-    "skepticism": 3,
-    "voice": "I usually skim the first paragraph of an email promo; if it doesn't mention a clear benefit within two lines, I delete it."
+    "voice": "I scroll to the KPI section first; if the metrics are buried in footnotes, I trust less."
   },
   {
     "id": "p089",
-    "name": "Rachel Kim",
+    "name": "Avery Collins",
     "age": 55,
     "gender": "Female",
     "location": "Providence, RI",
     "region": "Northeast US",
     "income_band": "25-40k",
-    "occupation": "Accountant",
-    "household": "Single, owns a townhouse",
-    "tech_comfort": 1,
+    "occupation": "Library Technician",
+    "household": "Single, lives in a rented townhouse",
+    "tech_comfort": 35,
+    "skepticism": 65,
+    "openness": 48,
+    "conscientiousness": 55,
+    "extraversion": 42,
+    "agreeableness": 60,
+    "neuroticism": 50,
     "values": [
-      "accuracy",
-      "work-life balance"
+      "quiet environment",
+      "access to knowledge"
     ],
     "buying_triggers": [
-      "tax software update that reduces filing time",
-      "free CPE webinar"
+      "extended loan period",
+      "no late fees"
     ],
     "pet_peeves": [
-      "software that hides fees until checkout",
-      "mandatory training with irrelevant content"
+      "automatic renewals",
+      "complex reservation system"
     ],
-    "skepticism": 4,
-    "voice": "I prefer plain\u2011text updates over flashy graphics; they load faster on my old laptop. Promises of 'effortless' automation make me skeptical."
+    "voice": "I glance at the loan terms; if automatic renewal isn\u2019t mentioned, I set a phone alarm."
   },
   {
     "id": "p090",
-    "name": "Marcus Brooks",
+    "name": "Morgan Edwards",
     "age": 68,
     "gender": "Male",
-    "location": "Charleston, SC",
+    "location": "Miami, FL",
     "region": "Southeast US",
     "income_band": "150k+",
-    "occupation": "Landscape architect",
-    "household": "Married, shares a historic home with spouse",
-    "tech_comfort": 3,
+    "occupation": "Orthopedic Surgeon",
+    "household": "Married, lives in a gated community with spouse",
+    "tech_comfort": 80,
+    "skepticism": 73,
+    "openness": 60,
+    "conscientiousness": 85,
+    "extraversion": 30,
+    "agreeableness": 40,
+    "neuroticism": 25,
     "values": [
-      "design innovation",
-      "environmental stewardship"
+      "patient outcomes",
+      "evidence\u2011based practice"
     ],
     "buying_triggers": [
-      "new sustainable material sample kit",
-      "invitation to speak at a design symposium"
+      "clinical trial data",
+      "FDA clearance"
     ],
     "pet_peeves": [
-      "vendors that push generic products without site\u2011specific advice",
-      "contracts with vague deliverables"
+      "marketing hype without data",
+      "pressure to adopt quickly"
     ],
-    "skepticism": 5,
-    "voice": "I trust a brochure that shows real project photos with measurements; renderings alone feel like fantasy."
+    "voice": "I search for a peer\u2011reviewed study link; if the page only has testimonials, I close it."
   },
   {
     "id": "p091",
-    "name": "Maya Miller",
+    "name": "Maya Patel",
     "age": 22,
-    "gender": "female",
-    "location": "Columbus, Ohio",
+    "gender": "Female",
+    "location": "Columbus, Ohio, USA",
     "region": "Midwest US",
     "income_band": "40-75k",
-    "occupation": "part-time barista",
-    "household": "shared apartment with two roommates",
-    "tech_comfort": 4,
+    "occupation": "Marketing Coordinator",
+    "household": "Single, renting apartment",
+    "tech_comfort": 68,
+    "skepticism": 55,
+    "openness": 72,
+    "conscientiousness": 58,
+    "extraversion": 42,
+    "agreeableness": 78,
+    "neuroticism": 30,
     "values": [
-      "environmentally friendly products",
+      "environmental sustainability",
       "supporting local businesses"
     ],
     "buying_triggers": [
-      "discount for first purchase",
-      "free shipping"
+      "seeing a demo video",
+      "limited-time eco-friendly bundle",
+      "referral discount"
     ],
     "pet_peeves": [
-      "pop-up ads that cover content",
-      "autoplay videos with sound"
+      "excessive packaging",
+      "autoplay video ads"
     ],
-    "skepticism": 3,
-    "voice": "I habitually glance at the preview line of an email and delete it if it feels like a sales pitch. I trust recommendations from friends more than banner ads."
+    "voice": "When I see an ad, I first look for the recycling symbol; if it\u2019s there, I read the bullet points, otherwise I scroll past."
   },
   {
     "id": "p092",
-    "name": "Javier Brooks",
-    "age": 28,
-    "gender": "male",
-    "location": "Phoenix, Arizona",
+    "name": "Luis Martinez",
+    "age": 29,
+    "gender": "Male",
+    "location": "Tucson, Arizona",
     "region": "Southwest US",
     "income_band": "<25k",
-    "occupation": "rideshare driver",
-    "household": "lives alone in a studio",
-    "tech_comfort": 2,
+    "occupation": "Food Service Worker",
+    "household": "Single, lives with roommate",
+    "tech_comfort": 55,
+    "skepticism": 70,
+    "openness": 60,
+    "conscientiousness": 50,
+    "extraversion": 45,
+    "agreeableness": 55,
+    "neuroticism": 50,
     "values": [
-      "saving money on gas",
-      "flexible schedule"
+      "Finding affordable meals at local food trucks",
+      "Saving up for a reliable used car",
+      "Helping my younger sibling with school supplies"
     ],
     "buying_triggers": [
-      "surge pricing alerts",
-      "referral bonuses"
+      "Receiving a text coupon from a favorite taco stand",
+      "Seeing a friend post about a good deal on Facebook",
+      "Hearing about a flash sale while waiting in line at the grocery store"
     ],
     "pet_peeves": [
-      "apps that constantly ask for ratings",
-      "unclear fare breakdowns"
+      "When online ads autoplay sound",
+      "Getting emailed daily deals after unsubscribing",
+      "Products advertised as 'low price' but with hidden fees"
     ],
-    "skepticism": 4,
-    "voice": "When I see an ad promising extra earnings, I check the fine print before tapping. I ignore promotional push notifications unless they show a concrete bonus amount."
+    "voice": "I usually ignore flashy banner ads unless they mention a discount I can use today. If an email looks like a generic blast, I delete it without opening. I trust a recommendation more when it comes from someone I know who actually bought the item."
   },
   {
     "id": "p093",
-    "name": "Eli Clark",
+    "name": "Ethan",
     "age": 42,
-    "gender": "non-binary",
-    "location": "Seattle, Washington",
+    "gender": "Male",
+    "location": "Portland, Oregon",
     "region": "West US",
     "income_band": "75-150k",
-    "occupation": "senior UX designer",
-    "household": "owns a condo with partner",
-    "tech_comfort": 5,
+    "occupation": "Product Manager",
+    "household": "Married, two kids",
+    "tech_comfort": 78,
+    "skepticism": 45,
+    "openness": 62,
+    "conscientiousness": 70,
+    "extraversion": 55,
+    "agreeableness": 60,
+    "neuroticism": 30,
     "values": [
-      "intuitive design",
-      "accessibility features"
+      "Environmental sustainability",
+      "Family time",
+      "Career growth",
+      "Community involvement"
     ],
     "buying_triggers": [
-      "free trial of premium features",
-      "early access to beta"
+      "Limited-time discount",
+      "Free shipping over $50",
+      "Positive online reviews",
+      "Product demo video"
     ],
     "pet_peeves": [
-      "overly complex onboarding flows",
-      "jargon-heavy tooltips"
+      "Pop-up ads that cover content",
+      "Unclear return policies",
+      "Autoplay videos with sound",
+      "Slow website loading"
     ],
-    "skepticism": 2,
-    "voice": "I tend to click on ads that showcase a clear prototype video. If a product\u2019s landing page loads slowly, I leave immediately."
+    "voice": "I usually skim the headline and bullet points; if I don\u2019t see a clear benefit within three seconds, I scroll past. I trust user\u2011generated photos more than studio shots."
   },
   {
     "id": "p094",
-    "name": "Laura Bennett",
+    "name": "Lars Johansson",
     "age": 58,
-    "gender": "female",
+    "gender": "Male",
     "location": "Berlin, Germany",
     "region": "Western Europe",
     "income_band": "25-40k",
-    "occupation": "public transit operator",
-    "household": "married, one child in school",
-    "tech_comfort": 3,
+    "occupation": "Nurse Practitioner",
+    "household": "Divorced, shares custody of two kids",
+    "tech_comfort": 48,
+    "skepticism": 70,
+    "openness": 48,
+    "conscientiousness": 82,
+    "extraversion": 38,
+    "agreeableness": 70,
+    "neuroticism": 40,
     "values": [
-      "reliable service",
-      "punctual schedules"
+      "reliability",
+      "trust in brands",
+      "data privacy"
     ],
     "buying_triggers": [
-      "monthly pass discounts",
-      "contactless payment options"
+      "clear warranty terms",
+      "third-party security certification",
+      "price match guarantee"
     ],
     "pet_peeves": [
-      "delayed service announcements",
-      "ticket machines that reject coins"
+      "unsolicited phone calls",
+      "complex return process"
     ],
-    "skepticism": 4,
-    "voice": "I read transit ads only when they mention a new route that affects my shift. I won\u2019t consider a service upgrade unless it guarantees shorter wait times."
+    "voice": "I always pause at the privacy policy link; if it\u2019s longer than two screens, I close the tab and look for a simpler alternative."
   },
   {
     "id": "p095",
-    "name": "Daniel Roberts",
+    "name": "Emma Clarke",
     "age": 68,
-    "gender": "male",
-    "location": "Sydney, Australia",
+    "gender": "Female",
+    "location": "Melbourne, Australia",
     "region": "Asia-Pacific",
     "income_band": "150k+",
-    "occupation": "retired corporate lawyer",
-    "household": "lives with spouse, no kids at home",
-    "tech_comfort": 2,
+    "occupation": "Retired University Professor",
+    "household": "Lives alone in a suburban home with a small garden",
+    "tech_comfort": 45,
+    "skepticism": 70,
+    "openness": 55,
+    "conscientiousness": 80,
+    "extraversion": 40,
+    "agreeableness": 65,
+    "neuroticism": 30,
     "values": [
-      "preserving wealth",
-      "low-maintenance lifestyle"
+      "Maintaining independence",
+      "Supporting local arts",
+      "Environmental stewardship",
+      "Lifelong learning"
     ],
     "buying_triggers": [
-      "exclusive investment offers",
-      "complimentary financial review"
+      "Product durability demonstrated via third\u2011party testing",
+      "Clear warranty terms",
+      "Personal recommendation from a trusted peer",
+      "Easy return process"
     ],
     "pet_peeves": [
-      "high-pressure sales calls",
-      "vague fee disclosures"
+      "Overly technical jargon in advertisements",
+      "Unsolicited phone calls",
+      "Hidden fees disclosed only at checkout",
+      "Ads that assume tech savviness without explanation"
     ],
-    "skepticism": 5,
-    "voice": "I delete any unsolicited email that mentions \u2018guaranteed returns.\u2019 Only a personalized letter from a known advisor gets my attention."
+    "voice": "I usually skim the fine print before clicking \u2018buy now\u2019; if I can\u2019t find a clear warranty, I walk away. I trust a friend\u2019s endorsement more than any celebrity ad."
   },
   {
     "id": "p096",
-    "name": "Isabela Foster",
+    "name": "Sofia Martinez",
     "age": 20,
-    "gender": "female",
-    "location": "Medell\u00edn, Colombia",
+    "gender": "Female",
+    "location": "Bogot\u00e1, Colombia",
     "region": "Latin America",
     "income_band": "40-75k",
-    "occupation": "lab assistant",
-    "household": "shared house with three fellow students",
-    "tech_comfort": 4,
+    "occupation": "Graphic Designer",
+    "household": "Shared apartment with two roommates",
+    "tech_comfort": 77,
+    "skepticism": 60,
+    "openness": 55,
+    "conscientiousness": 38,
+    "extraversion": 70,
+    "agreeableness": 72,
+    "neuroticism": 45,
     "values": [
-      "sustainable lab practices",
-      "career growth"
+      "creative expression",
+      "affordable fashion",
+      "community events"
     ],
     "buying_triggers": [
-      "conference travel grants",
-      "equipment discount coupons"
+      "limited edition design drop",
+      "influencer styling tip",
+      "easy return policy"
     ],
     "pet_peeves": [
-      "repetitive safety training emails",
-      "printers that jam frequently"
+      "size inconsistency across brands",
+      "misleading 'sale' labels"
     ],
-    "skepticism": 3,
-    "voice": "I look for subject lines that include a clear deadline before opening. If an ad promises a free sample, I check the shipping cost first."
+    "voice": "I save the product image to my mood board, then wait 24 hours to see if I still want it before adding to cart."
   },
   {
     "id": "p097",
-    "name": "Oscar Hayes",
-    "age": 27,
-    "gender": "male",
-    "location": "Boston, Massachusetts",
+    "name": "Jamal Washington",
+    "age": 30,
+    "gender": "Male",
+    "location": "Boston, Massachusetts, USA",
     "region": "Northeast US",
     "income_band": "<25k",
-    "occupation": "freelance graphic designer",
-    "household": "lives with parents while building portfolio",
-    "tech_comfort": 4,
+    "occupation": "Retail Sales Associate",
+    "household": "Single, living with a roommate",
+    "tech_comfort": 55,
+    "skepticism": 85,
+    "openness": 30,
+    "conscientiousness": 32,
+    "extraversion": 58,
+    "agreeableness": 38,
+    "neuroticism": 78,
     "values": [
-      "creative freedom",
-      "timely payments"
+      "independent thinking",
+      "questioning authority",
+      "personal freedom"
     ],
     "buying_triggers": [
-      "milestone-based payments",
-      "exposure to reputable clients"
+      "no hidden fees",
+      "transparent ingredient list",
+      "money-back guarantee if not satisfied"
     ],
     "pet_peeves": [
-      "clients requesting unlimited revisions",
-      "vague project briefs"
+      "overly aggressive upselling",
+      "vague benefit claims"
     ],
-    "skepticism": 4,
-    "voice": "I scan Instagram ads for a quick glimpse of the portfolio style. I skip any ad that asks me to fill out a lengthy questionnaire first."
+    "voice": "I distrust claims that sound too good; I search for third\u2011review videos and only trust those with over 10k views."
   },
   {
     "id": "p098",
-    "name": "Talia Cole",
-    "age": 44,
-    "gender": "female",
-    "location": "Atlanta, Georgia",
+    "name": "Brooke Sullivan",
+    "age": 45,
+    "gender": "Female",
+    "location": "Atlanta, Georgia, USA",
     "region": "Southeast US",
     "income_band": "75-150k",
-    "occupation": "marketing manager",
-    "household": "married, two kids, suburban home",
-    "tech_comfort": 3,
+    "occupation": "Construction Manager",
+    "household": "Married, two young children, suburban home",
+    "tech_comfort": 81,
+    "skepticism": 38,
+    "openness": 60,
+    "conscientiousness": 78,
+    "extraversion": 52,
+    "agreeableness": 75,
+    "neuroticism": 28,
     "values": [
-      "data-driven campaigns",
-      "brand authenticity"
+      "family safety",
+      "health and wellness",
+      "time efficiency"
     ],
     "buying_triggers": [
-      "limited-time offer codes",
-      "access to analytics dashboard"
+      "pediatrician-recommended label",
+      "subscription auto-refill",
+      "family pack discount"
     ],
     "pet_peeves": [
-      "misleading clickbait headlines",
-      "ads that auto-play sound"
+      "products that leak or spill",
+      "hard-to-read expiration dates"
     ],
-    "skepticism": 2,
-    "voice": "I often run a quick A/B test on subject lines before committing to a send. If a headline feels overly sensational, I move on without reading further."
+    "voice": "I read the label aloud to my partner; if any ingredient makes us both frown, I put the item back."
   },
   {
     "id": "p099",
-    "name": "Victor Hammond",
-    "age": 57,
-    "gender": "male",
-    "location": "Indianapolis, Indiana",
+    "name": "Claire Martinez",
+    "age": 58,
+    "gender": "Female",
+    "location": "Columbus, Ohio",
     "region": "Midwest US",
     "income_band": "25-40k",
-    "occupation": "HVAC technician",
-    "household": "single, owns a small house with a dog",
-    "tech_comfort": 3,
+    "occupation": "Retail Sales Associate",
+    "household": "Shares a rented townhouse with her adult son who attends community college.",
+    "tech_comfort": 45,
+    "skepticism": 60,
+    "openness": 50,
+    "conscientiousness": 55,
+    "extraversion": 40,
+    "agreeableness": 50,
+    "neuroticism": 45,
     "values": [
-      "dependable tools",
-      "straightforward fixes"
+      "Reliability in everyday products",
+      "Supporting local businesses",
+      "Clear warranty terms"
     ],
     "buying_triggers": [
-      "rebate on energy-efficient units",
-      "free diagnostic visit"
+      "Discounts on bulk household goods",
+      "Free in-store demonstrations",
+      "Loyalty points that never expire"
     ],
     "pet_peeves": [
-      "upsell tactics during service calls",
-      "hard-to-reach parts"
+      "Overly aggressive upselling at checkout",
+      "Email spam with irrelevant offers",
+      "Products with hard-to-open packaging"
     ],
-    "skepticism": 4,
-    "voice": "I only consider a flyer if it lists a clear price range for installation. I distrust any claim that sounds \u2018too good to be true\u2019 without proof."
+    "voice": "I usually skim the headline and look for the price before I decide to read more. If an ad feels pushy, I close it right away. I trust a review more when it mentions how long the product lasted."
   },
   {
     "id": "p100",
-    "name": "Evelyn Stone",
-    "age": 70,
-    "gender": "female",
-    "location": "Austin, Texas",
+    "name": "Arthur Collins",
+    "age": 71,
+    "gender": "Male",
+    "location": "Tucson, Arizona",
     "region": "Southwest US",
     "income_band": "150k+",
-    "occupation": "retired educator",
-    "household": "lives alone, occasional visits from grandchildren",
-    "tech_comfort": 1,
+    "occupation": "Financial Advisor",
+    "household": "Widowed, lives alone in a two-bedroom condo",
+    "tech_comfort": 55,
+    "skepticism": 78,
+    "openness": 62,
+    "conscientiousness": 85,
+    "extraversion": 38,
+    "agreeableness": 55,
+    "neuroticism": 30,
     "values": [
-      "lifelong learning",
-      "community involvement"
+      "maintaining a debt-free lifestyle",
+      "supporting local food banks",
+      "receiving straightforward explanations"
     ],
     "buying_triggers": [
-      "invitation to a free lecture series",
-      "discounted museum membership"
+      "no hidden fees",
+      "personalized recommendation from a trusted advisor",
+      "guaranteed return within 30 days"
     ],
     "pet_peeves": [
-      "donation requests with vague impact statements",
-      "frequent fundraising emails"
+      "pushy sales tactics",
+      "jargon-heavy brochures",
+      "unsolicited cold calls"
     ],
-    "skepticism": 5,
-    "voice": "I open newsletters only if they mention a specific event date in the first sentence. I mark as spam any email that asks for money without showing how it helps students."
+    "voice": "I always read the fine print first; if I spot any asterisks that hint at hidden fees, I discard the material right away. I favor a brief bullet\u2011point summary over a lengthy narrative. I won\u2019t even look at offers that arrive after 6\u202fp.m. on a weekday."
   }
 ]

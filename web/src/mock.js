@@ -98,11 +98,21 @@ export function buildMockPersonas(n = 100) {
       income_band: pick(INCOME_BANDS, i + 1),
       occupation: pick(OCCUPATIONS, i),
       household: i % 3 === 0 ? 'lives alone' : 'lives with spouse, kids nearby',
-      tech_comfort: (i % 5) + 1,
+      // 1-100, not 1-5 (section 3 said 1-5; widened by request on 2026-10-28
+      // for more variability). Different multipliers per trait so they're
+      // not all just the same i value in disguise.
+      tech_comfort: ((i * 7) % 100) + 1,
+      skepticism: ((i * 13 + 5) % 100) + 1,
+      // Big Five / OCEAN, 1-100 -- not in the original section 3 schema,
+      // added by request alongside the skepticism/tech_comfort rescale.
+      openness: ((i * 17 + 11) % 100) + 1,
+      conscientiousness: ((i * 23 + 3) % 100) + 1,
+      extraversion: ((i * 29 + 7) % 100) + 1,
+      agreeableness: ((i * 31 + 2) % 100) + 1,
+      neuroticism: ((i * 37 + 9) % 100) + 1,
       values: pickN(VALUE_POOL, i, 3),
       buying_triggers: pickN(TRIGGER_POOL, i + 2, 2),
       pet_peeves: pickN(PEEVE_POOL, i + 4, 3),
-      skepticism: ((i + 2) % 5) + 1,
       voice: voiceFor(name, i),
     })
   }
@@ -170,16 +180,16 @@ export function buildMockSynthesis(personas) {
       {
         claim: 'The $29 figure is read as monthly by most low-tech-comfort personas',
         affected_pct: 41,
-        affected_segment: 'tech_comfort <= 2',
-        affected_segment_filter: [{ field: 'tech_comfort', op: '<=', value: 2 }],
+        affected_segment: 'tech_comfort <= 33',
+        affected_segment_filter: [{ field: 'tech_comfort', op: '<=', value: 33 }],
         evidence: evidenceFrom(0),
         severity: 'high',
       },
       {
         claim: 'High-skepticism personas object to the missing cancellation policy',
         affected_pct: 33,
-        affected_segment: 'skepticism >= 4',
-        affected_segment_filter: [{ field: 'skepticism', op: '>=', value: 4 }],
+        affected_segment: 'skepticism >= 70',
+        affected_segment_filter: [{ field: 'skepticism', op: '>=', value: 70 }],
         evidence: evidenceFrom(10),
         severity: 'medium',
       },
@@ -205,26 +215,42 @@ export function buildMockSynthesis(personas) {
   }
 }
 
+// flipped_to_act (and flipped_positive/negative below) are about the
+// would_act decision, not sentiment sign -- section 4.4's prompt wording
+// ("N personas moved to would_act... N moved away") is the one place the
+// spec pins this unambiguously. sentiment_before/after still move too, so
+// the grid's color wave has something to animate, but they're not what
+// "flipped" means here.
+function buildMockDelta(persona, reactionsBefore, wouldActBefore, wouldActAfter) {
+  const before = reactionsBefore.find((r) => r.persona_id === persona.id)
+  const sentimentBefore = before ? before.sentiment : -1
+  const sentimentAfter = !wouldActBefore && wouldActAfter
+    ? Math.min(2, sentimentBefore + 2)
+    : wouldActBefore && !wouldActAfter
+      ? Math.max(-2, sentimentBefore - 1)
+      : sentimentBefore
+  return {
+    persona_id: persona.id,
+    sentiment_before: sentimentBefore,
+    sentiment_after: sentimentAfter,
+    flipped_to_act: !wouldActBefore && wouldActAfter,
+  }
+}
+
 export function buildMockCompareResult(personas, reactionsBefore) {
-  const flippedIds = personas.slice(0, 22)
-  const deltas = flippedIds.map((p, i) => {
-    const before = reactionsBefore.find((r) => r.persona_id === p.id)
-    const sentimentBefore = before ? before.sentiment : -1
-    const sentimentAfter = i < 19 ? Math.min(2, sentimentBefore + 2) : Math.max(-2, sentimentBefore - 1)
-    return {
-      persona_id: p.id,
-      sentiment_before: sentimentBefore,
-      sentiment_after: sentimentAfter,
-      flipped_to_act: sentimentAfter >= 1 && sentimentBefore < 1,
-    }
-  })
+  const flippedPositive = personas.slice(0, 19)
+  const flippedNegative = personas.slice(19, 22)
+  const deltas = [
+    ...flippedPositive.map((p) => buildMockDelta(p, reactionsBefore, false, true)),
+    ...flippedNegative.map((p) => buildMockDelta(p, reactionsBefore, true, false)),
+  ]
   return {
     run_a: 'mock-run',
     run_b: 'mock-run-b',
     deltas,
-    flipped_positive: 19,
-    flipped_negative: 3,
-    would_act_delta_pct: 19,
+    flipped_positive: flippedPositive.length,
+    flipped_negative: flippedNegative.length,
+    would_act_delta_pct: flippedPositive.length - flippedNegative.length,
     summary: 'Naming the price as one-time flips 19 skeptical, low-tech-comfort readers toward acting.',
   }
 }

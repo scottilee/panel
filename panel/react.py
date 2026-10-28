@@ -25,6 +25,16 @@ DEFAULT_MAX_CONCURRENCY = int(env("MAX_CONCURRENCY", "25"))
 # would otherwise silently 2-3x every call's latency.
 REACTION_MAX_TOKENS = 3000
 
+# Section 4 states temperature=0.7 for reactions. Measured empirically
+# (2026-10-28): rerunning the identical edited artifact against the
+# identical 100 personas gave 7 flipped-to-act personas on one run and 4
+# on an immediate rerun -- the same edit, same people, same text, nearly
+# double the variance. That noise was swamping the signal we actually
+# care about (does this edit help). Lower temperature trades away some
+# per-reaction variety for materially more run-to-run stability, which
+# matters more here than it does for the one-off persona-generation calls.
+REACTION_TEMPERATURE = 0.4
+
 
 async def _react_one(
     persona: Persona, artifact_text: str, run_id: str, sem: asyncio.Semaphore
@@ -36,7 +46,7 @@ async def _react_one(
                 system=REACTION_SYSTEM,
                 user=reaction_user(persona.model_dump_json(), artifact_text),
                 schema=Reaction,
-                temperature=0.7,
+                temperature=REACTION_TEMPERATURE,
                 seed=hash(persona.id) % (2**31),
                 max_tokens=REACTION_MAX_TOKENS,
             )

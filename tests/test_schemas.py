@@ -33,11 +33,16 @@ PERSONA_KWARGS = dict(
     income_band="40-75k",
     occupation="retired school secretary",
     household="lives with spouse, two adult children nearby",
-    tech_comfort=2,
+    tech_comfort=30,
+    skepticism=78,
+    openness=35,
+    conscientiousness=82,
+    extraversion=40,
+    agreeableness=55,
+    neuroticism=60,
     values=["frugality", "family", "distrust of fine print"],
     buying_triggers=["recommendation from daughter", "clear cancellation policy"],
     pet_peeves=["auto-renewal", "jargon", "having to call to cancel"],
-    skepticism=4,
     voice="I read everything twice and I still assume there's a catch.",
 )
 
@@ -46,9 +51,20 @@ def test_persona_round_trip():
     round_trip(Persona, Persona(**PERSONA_KWARGS))
 
 
-@pytest.mark.parametrize("field", ["tech_comfort", "skepticism"])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "tech_comfort",
+        "skepticism",
+        "openness",
+        "conscientiousness",
+        "extraversion",
+        "agreeableness",
+        "neuroticism",
+    ],
+)
 def test_persona_rejects_out_of_range_scores(field):
-    kwargs = {**PERSONA_KWARGS, field: 6}
+    kwargs = {**PERSONA_KWARGS, field: 101}
     with pytest.raises(ValidationError):
         Persona(**kwargs)
 

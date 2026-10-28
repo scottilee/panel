@@ -27,6 +27,22 @@ AGE_BANDS = ["18-24", "25-34", "35-49", "50-64", "65+"]
 AGE_BAND_SAMPLE_AGE = {"18-24": 21, "25-34": 29, "35-49": 41, "50-64": 58, "65+": 70}
 
 
+def age_band_for(age: int) -> str:
+    """age_band isn't a stored Persona field (only age is) -- it's derived
+    wherever a segment needs to bucket by it, so there's exactly one
+    definition (used by scripts/gen_personas.py's C1 check and
+    synthesize.py's segment-filter recount)."""
+    if age <= 24:
+        return "18-24"
+    if age <= 34:
+        return "25-34"
+    if age <= 49:
+        return "35-49"
+    if age <= 64:
+        return "50-64"
+    return "65+"
+
+
 def load_personas(path: Path = DEFAULT_PATH) -> list[Persona]:
     with open(path) as f:
         raw = json.load(f)
@@ -223,9 +239,10 @@ async def make_more_skeptical(persona: Persona, new_skepticism: int) -> Persona:
         "Rewrite their voice (1 to 3 first-person sentences with a specific "
         "distrustful habit, limit, or trigger — not a vague statement of "
         "distrust) and pet_peeves (2 to 4 concrete items) so both actually "
-        f"read as skepticism level {new_skepticism}/5. Keep their name, "
-        "age, occupation, region, income_band, tech_comfort, values, and "
-        "buying_triggers exactly as given.\n\n"
+        f"read as skepticism level {new_skepticism}/100. Keep their name, "
+        "age, occupation, region, income_band, tech_comfort, openness, "
+        "conscientiousness, extraversion, agreeableness, neuroticism, "
+        "values, and buying_triggers exactly as given.\n\n"
         f"Schema: {json.dumps(_VoicePeeves.model_json_schema())}"
     )
     result = await chat_json(
