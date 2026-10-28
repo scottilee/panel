@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { getCompareResult, getExamples, getPoolSize, previewPersonas, startRun } from './api.js'
+import { checkArtifact, getCompareResult, getExamples, getPoolSize, previewPersonas, startRun } from './api.js'
 import ArtifactInput, { MAX_TEXT_LENGTH, MIN_TEXT_LENGTH } from './components/ArtifactInput.jsx'
 import CompareBar from './components/CompareBar.jsx'
 import Filters from './components/Filters.jsx'
@@ -27,6 +27,10 @@ import {
 
 const DEFAULT_PERSONA_COUNT = 100
 const TICK_INTERVAL_MS = 250
+// Long enough that typing a sentence doesn't fire a call per keystroke,
+// short enough that a paste-then-read user has the verdict before they
+// reach for Run.
+const CHECK_DEBOUNCE_MS = 1200
 
 // Applies highest_leverage_edit to the artifact text for mock-mode's
 // Apply-and-compare flow. The real equivalent (panel/synthesize.py's
@@ -116,6 +120,13 @@ export default function App() {
   // tile order: all UI-only, not "run state" the way reactions/synthesis are.
   const [pinnedPersonaId, setPinnedPersonaId] = useState(null)
   const [activeFilters, setActiveFilters] = useState([])
+  // Pre-submission check: the advisory verdict for the current text, and
+  // the "are you sure" prompt it can raise. Advisory only -- see
+  // panel/classify.py. `confirmCheck` holding a verdict means the user has
+  // been asked and hasn't answered yet.
+  const [textCheck, setTextCheck] = useState(null)
+  const [confirmCheck, setConfirmCheck] = useState(null)
+  const [confirmCancel, setConfirmCancel] = useState(false)
   const [highlightedIds, setHighlightedIds] = useState(null)
   const [viewMode, setViewMode] = useState('A')
   const [sortedByReaction, setSortedByReaction] = useState(false)
@@ -152,13 +163,42 @@ export default function App() {
   const handleEvidenceHoverStart = useCallback((evidence) => setHighlightedIds(new Set(evidence)), [])
   const handleEvidenceHoverEnd = useCallback(() => setHighlightedIds(null), [])
 
+  // Check the text while the user is still looking at it, not after they
+  // click Run: the call takes 5-10s, which is invisible here and painful
+  // in front of a button press. Debounced so typing doesn't fire a call
+  // per keystroke, and api.js caches by exact text so this and the Run
+  // click share one request.
+  const checkableText = state.inputMode === 'text' ? state.artifactText.trim() : ''
+  useEffect(() => {
+    setTextCheck(null)
+    setConfirmCheck(null)
+    if (checkableText.length < MIN_TEXT_LENGTH || checkableText.length > MAX_TEXT_LENGTH) return
+    let cancelled = false
+    const id = setTimeout(() => {
+      checkArtifact(checkableText).then((verdict) => {
+        if (!cancelled) setTextCheck(verdict)
+      })
+    }, CHECK_DEBOUNCE_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(id)
+    }
+  }, [checkableText])
+
   useEffect(() => {
     function onKeyDown(e) {
-      if (e.key === 'Escape') setPinnedPersonaId(null)
+      if (e.key !== 'Escape') return
+      // Escape dismisses the cancel prompt without cancelling -- the
+      // safe direction for a destructive confirm.
+      if (confirmCancel) {
+        setConfirmCancel(false)
+        return
+      }
+      setPinnedPersonaId(null)
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [confirmCancel])
 
   const filteredIds = useMemo(
     () => selectFilteredPersonaIds(state.personas, activeFilters),
@@ -197,8 +237,10 @@ export default function App() {
 
   function handleSelectExample(example) {
     if (isRunning) return
-    dispatch({ type: 'SET_ARTIFACT_TEXT', text: example.text })
-    dispatch({ type: 'SET_LABEL', label: example.label })
+    // One action, not two: SET_ARTIFACT_TEXT now clears a borrowed label,
+    // so dispatching them separately would set the name and immediately
+    // throw it away.
+    dispatch({ type: 'SELECT_EXAMPLE', text: example.text, label: example.label })
   }
 
   // Section 6.8: "if a live run emits error within 10 seconds of
@@ -235,6 +277,9 @@ export default function App() {
         case 'done':
           dispatch({ type: 'DONE', stats: event.data.stats })
           break
+        case 'cancelled':
+          dispatch({ type: 'CANCELLED' })
+          break
         case 'error': {
           const withinRetryWindow = Date.now() - startedAt < 10_000
           const matchedExample = examples.find((ex) => ex.text === state.artifactText)
@@ -268,7 +313,34 @@ export default function App() {
     })
   }
 
-  function handleRun() {
+  // Clicking Run consults the pre-submission check first. Three cases,
+  // and the ordering matters: a verdict already in hand gates
+  // immediately; a check still in flight is awaited (api.js dedupes, so
+  // this joins the debounced request rather than making a second); and no
+  // verdict at all -- mock mode, a failed check, URL mode -- just runs.
+  // The check can only ever ask; it never refuses.
+  async function handleRun() {
+    if (state.inputMode === 'text' && !confirmCheck) {
+      const verdict = textCheck ?? (await checkArtifact(state.artifactText.trim()))
+      if (verdict && verdict.is_reviewable === false) {
+        setConfirmCheck(verdict)
+        return
+      }
+    }
+    setConfirmCheck(null)
+    startRunNow()
+  }
+
+  function handleCancelConfirmed() {
+    setConfirmCancel(false)
+    // Cancels locally AND server-side (api.js's handle) -- the credits
+    // stop, which is the only version of this button worth having.
+    runHandleRef.current?.cancel()
+    compareRunHandleRef.current?.cancel()
+    dispatch({ type: 'CANCELLED' })
+  }
+
+  function startRunNow() {
     runHandleRef.current?.cancel()
     compareRunHandleRef.current?.cancel()
     setViewMode('A')
@@ -421,11 +493,109 @@ export default function App() {
               <span className="step-label">Run it</span>
             </div>
             <button type="button" className="run-button" disabled={!canRun} onClick={handleRun}>
-              {isRunning ? 'Running...' : anyRunStarted ? 'Run again' : 'Run panel'}
+              {isRunning && <span className="run-spinner" aria-hidden="true" />}
+              {isRunning ? 'Running' : anyRunStarted ? 'Run again' : 'Run panel'}
             </button>
+            {isRunning && (
+              <button
+                type="button"
+                className="cancel-button"
+                onClick={() => setConfirmCancel(true)}
+              >
+                Cancel run
+              </button>
+            )}
+            {/* The only place any of this surfaces. state.error,
+                state.retrying and the cancelled status were all tracked by
+                the reducer and rendered nowhere -- section 6.8's "never
+                show a raw error to a judge" had been implemented as never
+                showing an error at all, so a failed run silently stopped
+                with the grid half-full and no explanation. */}
+            {state.retrying && (
+              <p className="run-note run-note-busy">Retrying with a cached example...</p>
+            )}
+            {!state.retrying && state.status === STATUS.CANCELLED && (
+              <p className="run-note">
+                Run cancelled.
+                {liveStats.done > 0 && ` The ${liveStats.done} reactions already in are kept below.`}
+              </p>
+            )}
+            {!state.retrying && state.status === STATUS.ERROR && state.error && (
+              <p className="run-note run-note-error" role="alert">
+                {state.error}
+              </p>
+            )}
+            {confirmCheck && !isRunning && (
+              <div className="check-confirm" role="alert">
+                <span className="check-confirm-kind">
+                  This looks like {confirmCheck.kind}
+                </span>
+                <span className="check-confirm-reason">{confirmCheck.reason}</span>
+                <span className="check-confirm-actions">
+                  <button
+                    type="button"
+                    className="check-confirm-go"
+                    onClick={() => {
+                      setConfirmCheck(null)
+                      startRunNow()
+                    }}
+                  >
+                    Run anyway
+                  </button>
+                  <button
+                    type="button"
+                    className="check-confirm-cancel"
+                    onClick={() => setConfirmCheck(null)}
+                  >
+                    Let me edit it
+                  </button>
+                </span>
+              </div>
+            )}
           </div>
         </aside>
-        {state.compare.visible && (
+        {confirmCancel && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setConfirmCancel(false)}
+          role="presentation"
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="modal-title" id="cancel-modal-title">
+              Cancel this run?
+            </h2>
+            <p className="modal-body">
+              {liveStats.done > 0
+                ? `${liveStats.done} of ${liveStats.total} people have already read it. Those reactions are kept, but the run stops here and there will be no verdict.`
+                : 'The run stops here and there will be no verdict.'}
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-cancel"
+                onClick={() => setConfirmCancel(false)}
+              >
+                Keep running
+              </button>
+              <button
+                type="button"
+                className="modal-destructive"
+                onClick={handleCancelConfirmed}
+                autoFocus
+              >
+                Cancel the run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {state.compare.visible && (
           <div className="compare-textarea-block">
             <div className="edit-label">Compare artifact (locked N: {state.personaCount})</div>
             <textarea className="artifact-textarea" value={state.compare.text} readOnly />

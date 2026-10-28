@@ -245,3 +245,33 @@ def compare_summary_user(
         flipped_pos_summary=flipped_pos_summary,
         flipped_neg_summary=flipped_neg_summary,
     )
+
+
+# --- Pre-submission check (not one of section 4's four prompts) -------------
+
+ARTIFACT_CHECK_SYSTEM = (
+    "You identify what a piece of text is, for a tool that tests marketing "
+    "and public-facing copy on a panel of synthetic readers. You are a "
+    "gatekeeper only against obvious mistakes, not a judge of quality. "
+    "Output only a JSON object matching the schema, no prose, no code fences."
+)
+
+ARTIFACT_CHECK_USER_TEMPLATE = """Someone pasted this into a tool that shows copy to a panel of ordinary people and reports their reactions:
+---
+{artifact_text}
+---
+
+Answer with this schema:
+{schema}
+
+- kind: what this text is, in two to five plain words ("SaaS landing page", "job posting", "Python source code", "random characters").
+- is_reviewable: true if showing this to ordinary readers and asking "what confused you, what would stop you" would produce useful answers. Be generous: landing pages, ads, pricing pages, emails, policy and legal notices, product descriptions, fundraising appeals, job postings, app store listings, press releases, onboarding and error messages, and rough drafts of any of those are ALL reviewable, however short, unpolished or unusual. Writing meant to be read by people is reviewable.
+- Set is_reviewable false only when a panel of readers genuinely has nothing to react to: random or meaningless characters, placeholder text like lorem ipsum, source code, configuration, logs, raw data or tables, machine output, or text that addresses no reader and asks nothing of one. Fiction, jokes and personal writing are not reviewable either -- there is no action for a reader to take or decline.
+- reason: one short sentence addressed to the person who pasted it, saying what you think this is and, when is_reviewable is false, what the panel would fail to tell them. Plain and non-judgmental; never scold, and never comment on how good the writing is.
+"""
+
+
+def artifact_check_user(artifact_text: str, schema_json: str) -> str:
+    return ARTIFACT_CHECK_USER_TEMPLATE.format(
+        artifact_text=artifact_text, schema=schema_json
+    )

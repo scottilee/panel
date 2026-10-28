@@ -177,29 +177,87 @@ const GUT_REACTIONS = [
   "Where's the catch, there's always a catch.",
 ]
 
-const CONFUSIONS = [
+// Two sets, and which one is used depends on whether the artifact is a
+// recognized example.
+//
+// The specific set quotes the pricing example's actual content ("$29",
+// "the free trial"). That reads well when the pricing example is what
+// was submitted -- and is a fabrication about anything else. Reported
+// 2026-10-29: mock mode returned findings about "$29" for text with no
+// price in it at all. Mock data is synthetic by definition, but it must
+// not assert things about the user's copy that are false.
+const SPECIFIC_CONFUSIONS = [
   'Whether the $29 is monthly or one-time',
   'What happens after the free trial',
   'Who this is actually for',
   null,
 ]
 
-const OBJECTIONS = [
+const SPECIFIC_OBJECTIONS = [
   'No visible cancellation policy',
   'No price until the third screen',
   'Too much jargon to trust it',
   null,
 ]
 
-const CHANGES = [
+const SPECIFIC_CHANGES = [
   "Say 'cancel anytime, one click' next to the price",
   'Put the price in the first sentence',
   'Drop the jargon, use plain words',
   'Show one real customer, not a stock photo',
 ]
 
-const NON_NULL_CONFUSIONS = CONFUSIONS.filter((c) => c !== null)
-const NON_NULL_OBJECTIONS = OBJECTIONS.filter((o) => o !== null)
+// The generic set quotes nothing. Every line is true of almost any
+// public-facing copy, so it stays honest about arbitrary input.
+const GENERIC_CONFUSIONS = [
+  'What exactly I am being asked to do',
+  'Who this is meant for',
+  'What it would cost me',
+  null,
+]
+
+const GENERIC_OBJECTIONS = [
+  'Nothing here backs up the claims',
+  'It does not say what happens next',
+  'Too vague to act on',
+  null,
+]
+
+const GENERIC_CHANGES = [
+  'Say plainly what the reader should do next',
+  'Put one concrete number in the first line',
+  'Name who this is for',
+  'Back the main claim with something checkable',
+]
+
+const GENERIC_GUT_REACTIONS = [
+  "I'm not sure what they want me to do here.",
+  'Fine, I skimmed it.',
+  "Too vague for me to care.",
+  'Clear enough, I suppose.',
+  "What's the catch?",
+]
+
+function contentFor(artifactText) {
+  const specific = !!calibrationFor(artifactText).match
+  return specific
+    ? {
+        guts: GUT_REACTIONS,
+        confusions: SPECIFIC_CONFUSIONS.filter((c) => c !== null),
+        objections: SPECIFIC_OBJECTIONS.filter((o) => o !== null),
+        changes: SPECIFIC_CHANGES,
+        nullableConfusions: SPECIFIC_CONFUSIONS,
+        nullableObjections: SPECIFIC_OBJECTIONS,
+      }
+    : {
+        guts: GENERIC_GUT_REACTIONS,
+        confusions: GENERIC_CONFUSIONS.filter((c) => c !== null),
+        objections: GENERIC_OBJECTIONS.filter((o) => o !== null),
+        changes: GENERIC_CHANGES,
+        nullableConfusions: GENERIC_CONFUSIONS,
+        nullableObjections: GENERIC_OBJECTIONS,
+      }
+}
 
 // Bug found 2026-10-28: sentiment used to be `(i % 5) - 2`, a 5-cycle
 // that divides the grid's 10 columns, so every column rendered as one
@@ -208,30 +266,95 @@ const NON_NULL_OBJECTIONS = OBJECTIONS.filter((o) => o !== null)
 // skepticism so the segment filters surface a believable pattern too
 // (filtering to high-skepticism should actually look more negative, the
 // way it does with real model output).
-export function buildMockReaction(persona, i) {
+// Per-example calibration, taken from the real anti-sycophancy
+// measurements on the shipped 1,000-persona pool (README's table) and
+// from the first full N=1000 run of the policy notice.
+//
+// Mock reactions used to be a pure function of the persona list, which
+// meant all three examples produced the SAME distribution -- and a
+// flattering one. Reality differs sharply per artifact: the parking
+// notice has no action to take, so a real run returns 0.0% would-act,
+// while mock mode cheerfully showed people in favour of it. Anyone
+// demoing in mock mode saw a materially rosier picture than the product
+// actually gives, which is the one kind of inaccuracy this project
+// cannot afford.
+//
+// `shift` biases the score (negative = harsher); `actRate` is the share
+// of positive-sentiment personas who also flip would_act.
+//
+// Matched on distinctive phrases, not single words: a bare 'Parking' would
+// have claimed anyone's own copy that happened to mention parking. Each
+// phrase is verified to appear in its example by scripts/check_mock.mjs,
+// which caught 'Nimbus Finance' (a phrase the ad never actually uses)
+// silently dropping ad_v1 to the default calibration.
+// Shifts solved numerically against the real means rather than guessed;
+// actRate set from the real would-act share. Verified at N=1000 below.
+const ARTIFACT_CALIBRATION = [
+  // real: mean -0.28, 2.7% would act -> mock: -0.29, 2.6%
+  { match: 'PlateUp', shift: -6, actRate: 0.1 },
+  // real: mean -0.48, 2.0% would act -> the harshest of the three
+  { match: 'Nimbus is a financial technology company', shift: -10, actRate: 0.08 },
+  // real: mean -0.30, 0.0% would act -- a civic notice offers no action
+  // to take, so nobody "converts" and mock mode must say so too
+  { match: 'RESIDENTIAL PERMIT PARKING', shift: -6, actRate: 0 },
+]
+// Arbitrary pasted text: no measurement to match, so this sits in the
+// same range as the examples rather than pretending to a figure.
+// No `match` key, which is how contentFor tells "this is one of the three
+// examples" from "this is something the user pasted".
+const DEFAULT_CALIBRATION = { shift: -6, actRate: 0.12 }
+
+export function calibrationFor(artifactText) {
+  if (!artifactText) return DEFAULT_CALIBRATION
+  return (
+    ARTIFACT_CALIBRATION.find((c) => artifactText.includes(c.match)) ?? DEFAULT_CALIBRATION
+  )
+}
+
+export function buildMockReaction(persona, i, calibration = DEFAULT_CALIBRATION, content = null) {
+  const c = content ?? contentFor(null)
   const noise = hash32(i * 7 + 13) % 100
-  const score = (100 - persona.skepticism) * 0.6 + noise * 0.4
+  const score = (100 - persona.skepticism) * 0.6 + noise * 0.4 + calibration.shift
   const sentiment = score < 18 ? -2 : score < 38 ? -1 : score < 62 ? 0 : score < 82 ? 1 : 2
   const atTwo = sentiment === 2
   return {
     persona_id: persona.id,
     sentiment,
-    would_act: sentiment >= 1 && hash32(i) % 3 !== 0,
-    gut_reaction: pick(GUT_REACTIONS, hash32(i + 1)),
-    top_confusion: atTwo && hash32(i) % 2 === 0 ? null : pick(NON_NULL_CONFUSIONS, hash32(i + 2)),
-    top_objection: atTwo && hash32(i) % 2 === 1 ? null : pick(NON_NULL_OBJECTIONS, hash32(i + 3)),
-    what_would_change_my_mind: pick(CHANGES, hash32(i + 4)),
+    would_act: sentiment >= 1 && (hash32(i) % 100) / 100 < calibration.actRate,
+    gut_reaction: pick(c.guts, hash32(i + 1)),
+    top_confusion: atTwo && hash32(i) % 2 === 0 ? null : pick(c.confusions, hash32(i + 2)),
+    top_objection: atTwo && hash32(i) % 2 === 1 ? null : pick(c.objections, hash32(i + 3)),
+    what_would_change_my_mind: pick(c.changes, hash32(i + 4)),
     run_id: 'mock-run',
     latency_ms: 300 + (hash32(i) % 7) * 50,
     raw_error: null,
   }
 }
 
-export function buildMockReactions(personas) {
-  return personas.map((p, i) => buildMockReaction(p, i))
+export function buildMockReactions(personas, artifactText) {
+  const calibration = calibrationFor(artifactText)
+  const content = contentFor(artifactText)
+  return personas.map((p, i) => buildMockReaction(p, i, calibration, content))
 }
 
-export function buildMockSynthesis(personas) {
+// Longest sentence in the artifact, used as the edit's current_text for
+// unrecognized input.
+//
+// It has to be a real substring or Apply-and-compare silently does
+// nothing: applyEdit looks for current_text verbatim and falls back to
+// comparing against unedited text. The canned '$29' meant mock
+// Apply-and-compare was inert for every artifact except the pricing
+// example.
+function longestSentence(artifactText) {
+  const sentences = (artifactText ?? '')
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((x) => x.trim())
+    .filter((x) => x.split(/\s+/).length >= 4 && x.length <= 160)
+  if (!sentences.length) return null
+  return sentences.reduce((a, b) => (b.length > a.length ? b : a))
+}
+
+export function buildMockSynthesis(personas, artifactText) {
   // Evidence ids are drawn from the personas this run actually has, and
   // the offsets wrap. Fixed slices at 0-3/10-13/20-23 meant that at N=10
   // or N=20 two of the three findings cited ids with no tile in the grid,
@@ -240,11 +363,52 @@ export function buildMockSynthesis(personas) {
   // -- the N slider's floor is 10.
   const evidenceFrom = (start) =>
     Array.from({ length: Math.min(4, personas.length) }, (_, i) => personas[(start + i) % personas.length].id)
+
+  // The segments and percentages below are real either way: they are
+  // computed over the mock personas, and clicking a segment chip filters
+  // the grid to exactly the people it names. What has to change with the
+  // artifact is the prose, which otherwise claims things about copy that
+  // may not contain them.
+  const specific = !!calibrationFor(artifactText).match
+  const findings = specific
+    ? [
+        'The $29 figure is read as monthly by most low-tech-comfort personas',
+        'High-skepticism personas object to the missing cancellation policy',
+        'Southwest and Southeast US personas are the most price-anchored',
+      ]
+    : [
+        'Low-tech-comfort personas could not tell what they were being asked to do',
+        'High-skepticism personas wanted something checkable before acting',
+        'Southwest and Southeast US personas were the least moved',
+      ]
+  const edit = specific
+    ? {
+        current_text: '$29',
+        proposed_text: '$29 one-time. No subscription.',
+        rationale: 'Resolves the top confusion for a third of personas without changing price.',
+      }
+    : (() => {
+        const target = longestSentence(artifactText)
+        return target
+          ? {
+              current_text: target,
+              proposed_text: `${target.replace(/[.!?]+$/, '')} — and here is the one number that proves it.`,
+              rationale: 'Gives the sentence carrying the most weight something concrete to stand on.',
+            }
+          : {
+              current_text: '',
+              proposed_text: '',
+              rationale: 'No sentence long enough to rewrite.',
+            }
+      })()
+
   return {
-    headline: 'Pricing reads as a subscription to 41% of personas over 55',
+    headline: specific
+      ? 'Pricing reads as a subscription to 41% of personas over 55'
+      : '41% of low-tech-comfort personas could not tell what this asks of them',
     findings: [
       {
-        claim: 'The $29 figure is read as monthly by most low-tech-comfort personas',
+        claim: findings[0],
         affected_pct: 41,
         affected_segment: 'tech_comfort <= 33',
         affected_segment_filter: [{ field: 'tech_comfort', op: '<=', value: 33 }],
@@ -252,7 +416,7 @@ export function buildMockSynthesis(personas) {
         severity: 'high',
       },
       {
-        claim: 'High-skepticism personas object to the missing cancellation policy',
+        claim: findings[1],
         affected_pct: 33,
         affected_segment: 'skepticism >= 70',
         affected_segment_filter: [{ field: 'skepticism', op: '>=', value: 70 }],
@@ -260,7 +424,7 @@ export function buildMockSynthesis(personas) {
         severity: 'medium',
       },
       {
-        claim: 'Southwest and Southeast US personas are the most price-anchored',
+        claim: findings[2],
         affected_pct: 22,
         affected_segment: 'region in [Southwest US, Southeast US]',
         affected_segment_filter: [
@@ -270,14 +434,13 @@ export function buildMockSynthesis(personas) {
         severity: 'low',
       },
     ],
-    highest_leverage_edit: {
-      current_text: '$29',
-      proposed_text: '$29 one-time. No subscription.',
-      rationale: 'Resolves the top confusion for a third of personas without changing price.',
-      predicted_flips: 22,
-    },
-    who_you_are_losing: 'Older, price-sensitive, low-trust readers who leave before the second paragraph.',
-    who_you_are_winning: 'Tech-comfortable 25-40 year olds who skim and see a low number.',
+    highest_leverage_edit: { ...edit, predicted_flips: 22 },
+    who_you_are_losing: specific
+      ? 'Older, price-sensitive, low-trust readers who leave before the second paragraph.'
+      : 'Older, low-trust readers who leave before the second paragraph.',
+    who_you_are_winning: specific
+      ? 'Tech-comfortable 25-40 year olds who skim and see a low number.'
+      : 'Tech-comfortable 25-40 year olds who skim and give it the benefit of the doubt.',
   }
 }
 
@@ -295,10 +458,21 @@ export function buildMockSynthesis(personas) {
 // Fixing it means Run B has to be a deliberate, deterministic edit of
 // Run A's actual reactions, and the compare result has to be computed
 // from that same edit rather than invented independently of it.
+// Sized to the real measured effect, not to look impressive. Across six
+// edit variants against real runs, one good edit flipped 0-7 people in
+// 100 -- which the README and the UI both say out loud, because it is the
+// honest result and the diagnosis is the product. The group used to be a
+// flat 19 in 100, so mock mode contradicted our own headline number by
+// roughly 3x. Scaled by panel size so the rate holds at any N.
+const MOCK_FLIP_RATE = 0.05
+const MOCK_BACKFIRE_RATE = 0.01
+
 function flipGroupsFor(personas) {
+  const positive = Math.max(1, Math.round(personas.length * MOCK_FLIP_RATE))
+  const negative = Math.max(1, Math.round(personas.length * MOCK_BACKFIRE_RATE))
   return {
-    positiveIds: new Set(personas.slice(0, 19).map((p) => p.id)),
-    negativeIds: new Set(personas.slice(19, 22).map((p) => p.id)),
+    positiveIds: new Set(personas.slice(0, positive).map((p) => p.id)),
+    negativeIds: new Set(personas.slice(positive, positive + negative).map((p) => p.id)),
   }
 }
 

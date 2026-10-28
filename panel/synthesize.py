@@ -557,29 +557,153 @@ def _clean_digest(digest: _ShardDigest, shard: list[Reaction]) -> _ShardDigest:
     )
 
 
-def _format_digests(digests: list[tuple[int, _ShardDigest]]) -> str:
-    """No counts printed, deliberately.
+# Caps on what reaches Ultra after merging. At 100 shards the raw digests
+# are ~1800 theme lines and ~35k tokens, which is what made Ultra truncate
+# three times on the first real 1,000-persona run and then emit a finding
+# whose "segment" was every age band at once. Merged and capped, the same
+# material is a few dozen lines.
+MERGED_THEMES_PER_CATEGORY = 12
+MERGED_EXAMPLES_PER_THEME = 8
+MERGED_QUOTES = 12
 
-    persona_ids is a handful of examples, not a tally, so rendering
-    "(3/50)" beside a theme would invent a statistic out of how many
-    examples the model happened to give -- the exact confusion between
-    evidence and quantity that broke the first two versions of this stage.
-    Every number Ultra reports gets recounted from its
-    affected_segment_filter instead.
+# Dropped when building a theme's merge key, so "price too high" and "the
+# price is too high" land in the same bucket. Deliberately tiny: an
+# aggressive stopword list starts merging themes that differ only by the
+# word it removed.
+_THEME_STOPWORDS = frozenset(
+    "a an and are as at be been by for from has have how in is it its of on or "
+    "that the their there they this to too was what when which who will with "
+    "about not no i me my you your we us seems seem feels feel just very "
+    "really quite rather".split()
+)
+
+
+def _theme_key(theme: str) -> str:
+    """Normalized identity for merging. Lowercased, punctuation stripped,
+    stopwords dropped, remaining words sorted -- so word order and
+    articles don't split one theme into three."""
+    words = re.findall(r"[a-z0-9$%]+", theme.lower())
+    kept = [w for w in words if w not in _THEME_STOPWORDS]
+    return " ".join(sorted(kept)) or theme.lower().strip()
+
+
+def _absorb_near_duplicates(merged: dict[str, dict]) -> dict[str, dict]:
+    """Second pass: fold a key into another whose words it contains.
+
+    Stopword removal alone left "high price", "high price seems" and
+    "high me price" as three separate themes, so the same complaint
+    occupied three of Ultra's twelve slots. A key is absorbed only when
+    the shorter one has at least 2 significant words and the longer adds
+    at most 1 -- both guards matter. Without the first, a bare "price"
+    would swallow "high price" and "price unclear" alike and conflate "too
+    expensive" with "I don't understand the price"; without the second,
+    chains of loosely related themes collapse into one.
     """
-    lines = []
-    for n, digest in digests:
-        lines.append(f"--- a batch of {n} reactions ---")
-        for label, themes in (
-            ("confusions", digest.confusions),
-            ("objections", digest.objections),
-            ("requested changes", digest.requested_changes),
-        ):
-            lines.append(f"{label}:")
-            for t in themes:
-                lines.append(f"  - {t.theme} [e.g. {', '.join(t.persona_ids)}]")
-        lines.append("representative quotes:")
-        lines.extend(f"  {q}" for q in digest.quotes)
+    keys = sorted(merged, key=lambda k: (len(k.split()), k))
+    absorbed: dict[str, str] = {}
+    for i, short in enumerate(keys):
+        if short in absorbed:
+            continue
+        short_words = set(short.split())
+        if len(short_words) < 2:
+            continue
+        for long in keys[i + 1 :]:
+            if long in absorbed:
+                continue
+            long_words = set(long.split())
+            if short_words <= long_words and len(long_words) - len(short_words) <= 1:
+                absorbed[long] = short
+    for long, short in absorbed.items():
+        target, src = merged[short], merged.pop(long)
+        target["labels"].extend(src["labels"])
+        target["ids"].extend(src["ids"])
+        target["shards"] += src["shards"]
+    return merged
+
+
+def _merge_themes(
+    per_shard: list[list[_DigestTheme]], cap: int
+) -> list[tuple[str, int, list[str]]]:
+    """Collapse the same theme across shards -> (label, shards, examples).
+
+    `shards` is how many batches raised it, which is a real count made in
+    Python from real data -- the thing the models could not be trusted to
+    do (see _DIGEST_USER_TEMPLATE). It is a far better signal than the
+    hundred fragmentary repeats it replaces: Ultra previously had to infer
+    "most batches mention price" by reading 100 separate blocks.
+    """
+    merged: dict[str, dict] = {}
+    for themes in per_shard:
+        # One shard counts once toward a theme however it phrases it.
+        seen_here: set[str] = set()
+        for t in themes:
+            key = _theme_key(t.theme)
+            entry = merged.setdefault(key, {"labels": [], "shards": 0, "ids": []})
+            entry["labels"].append(t.theme.strip())
+            entry["ids"].extend(t.persona_ids)
+            if key not in seen_here:
+                entry["shards"] += 1
+                seen_here.add(key)
+
+    merged = _absorb_near_duplicates(merged)
+
+    rows = []
+    for entry in merged.values():
+        # Shortest phrasing as the label: with dozens of variants of the
+        # same complaint, the terse one reads best and the long ones are
+        # usually one shard's editorializing.
+        label = min(entry["labels"], key=len)
+        ids = list(dict.fromkeys(entry["ids"]))[:MERGED_EXAMPLES_PER_THEME]
+        # Clamped: absorbing variants sums their shard counts, and one
+        # shard raising two phrasings of the same theme would otherwise
+        # push the total above the number of batches that exist.
+        rows.append((label, min(entry["shards"], len(per_shard)), ids))
+    rows.sort(key=lambda r: (-r[1], r[0]))
+    return rows[:cap]
+
+
+def _format_digests(digests: list[tuple[int, _ShardDigest]]) -> str:
+    """Themes merged across shards, counted in Python, capped.
+
+    This used to print one block per shard. That was fine at 4 shards and
+    actively harmful at 100: ~35k tokens of near-duplicate themes, which
+    on the first full 1,000-persona run made Ultra truncate at 6000,
+    12000 and 24000 in turn (spilling its reasoning into the content
+    field) and produce a finding whose affected_segment was "all
+    residents", filtered on every age band at once. Merging is pure
+    Python, costs no extra call, and gives Ultra a better input than it
+    had: one line per distinct theme with a real cross-panel count.
+    """
+    shard_count = len(digests)
+    reaction_count = sum(n for n, _ in digests)
+    lines = [
+        f"Themes across {shard_count} batches covering {reaction_count} reactions. "
+        f'"raised in N batches" is counted from the batches themselves:'
+    ]
+    for label, getter in (
+        ("confusions", lambda d: d.confusions),
+        ("objections", lambda d: d.objections),
+        ("requested changes", lambda d: d.requested_changes),
+    ):
+        lines.append(f"\n{label}:")
+        rows = _merge_themes([getter(d) for _, d in digests], MERGED_THEMES_PER_CATEGORY)
+        if not rows:
+            lines.append("  (none reported)")
+        for theme, shards, ids in rows:
+            lines.append(
+                f"  - {theme} -- raised in {shards} of {shard_count} batches "
+                f"[e.g. {', '.join(ids)}]"
+            )
+
+    # Quotes are already short and already a sample; take them round-robin
+    # across shards so they don't all come from the first few batches.
+    quotes: list[str] = []
+    for i in range(max((len(d.quotes) for _, d in digests), default=0)):
+        for _, d in digests:
+            if i < len(d.quotes):
+                quotes.append(d.quotes[i])
+    lines.append("\nrepresentative quotes:")
+    lines.extend(f"  {q}" for q in quotes[:MERGED_QUOTES])
     return "\n".join(lines)
 
 

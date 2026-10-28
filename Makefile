@@ -16,6 +16,8 @@ IMAGE   = $(REGION)-docker.pkg.dev/$(PROJECT)/$(SERVICE)/$(SERVICE):latest
 ## Run the test suite (no API calls, no credits)
 test:
 	python3 -m pytest tests/ -q
+	@node scripts/check_precheck.mjs
+	@node scripts/check_mock.mjs
 
 ## Build the container locally
 build:

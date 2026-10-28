@@ -19,12 +19,15 @@ from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
 
 from panel import config
+from panel.classify import check_artifact
 from panel.compare import delta
 from panel.fetch import UnsafeURLError, fetch_url_text
 from panel.personas import load_personas, sample_stable
 from panel.react import fan_out
 from panel.schemas import (
     Artifact,
+    ArtifactCheck,
+    CheckRequest,
     CompareRequest,
     CompareResult,
     Persona,
@@ -74,6 +77,9 @@ class RunContext:
 
 RUNS: dict[str, RunContext] = {}
 
+# A run still doing (and still paying for) work.
+ACTIVE_STATUSES = ("pending", "streaming", "synthesizing")
+
 # RUNS is the only record of a run that an SSE reconnect or a /compare can
 # read (section 5.4 keeps it in process memory deliberately -- hence
 # max_instance_count = 1 in infra/). It used to grow without bound, which
@@ -116,7 +122,7 @@ def _evict_old_runs() -> None:
     removable = [
         rid
         for rid, c in RUNS.items()
-        if c.run.status in ("done", "error") and not c.subscribers
+        if c.run.status in ("done", "error", "cancelled") and not c.subscribers
     ]
     for rid in removable[: max(0, len(RUNS) - MAX_RETAINED_RUNS)]:
         del RUNS[rid]
@@ -133,6 +139,10 @@ PERSONA_POOL = load_personas()
 MAX_PERSONA_COUNT = int(config.env("MAX_PERSONA_COUNT") or "1000")
 MAX_CONCURRENT_RUNS = int(config.env("MAX_CONCURRENT_RUNS") or "3")
 RATE_LIMIT_RUNS = int(config.env("RATE_LIMIT_RUNS") or "20")
+# Far higher than the run limit on purpose: a check is a single Nano call,
+# roughly a thousandth of a full run, and it is the thing a user triggers
+# repeatedly while editing their copy.
+RATE_LIMIT_CHECKS = int(config.env("RATE_LIMIT_CHECKS") or "120")
 RATE_LIMIT_WINDOW_S = int(config.env("RATE_LIMIT_WINDOW_S") or "3600")
 
 _RUN_TIMES_BY_IP: dict[str, list[float]] = defaultdict(list)
@@ -212,6 +222,14 @@ def _compute_stats(reactions: list[Reaction], nano_calls: int, ultra_ms: int) ->
     )
 
 
+async def _mark_cancelled(ctx: RunContext) -> None:
+    if ctx.run.status == "cancelled":
+        return
+    print(f"run {ctx.run.run_id} cancelled by the user", flush=True)
+    ctx.run.status = "cancelled"
+    await _broadcast(ctx, "cancelled", {"done": len(ctx.run.reactions)})
+
+
 async def _fail_run(ctx: RunContext, exc: Exception) -> None:
     """Marks a run failed, logging the real exception server-side and
     broadcasting a generic message.
@@ -281,6 +299,9 @@ async def _execute_cached_run(ctx: RunContext, cached_data: dict) -> None:
         await _broadcast(ctx, "synthesis", synthesis)
         run.status = "done"
         await _broadcast(ctx, "done", {"stats": run.stats.model_dump(mode="json")})
+    except asyncio.CancelledError:
+        await _mark_cancelled(ctx)
+        raise
     except Exception as e:  # noqa: BLE001
         await _fail_run(ctx, e)
     finally:
@@ -315,6 +336,12 @@ async def _execute_run(ctx: RunContext) -> None:
 
         run.status = "done"
         await _broadcast(ctx, "done", {"stats": run.stats.model_dump(mode="json")})
+    except asyncio.CancelledError:
+        # A deliberate stop, not a failure. Marked and broadcast before
+        # re-raising so every open stream gets a terminal event instead of
+        # waiting forever on a queue nobody will write to again.
+        await _mark_cancelled(ctx)
+        raise
     except Exception as e:  # noqa: BLE001 -- unrecoverable failure, section 5.4's "error" status
         await _fail_run(ctx, e)
     finally:
@@ -335,28 +362,33 @@ def _cache_covers(cached_data: dict, personas: list[Persona]) -> bool:
 
 
 def _active_run_count() -> int:
-    return sum(1 for c in RUNS.values() if c.run.status in ("pending", "streaming", "synthesizing"))
+    return sum(1 for c in RUNS.values() if c.run.status in ACTIVE_STATUSES)
 
 
-def _check_rate_limit(client_ip: str) -> None:
-    """Per-client run budget over a rolling window.
+def _check_rate_limit(client_ip: str, bucket: str = "run", limit: int | None = None) -> None:
+    """Per-client budget over a rolling window, per bucket.
 
     This service is public, unauthenticated (allUsers invoker), CORS-open,
     and every POST /run spends real Token Factory credits -- up to 1,000
-    Nano calls plus Super digests plus one Ultra call. A for-loop against
-    the demo URL would drain the hackathon budget, and it has to survive
-    six weeks of judging unattended. An in-process window is sound here
-    specifically because the deployment is pinned to one instance
+    Nano calls plus Super condensing calls plus one Ultra call. A for-loop
+    against the demo URL would drain the hackathon budget, and it has to
+    survive six weeks of judging unattended. An in-process window is sound
+    here specifically because the deployment is pinned to one instance
     (max_instance_count = 1, for the SSE state reasons documented in
     infra/main.tf).
+
+    Buckets keep cheap endpoints from eating an expensive endpoint's
+    allowance: POST /check is one Nano call, so a user typing and
+    re-checking should never find they have no runs left.
     """
+    cap = RATE_LIMIT_RUNS if limit is None else limit
     now = time.monotonic()
-    window = _RUN_TIMES_BY_IP[client_ip]
+    window = _RUN_TIMES_BY_IP[f"{bucket}:{client_ip}"]
     window[:] = [t for t in window if now - t < RATE_LIMIT_WINDOW_S]
-    if len(window) >= RATE_LIMIT_RUNS:
+    if len(window) >= cap:
         raise HTTPException(
             429,
-            f"rate limit: at most {RATE_LIMIT_RUNS} runs per "
+            f"rate limit: at most {cap} {bucket} requests per "
             f"{RATE_LIMIT_WINDOW_S // 60} minutes from one client",
         )
     window.append(now)
@@ -476,11 +508,14 @@ async def stream_run(run_id: str) -> EventSourceResponse:
             if run.status == "error":
                 yield _sse_event("error", {"message": ctx.error_message or "unknown error"})
                 return
+            if run.status == "cancelled":
+                yield _sse_event("cancelled", {"done": len(run.reactions)})
+                return
 
             while True:
                 event = await queue.get()
                 yield event
-                if event["event"] in ("done", "error"):
+                if event["event"] in ("done", "error", "cancelled"):
                     break
         finally:
             if queue in ctx.subscribers:
@@ -497,6 +532,34 @@ async def get_run(run_id: str) -> Run:
     return ctx.run
 
 
+@app.post("/run/{run_id}/cancel")
+async def cancel_run(run_id: str) -> dict:
+    """Actually stops the work, which is the whole point.
+
+    The frontend's own cancel only closed its EventSource, so the server
+    carried on through every remaining Nano call and the synthesis -- at
+    1,000 personas that is most of a run's cost still being spent on a
+    result nobody would see. Cancelling ctx.task propagates into
+    fan_out's finally block, which cancels the in-flight reaction tasks
+    too, so the spend stops within one call's latency.
+    """
+    ctx = RUNS.get(run_id)
+    if ctx is None:
+        raise HTTPException(404, "run not found")
+    if ctx.run.status not in ACTIVE_STATUSES:
+        # Idempotent: a double-click, or a cancel racing the run's own
+        # completion, is not an error.
+        return {"run_id": run_id, "status": ctx.run.status, "cancelled": False}
+    if ctx.task is not None:
+        ctx.task.cancel()
+    # Marked here as well as in the task's own handler: the task may be
+    # suspended somewhere that takes a moment to unwind, and the caller
+    # should see the new status in this response.
+    await _mark_cancelled(ctx)
+    _persist(ctx)
+    return {"run_id": run_id, "status": ctx.run.status, "cancelled": True}
+
+
 @app.post("/compare")
 async def compare_runs(req: CompareRequest) -> CompareResult:
     ctx_a = RUNS.get(req.run_a)
@@ -506,6 +569,22 @@ async def compare_runs(req: CompareRequest) -> CompareResult:
     if ctx_a.run.status != "done" or ctx_b.run.status != "done":
         raise HTTPException(409, "both runs must be done before comparing")
     return await delta(ctx_a.run, ctx_b.run)
+
+
+@app.post("/check")
+async def check_text(request: Request, req: CheckRequest) -> ArtifactCheck:
+    """Advisory pre-submission check -- see panel/classify.py.
+
+    Deliberately NOT called from inside POST /run. The whole value is that
+    the user gets to decide, and a server-side gate could only refuse,
+    which is the one behaviour we don't want: their copy is their call.
+    """
+    _check_rate_limit(
+        request.client.host if request.client else "unknown",
+        bucket="check",
+        limit=RATE_LIMIT_CHECKS,
+    )
+    return await check_artifact(req.text)
 
 
 @app.get("/personas")

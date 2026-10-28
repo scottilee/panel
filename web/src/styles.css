@@ -13,6 +13,11 @@
   --text-placeholder: #6b7280;
   --border: #d9dde3;
   --accent: #1f6feb;
+  /* Destructive actions only (cancel a run). Deliberately a true red,
+     distinct from --sentiment-neg2's orange: sentiment colours describe
+     data, this one describes consequence, and conflating them would make
+     a negative reaction look like a warning. */
+  --danger: #c0352b;
   --link: #1f5fd1;
   --link-hover: #163f8c;
 
@@ -1520,4 +1525,206 @@ input::placeholder {
   background: #ffffff;
   color: #111827;
   box-shadow: 0 1px 2px rgba(17, 24, 39, 0.12);
+}
+
+/* Pre-submission check advisory (panel/classify.py). Deliberately styled
+   as a caution rather than an error: the check is advisory, the run is
+   one click away, and "Run anyway" is listed first because the user's
+   own judgement about their own copy beats ours. Borrows the negative
+   sentiment hue rather than introducing a new colour. */
+.check-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--sentiment-neg1);
+  border-left: 3px solid var(--sentiment-neg2);
+  border-radius: 10px;
+  background: #fdf6f0;
+}
+
+.check-confirm-kind {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.check-confirm-reason {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.check-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.check-confirm-go,
+.check-confirm-cancel {
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.check-confirm-go {
+  border: 0;
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.check-confirm-cancel {
+  border: 1px solid var(--chip-border);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+}
+
+/* Run button spinner. The button is already disabled while a run is in
+   flight (canRun gates on isRunning); the spinner is what makes that
+   state legible rather than looking like a dead control. */
+.run-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
+.run-spinner {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: run-spin 0.7s linear infinite;
+}
+
+@keyframes run-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Respect a stated preference for less motion: the spinner is decorative,
+   and the disabled button plus "Running" label already carry the state. */
+@media (prefers-reduced-motion: reduce) {
+  .run-spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* Cancel is destructive, so it reads as destructive -- but secondary to
+   the run button above it, since stopping is the rarer intent. */
+.cancel-button {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 8px;
+  border: 1px solid var(--danger);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cancel-button:hover {
+  background: var(--danger);
+  color: #ffffff;
+}
+
+/* --- Modal ------------------------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(17, 24, 39, 0.45);
+}
+
+.modal {
+  width: 100%;
+  max-width: 400px;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  box-shadow: 0 18px 48px rgba(17, 24, 39, 0.28);
+}
+
+.modal-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.modal-body {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.modal-cancel,
+.modal-destructive {
+  flex: 1 1 140px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* "Keep running" first and visually calmer: the destructive action should
+   never be the one a reflexive click lands on. */
+.modal-cancel {
+  border: 1px solid var(--chip-border);
+  background: var(--chip-bg);
+  color: var(--chip-fg);
+}
+
+.modal-destructive {
+  border: 0;
+  background: var(--danger);
+  color: #ffffff;
+}
+
+/* Run status notes under the run button: retrying, cancelled, error.
+   Small and inline rather than a page-level banner -- they belong next to
+   the control that caused them. */
+.run-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.run-note-busy {
+  color: var(--accent);
+}
+
+.run-note-error {
+  padding: 8px 10px;
+  border-radius: 9px;
+  border-left: 3px solid var(--danger);
+  background: #fdf1f0;
+  color: #8a2520;
 }

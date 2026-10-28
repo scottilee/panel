@@ -168,7 +168,15 @@ class Run(BaseModel):
     run_id: str
     artifact: Artifact
     persona_set: str
-    status: Literal["pending", "streaming", "synthesizing", "done", "error"] = "pending"
+    # "cancelled" is an addition beyond section 3's five states, needed by
+    # the user-facing cancel button (2026-10-29 request). Flagging rather
+    # than folding it into "error": a deliberate stop is not a failure,
+    # the UI must not show "something went wrong" for it, and reusing
+    # "error" would also mean inventing an error message for a run that
+    # did exactly what it was told.
+    status: Literal[
+        "pending", "streaming", "synthesizing", "done", "error", "cancelled"
+    ] = "pending"
     reactions: list[Reaction] = Field(default_factory=list)
     synthesis: Synthesis | None = None
     stats: RunStats = Field(default_factory=RunStats)
@@ -190,6 +198,21 @@ class CompareResult(BaseModel):
     flipped_negative: int
     would_act_delta_pct: float
     summary: str
+
+
+class ArtifactCheck(BaseModel):
+    """Pre-submission sanity check on what the user pasted.
+
+    Not in the build spec. Added because a panel will dutifully react to
+    anything -- gibberish, a config file, a joke -- and produce a
+    confident, meaningless report, which is worse than refusing. The check
+    only ever *advises*: the user can always run anyway, and a failed
+    check never blocks a run (see panel/classify.py).
+    """
+
+    kind: str = Field(max_length=60)
+    is_reviewable: bool
+    reason: str = Field(max_length=240)
 
 
 # --- HTTP request bodies (section 3's API table) ---------------------------
@@ -216,3 +239,14 @@ class RunRequest(BaseModel):
 class CompareRequest(BaseModel):
     run_a: str
     run_b: str
+
+
+class CheckRequest(BaseModel):
+    # Same bounds as RunRequest.text, so anything the run endpoint would
+    # accept can be checked first and nothing else wastes a model call.
+    text: str = Field(min_length=50, max_length=20000)
+
+    @field_validator("text")
+    @classmethod
+    def _strip_text(cls, v: str) -> str:
+        return v.strip()

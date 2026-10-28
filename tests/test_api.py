@@ -339,3 +339,158 @@ def test_cached_replay_reports_zero_cost():
     assert stats.ultra_ms == 0
     # The sentiment figures stay real -- they describe what is on screen.
     assert stats.mean_sentiment != 0
+
+
+# --- Pre-submission check (POST /check) ------------------------------------
+
+
+def test_check_rejects_text_below_the_run_minimum():
+    """Same bounds as RunRequest.text, so anything /run would accept can be
+    checked first and nothing else wastes a model call."""
+    assert client.post("/check", json={"text": "too short"}).status_code == 422
+    assert client.post("/check", json={"text": "x" * 20_001}).status_code == 422
+    assert client.post("/check", json={}).status_code == 422
+
+
+def test_check_has_its_own_rate_limit_bucket():
+    """A check is one Nano call, roughly a thousandth of a run. Spending
+    checks must not leave a user unable to run."""
+    from api.main import RATE_LIMIT_CHECKS, RATE_LIMIT_RUNS, _check_rate_limit
+
+    assert RATE_LIMIT_CHECKS > RATE_LIMIT_RUNS
+    for _ in range(RATE_LIMIT_RUNS):
+        _check_rate_limit("1.2.3.4", bucket="check", limit=RATE_LIMIT_CHECKS)
+    # The run bucket is untouched by all of that.
+    _check_rate_limit("1.2.3.4", bucket="run")
+
+
+def test_check_rate_limit_eventually_refuses():
+    import pytest as _pytest
+    from fastapi import HTTPException
+
+    from api.main import _check_rate_limit
+
+    for _ in range(3):
+        _check_rate_limit("9.9.9.9", bucket="check", limit=3)
+    with _pytest.raises(HTTPException) as exc:
+        _check_rate_limit("9.9.9.9", bucket="check", limit=3)
+    assert exc.value.status_code == 429
+    assert "check requests" in exc.value.detail
+
+
+def test_check_fails_open_when_the_model_call_fails(monkeypatch):
+    """A broken checker must never cost someone a legitimate run, so every
+    failure resolves to is_reviewable=True."""
+    import asyncio
+
+    from panel import classify
+
+    async def boom(**kwargs):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr(classify, "chat_json", boom)
+    verdict = asyncio.run(classify.check_artifact("x" * 60))
+    assert verdict.is_reviewable is True
+    assert "could not run" in verdict.reason
+
+
+def test_check_returns_the_models_verdict_when_it_works(monkeypatch):
+    import asyncio
+
+    from panel import classify
+    from panel.schemas import ArtifactCheck
+    from panel.tf_client import ChatJsonResult
+
+    async def fake(**kwargs):
+        return ChatJsonResult(
+            data=ArtifactCheck(
+                kind="Python source code",
+                is_reviewable=False,
+                reason="This is code, which readers cannot meaningfully react to.",
+            ),
+            latency_ms=5,
+            attempts=1,
+        )
+
+    monkeypatch.setattr(classify, "chat_json", fake)
+    verdict = asyncio.run(classify.check_artifact("def f(): pass\n" * 10))
+    assert verdict.is_reviewable is False
+    assert verdict.kind == "Python source code"
+
+
+# --- Cancelling a run (2026-10-29) -----------------------------------------
+#
+# The frontend's cancel used to only close its EventSource, so the server
+# carried on through every remaining Nano call and the synthesis -- at
+# 1,000 personas, most of a run's cost spent on a result nobody would see.
+
+
+def test_cancel_unknown_run_is_404():
+    assert client.post("/run/does-not-exist/cancel").status_code == 404
+
+
+def test_cancel_marks_the_run_and_cancels_its_task():
+    import asyncio
+
+    async def scenario():
+        ctx = _finished_ctx("to-cancel", status="streaming")
+        started = asyncio.Event()
+
+        async def long_run():
+            started.set()
+            await asyncio.sleep(3600)
+
+        ctx.task = asyncio.create_task(long_run())
+        await started.wait()
+        RUNS["to-cancel"] = ctx
+
+        from api.main import cancel_run
+
+        result = await cancel_run("to-cancel")
+        assert result["cancelled"] is True
+        assert result["status"] == "cancelled"
+        assert ctx.run.status == "cancelled"
+        # The driving task is actually stopped, which is what stops the spend.
+        await asyncio.sleep(0)
+        assert ctx.task.cancelled() or ctx.task.done()
+
+    asyncio.run(scenario())
+    RUNS.clear()
+
+
+def test_cancel_is_idempotent():
+    """A double-click, or a cancel racing the run's own completion, is not
+    an error."""
+    import asyncio
+
+    from api.main import cancel_run
+
+    RUNS["already"] = _finished_ctx("already", status="done")
+    result = asyncio.run(cancel_run("already"))
+    assert result["cancelled"] is False
+    assert result["status"] == "done"
+    RUNS.clear()
+
+
+def test_cancelled_runs_do_not_count_against_the_concurrency_limit():
+    from api.main import MAX_CONCURRENT_RUNS, _active_run_count
+
+    RUNS.clear()
+    for i in range(MAX_CONCURRENT_RUNS + 2):
+        RUNS[f"c{i}"] = _finished_ctx(f"c{i}", status="cancelled")
+    assert _active_run_count() == 0
+    r = client.post("/run", json={"text": LONG_ENOUGH, "persona_count": 10})
+    # Not a 429 -- cancelled runs are finished runs.
+    assert r.status_code != 429
+    RUNS.clear()
+
+
+def test_a_cancelled_run_is_evictable():
+    from api.main import MAX_RETAINED_RUNS, _evict_old_runs
+
+    RUNS.clear()
+    for i in range(MAX_RETAINED_RUNS + 5):
+        RUNS[f"c{i:03d}"] = _finished_ctx(f"c{i:03d}", status="cancelled")
+    _evict_old_runs()
+    assert len(RUNS) == MAX_RETAINED_RUNS
+    RUNS.clear()

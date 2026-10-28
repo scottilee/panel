@@ -228,30 +228,31 @@ def _reaction(i):
     )
 
 
-def test_format_digests_renders_themes_as_examples_not_counts():
-    """The digest carries no quantities at all. The model is asked for a
-    few example ids per theme, and rendering "(2/50)" from however many
-    examples it happened to give would manufacture a statistic -- the
-    confusion between evidence and quantity that broke this stage twice.
+def test_format_digests_reports_batch_counts_not_example_counts():
+    """The count beside a theme is how many batches raised it -- computed
+    in Python from the batches themselves. What it must never be is the
+    number of example ids the model happened to supply, which would
+    manufacture a statistic out of an arbitrary sample.
     """
-    from panel.synthesize import _DigestTheme, _format_digests, _ShardDigest
+    from panel.synthesize import _format_digests
 
-    digest = _ShardDigest(
-        confusions=[
-            _DigestTheme(theme="price is unclear", persona_ids=["p001", "p002"]),
-            _DigestTheme(theme="no trial mentioned", persona_ids=["p005", "p006", "p007"]),
-        ],
-        objections=[_DigestTheme(theme="too expensive", persona_ids=["p003", "p009"])],
-        requested_changes=[_DigestTheme(theme="state the price", persona_ids=["p004", "p008"])],
-        quotes=['p001: "What does it cost?"'],
-    )
-    out = _format_digests([(50, digest)])
-    assert "a batch of 50 reactions" in out
-    assert "price is unclear [e.g. p001, p002]" in out
-    assert "no trial mentioned [e.g. p005, p006, p007]" in out
+    digests = [
+        (
+            10,
+            _shard(
+                confusions=[_theme("price is unclear", ["p001", "p002"])],
+                objections=[_theme("too expensive", ["p003", "p009"])],
+                quotes=['p001: "What does it cost?"'],
+            ),
+        ),
+        (10, _shard(confusions=[_theme("price is unclear", ["p011"])])),
+    ]
+    out = _format_digests(digests)
+    assert "covering 20 reactions" in out
+    # Raised in both batches, though one gave two examples and one gave one.
+    assert "price is unclear -- raised in 2 of 2 batches" in out
+    assert "too expensive -- raised in 1 of 2 batches" in out
     assert 'p001: "What does it cost?"' in out
-    # No "/50" fraction anywhere beside a theme.
-    assert "/50)" not in out
 
 
 def test_digest_theme_examples_are_capped():
@@ -355,7 +356,7 @@ async def test_large_panel_shards_through_super(monkeypatch, pool):
     # The raw reactions must NOT also be in the prompt -- that's the whole
     # point of digesting them.
     assert '"gut_reaction": "Hm."' not in captured["user"]
-    assert "price is unclear [e.g. p001," in captured["user"]
+    assert "price is unclear -- raised in 25 of 25 batches" in captured["user"]
 
 
 @pytest.mark.asyncio
@@ -624,3 +625,138 @@ async def test_a_shard_of_only_failed_reactions_is_skipped(monkeypatch, pool):
     import asyncio
 
     assert await S._digest_shard([broken], asyncio.Semaphore(1)) is None
+
+
+# --- Theme merging (added after the first full 1,000-persona run) ----------
+#
+# At 100 shards the unmerged digests were ~1800 theme lines and ~35k tokens.
+# On the first real N=1000 run Ultra truncated at 6000, 12000 and 24000 in
+# turn and produced a finding whose affected_segment was "all residents",
+# filtered on every age band at once. Merging is what fixed that.
+
+
+def _theme(text, ids):
+    from panel.synthesize import _DigestTheme
+
+    return _DigestTheme(theme=text, persona_ids=ids)
+
+
+def _shard(confusions=(), objections=(), requested=(), quotes=()):
+    from panel.synthesize import _ShardDigest
+
+    return _ShardDigest(
+        confusions=list(confusions),
+        objections=list(objections),
+        requested_changes=list(requested),
+        quotes=list(quotes),
+    )
+
+
+def test_theme_key_ignores_word_order_and_filler():
+    from panel.synthesize import _theme_key
+
+    same = ["price too high", "the price is too high", "Price is too high!", "too high price"]
+    assert len({_theme_key(t) for t in same}) == 1
+
+
+def test_merge_collapses_phrasings_of_one_theme():
+    from panel.synthesize import _merge_themes
+
+    per_shard = [
+        [_theme("price too high", ["p001"])],
+        [_theme("the price is too high", ["p002"])],
+        [_theme("Price is too high for me", ["p003"])],
+        [_theme("the price seems too high", ["p004"])],
+    ]
+    rows = _merge_themes(per_shard, cap=10)
+    assert len(rows) == 1
+    label, shards, ids = rows[0]
+    assert shards == 4
+    assert ids == ["p001", "p002", "p003", "p004"]
+    # Shortest phrasing wins as the label.
+    assert label == "price too high"
+
+
+def test_merge_keeps_genuinely_different_themes_apart():
+    """The failure that would matter: 'too expensive' and 'I can't tell what
+    it costs' are different complaints that both mention price."""
+    from panel.synthesize import _merge_themes
+
+    per_shard = [
+        [_theme("price too high", ["p001"]), _theme("price unclear", ["p002"])],
+        [_theme("price too high", ["p003"]), _theme("price unclear", ["p004"])],
+    ]
+    rows = _merge_themes(per_shard, cap=10)
+    assert len(rows) == 2
+    assert {r[0] for r in rows} == {"price too high", "price unclear"}
+
+
+def test_a_single_word_theme_never_absorbs_others():
+    """Guard on the subset rule: a bare 'price' must not swallow both
+    'price too high' and 'price unclear' and conflate them."""
+    from panel.synthesize import _merge_themes
+
+    per_shard = [
+        [_theme("price", ["p001"])],
+        [_theme("price too high", ["p002"])],
+        [_theme("price unclear", ["p003"])],
+    ]
+    rows = _merge_themes(per_shard, cap=10)
+    assert len(rows) == 3
+
+
+def test_merge_counts_a_shard_once_per_theme():
+    """Two phrasings of one theme inside a single shard is still one shard
+    raising it, and the printed count must never exceed the batch count."""
+    from panel.synthesize import _merge_themes
+
+    per_shard = [[_theme("price too high", ["p001"]), _theme("the price is too high", ["p002"])]]
+    rows = _merge_themes(per_shard, cap=10)
+    assert len(rows) == 1
+    assert rows[0][1] == 1
+
+
+def test_merge_sorts_by_how_many_batches_raised_it():
+    from panel.synthesize import _merge_themes
+
+    per_shard = [[_theme("rare thing", ["p001"])]] + [
+        [_theme("common thing", [f"p{i:03d}"])] for i in range(2, 12)
+    ]
+    rows = _merge_themes(per_shard, cap=10)
+    assert rows[0][0] == "common thing"
+    assert rows[0][1] == 10
+
+
+def test_format_digests_stays_small_at_a_hundred_shards():
+    """The whole point: ~35k tokens of near-duplicate themes became a few
+    hundred, which is what stopped Ultra truncating three times."""
+    from panel.synthesize import _format_digests
+
+    digests = [
+        (
+            10,
+            _shard(
+                confusions=[_theme("price too high", [f"p{i * 10 + 1:03d}"])],
+                objections=[_theme("no proof of savings", [f"p{i * 10 + 2:03d}"])],
+                requested=[_theme("state the price", [f"p{i * 10 + 3:03d}"])],
+                quotes=[f'p{i * 10 + 1:03d}: "quote {i}"'],
+            ),
+        )
+        for i in range(100)
+    ]
+    out = _format_digests(digests)
+    assert len(out) < 4000, f"{len(out)} chars is too much to hand Ultra"
+    assert "raised in 100 of 100 batches" in out
+    assert "covering 1000 reactions" in out
+    # Capped, so a pathological digest can't blow the prompt back up.
+    from panel.synthesize import MERGED_QUOTES
+
+    assert out.count('"quote ') <= MERGED_QUOTES
+
+
+def test_format_digests_caps_themes_per_category():
+    from panel.synthesize import MERGED_THEMES_PER_CATEGORY, _format_digests
+
+    digests = [(10, _shard(confusions=[_theme(f"distinct issue {i}", ["p001"])])) for i in range(40)]
+    out = _format_digests(digests)
+    assert out.count("distinct issue") == MERGED_THEMES_PER_CATEGORY

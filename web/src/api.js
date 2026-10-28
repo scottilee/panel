@@ -7,6 +7,7 @@
 // synthesizes the same sequence on timers, with no network and no credits
 // spent.
 
+import { localPrecheck } from './precheck.js'
 import {
   buildMockCompareResult,
   buildMockPersonas,
@@ -43,6 +44,50 @@ async function loadRealPool() {
   if (!res.ok) throw new Error(`GET /personas failed: HTTP ${res.status}`)
   realPoolCache = await res.json()
   return realPoolCache
+}
+
+// Advisory pre-submission check (POST /check, one Nano call). Returns
+// null in mock mode, which has no backend to ask -- the caller treats
+// null as "no opinion" and runs.
+//
+// Keyed by the exact text so the verdict can be computed while the user
+// is still reading their own paste and reused when they click Run. The
+// check takes 5-10s, which is fine in the background and bad in front of
+// a button press.
+const checkCache = new Map()
+
+export async function checkArtifact(text) {
+  const key = (text ?? '').trim()
+  if (!key) return null
+
+  // Local pass first, in both modes: instant, free, and the only check
+  // available in mock mode (which has no backend to ask). It only fires
+  // on overwhelming signals, so when it does there is nothing a model
+  // call would add.
+  const local = localPrecheck(key)
+  if (local) return local
+
+  if (isMockMode()) return null
+  if (checkCache.has(key)) return checkCache.get(key)
+
+  const pending = (async () => {
+    const res = await fetch('/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: key }),
+    })
+    if (!res.ok) return null // fails open, same as the server side
+    return res.json()
+  })()
+  // Cache the promise, not the result: a debounced check and a Run click
+  // racing on the same text should share one request, not make two.
+  checkCache.set(key, pending)
+  try {
+    return await pending
+  } catch {
+    checkCache.delete(key)
+    return null
+  }
 }
 
 export async function getPoolSize() {
@@ -89,7 +134,7 @@ export function previewPersonas(n) {
 // _find_cached_example); mock mode ignores it, since it has no such
 // concept.
 export function startRun({ text, url, label, personaCount, onEvent, previousReactionsById, cached }) {
-  if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById })
+  if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById, text })
   return startRealRun({ text, url, label, personaCount, onEvent, cached })
 }
 
@@ -147,10 +192,13 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false 
     onEvent({ type: 'run_started', data: { run_id: runId, artifact_text: fetchedText } })
 
     es = new EventSource(`/run/${runId}/stream`)
-    for (const type of ['reaction', 'progress', 'synthesizing', 'synthesis', 'done']) {
+    // 'cancelled' is terminal like 'done' -- a deliberate stop, which the
+    // server reports distinctly from an error so the UI never says
+    // "something went wrong" about something the user asked for.
+    for (const type of ['reaction', 'progress', 'synthesizing', 'synthesis', 'done', 'cancelled']) {
       es.addEventListener(type, (e) => {
         onEvent({ type, data: e.data ? JSON.parse(e.data) : undefined })
-        if (type === 'done') es.close()
+        if (type === 'done' || type === 'cancelled') es.close()
       })
     }
     es.addEventListener('error', (e) => {
@@ -176,6 +224,15 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false 
     cancel() {
       cancelled = true
       es?.close()
+      // Tell the server too, which this used to skip. Closing the
+      // EventSource only stopped us *listening*: the run carried on
+      // through every remaining Nano call and the synthesis, so an
+      // abandoned 1,000-persona run still spent most of its cost on a
+      // result nobody would ever see. Fire-and-forget -- the caller has
+      // already moved on, and a failed cancel must not throw into it.
+      if (runId) {
+        fetch(`/run/${runId}/cancel`, { method: 'POST' }).catch(() => {})
+      }
     },
   }
 }
@@ -244,11 +301,11 @@ function percent(items, pred) {
   return items.length ? (100 * items.filter(pred).length) / items.length : 0
 }
 
-function startMockRun({ personaCount, onEvent, previousReactionsById }) {
+function startMockRun({ personaCount, onEvent, previousReactionsById, text }) {
   const personas = buildMockPersonas(personaCount)
   const reactions = previousReactionsById
     ? buildMockReactionsB(personas, previousReactionsById)
-    : buildMockReactions(personas)
+    : buildMockReactions(personas, text)
   const order = completionOrder(personaCount)
   const total = personas.length
 
@@ -266,7 +323,7 @@ function startMockRun({ personaCount, onEvent, previousReactionsById }) {
         // Built from this run's personas, not the module-level N=100
         // MOCK_SYNTHESIS, so the evidence ids it cites actually have
         // tiles in the grid at whatever N the slider is on.
-        onEvent({ type: 'synthesis', data: buildMockSynthesis(personas) })
+        onEvent({ type: 'synthesis', data: buildMockSynthesis(personas, text) })
         onEvent({
           type: 'done',
           data: {

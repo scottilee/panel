@@ -14,6 +14,12 @@ export const STATUS = {
   SYNTHESIZING: 'synthesizing',
   DONE: 'done',
   ERROR: 'error',
+  // Frontend-only terminal state for a user-initiated stop. The backend
+  // reports "cancelled" too (an addition to section 3's Run.status,
+  // flagged in schemas.py); keeping it distinct from ERROR is what lets
+  // the UI avoid telling someone a failure happened when they pressed
+  // the stop button themselves.
+  CANCELLED: 'cancelled',
 }
 
 // Section 6.6/6.7: the second run of a compare. `visible` (the second
@@ -46,6 +52,9 @@ export const initialState = {
   artifactText: '',
   artifactUrl: '',
   label: '',
+  // True while `label` is a name borrowed from a chosen example rather
+  // than something the user typed -- see SET_ARTIFACT_TEXT.
+  labelFromExample: false,
   status: STATUS.IDLE,
   runId: null,
   personas: [],
@@ -94,12 +103,35 @@ export function reducer(state, action) {
 
     case 'SET_INPUT_MODE':
       return { ...state, inputMode: action.mode }
+
+    // Picking an example fills in both the text and its name. The name is
+    // marked as borrowed so the next case can drop it again.
+    case 'SELECT_EXAMPLE':
+      return {
+        ...state,
+        artifactText: action.text,
+        label: action.label,
+        labelFromExample: true,
+      }
+
     case 'SET_ARTIFACT_TEXT':
-      return { ...state, artifactText: action.text }
+      // A borrowed label does not survive an edit to the text it came
+      // with. Previously, picking "Parking policy notice v1" and then
+      // pasting your own copy over it left the run -- and the verdict
+      // header above it -- still labelled as the parking notice.
+      return {
+        ...state,
+        artifactText: action.text,
+        label: state.labelFromExample ? '' : state.label,
+        labelFromExample: false,
+      }
+
     case 'SET_ARTIFACT_URL':
       return { ...state, artifactUrl: action.url }
+
     case 'SET_LABEL':
-      return { ...state, label: action.label }
+      // Typed by hand, so it is the user's and nothing clears it.
+      return { ...state, label: action.label, labelFromExample: false }
 
     case 'RUN_START':
       return {
@@ -142,6 +174,11 @@ export function reducer(state, action) {
       return { ...state, status: STATUS.DONE, stats: action.stats }
     case 'ERROR':
       return { ...state, status: STATUS.ERROR, error: action.message }
+
+    // Keeps whatever reactions already landed: they were paid for and
+    // they are real, so the grid stays as it is rather than blanking.
+    case 'CANCELLED':
+      return { ...state, status: STATUS.CANCELLED, retrying: false, error: null }
 
     case 'TICK': {
       if (!state.startedAt && !state.compare.startedAt) return state
