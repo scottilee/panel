@@ -8,7 +8,7 @@ import difflib
 from pydantic import BaseModel
 
 from panel.config import MODEL_ULTRA
-from panel.prompts import compare_summary_user
+from panel.prompts import ARTIFACT_IS_DATA, compare_summary_user
 from panel.schemas import CompareDelta, CompareResult, Run
 from panel.stats import usable
 from panel.tf_client import chat_json
@@ -22,9 +22,12 @@ class _CompareSummary(BaseModel):
     summary: str
 
 
+# The diff quotes both versions of the artifact, so it gets the same
+# treat-as-data instruction as every other prompt that carries one.
 COMPARE_SUMMARY_SYSTEM_JSON = (
-    "One sentence. No preamble. Output only a JSON object matching the "
-    'schema: {"summary": "..."}. No code fences.'
+    "One sentence. No preamble. "
+    + ARTIFACT_IS_DATA
+    + ' Output only a JSON object matching the schema: {"summary": "..."}. No code fences.'
 )
 
 

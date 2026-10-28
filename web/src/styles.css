@@ -1741,6 +1741,16 @@ input::placeholder {
   color: var(--accent);
 }
 
+/* A cached replay is shown in place of a failed live run; it must not
+   pass for one. */
+.run-note-replay {
+  padding: 8px 10px;
+  border-radius: 9px;
+  border-left: 3px solid var(--accent);
+  background: var(--segment-chip-bg);
+  color: var(--text);
+}
+
 .run-note-error {
   padding: 8px 10px;
   border-radius: 9px;

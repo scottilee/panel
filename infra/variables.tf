@@ -31,7 +31,7 @@ variable "tf_api_key" {
 }
 
 variable "tavily_api_key" {
-  description = "Optional Tavily key for URL input. Empty = the app fetches pages itself."
+  description = "Optional Tavily key: URL extraction and the market comparison. Empty = pages are fetched directly and the market comparison is hidden."
   type        = string
   default     = ""
   sensitive   = true
@@ -40,8 +40,8 @@ variable "tavily_api_key" {
 variable "min_instances" {
   description = <<-EOT
     0 scales to zero (effectively free, but a cold start on the first
-    request). 1 keeps one instance warm (~$10-15/month) so a judge's first
-    click is instant. max_instance_count is pinned at 1 regardless -- run
+    request). 1 keeps one instance warm so a judge's first click is
+    instant; with cpu_idle = false that is ~$45-55/month at list prices. max_instance_count is pinned at 1 regardless -- run
     state is in process memory.
   EOT
   type        = number
@@ -80,7 +80,13 @@ variable "rate_limit_runs" {
 }
 
 variable "daily_persona_budget" {
-  description = "Persona reactions all live runs together may start per rolling 24h. 10,000 is a hundred default-size runs."
+  description = "Persona reactions all live runs and market comparisons together may use per rolling 24h. 10,000 is a hundred default-size runs."
   type        = number
   default     = 10000
+}
+
+variable "daily_client_persona_budget" {
+  description = "Persona reactions one client may use per rolling 24h, so one caller can't spend the whole daily budget."
+  type        = number
+  default     = 2000
 }

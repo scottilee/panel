@@ -83,7 +83,11 @@ export async function checkArtifact(text) {
   // racing on the same text should share one request, not make two.
   checkCache.set(key, pending)
   try {
-    return await pending
+    const verdict = await pending
+    // A failed check (429, 5xx) is not a verdict: dropping it lets the
+    // next Run click ask again instead of skipping the check for good.
+    if (verdict === null) checkCache.delete(key)
+    return verdict
   } catch {
     checkCache.delete(key)
     return null
@@ -265,6 +269,15 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false,
   }
 }
 
+// Optional server features (GET /features). Mock mode simulates the
+// market comparison on timers, so it reports it available.
+export async function getFeatures() {
+  if (isMockMode()) return { market: true }
+  const res = await fetch('/features')
+  if (!res.ok) throw new Error(`GET /features failed: HTTP ${res.status}`)
+  return res.json()
+}
+
 // The example buttons, loaded from GET /examples in the real client.
 // Mock mode sources the same shape from mock.js.
 export async function getExamples() {
@@ -419,7 +432,7 @@ export function startBenchmark({ runId, text, panelSize, onEvent }) {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        onEvent({ type: 'error', data: { message: body.detail || `HTTP ${res.status}` } })
+        onEvent({ type: 'error', data: { message: errorDetail(body, `POST /benchmark failed: HTTP ${res.status}`) } })
         return
       }
       ;({ benchmark_id: benchmarkId } = await res.json())

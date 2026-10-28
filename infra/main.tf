@@ -95,9 +95,10 @@ resource "google_secret_manager_secret_iam_member" "runtime_access" {
   member    = "serviceAccount:${google_service_account.runtime.email}"
 }
 
-# Optional Tavily key for URL input. Without it the app fetches pages
-# itself (requests + readability); with it, Tavily Extract is tried first
-# and the direct fetch is the fallback. Same Secret Manager handling, and
+# Optional Tavily key. With it, URL input tries Tavily Extract first (the
+# direct fetch is the fallback) and the market comparison (POST
+# /benchmark, Tavily Search) works; without it, URL input fetches pages
+# itself and the market comparison is hidden. Same Secret Manager handling, and
 # the same Terraform-state caveat, as the Token Factory key above.
 resource "google_secret_manager_secret" "tavily_api_key" {
   count     = var.tavily_api_key == "" ? 0 : 1
@@ -144,7 +145,10 @@ resource "google_cloud_run_v2_service" "panel" {
       # reconnect would silently never deliver its events.
       #
       # min: 1 keeps the service warm so a judge's first click isn't
-      # waiting on a cold start (~$10-15/month). 0 scales to zero and is
+      # waiting on a cold start. With cpu_idle = false below, that
+      # instance's 1 vCPU and 1 GiB are billed around the clock: roughly
+      # $45-55/month at us-central1 list prices, less the free tier. 0
+      # scales to zero and is
       # effectively free, at the cost of a slow first request. Set via
       # var.min_instances.
       min_instance_count = var.min_instances
@@ -196,6 +200,11 @@ resource "google_cloud_run_v2_service" "panel" {
       env {
         name  = "DAILY_PERSONA_BUDGET"
         value = tostring(var.daily_persona_budget)
+      }
+
+      env {
+        name  = "DAILY_CLIENT_PERSONA_BUDGET"
+        value = tostring(var.daily_client_persona_budget)
       }
 
       env {

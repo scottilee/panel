@@ -3,6 +3,7 @@ import {
   checkArtifact,
   getCompareResult,
   getExamples,
+  getFeatures,
   getPoolSize,
   isMockMode,
   previewPersonas,
@@ -66,6 +67,8 @@ export default function App() {
   const compareRunHandleRef = useRef(null)
 
   const [examples, setExamples] = useState([])
+  // Optional server features; the market comparison needs a Tavily key.
+  const [features, setFeatures] = useState({ market: false })
 
   // The pool fetch is load-bearing for the whole setup card: poolSize is
   // the N slider's maximum, and previewPersonas() throws until the pool
@@ -88,6 +91,9 @@ export default function App() {
     getExamples()
       .then(setExamples)
       .catch(() => setExamples([]))
+    getFeatures()
+      .then(setFeatures)
+      .catch(() => setFeatures({ market: false }))
   }, [])
 
   const isRunning = selectIsRunning(state)
@@ -244,11 +250,13 @@ export default function App() {
   }
 
   // Demo fallback: if a live run of one of the examples errors within 10
-  // seconds, quietly re-request it with ?cached=true and show
-  // "Retrying..." instead of the raw error. allowRetry is false on the
-  // retry's own handler so a failing cached replay (e.g. no cache file for
-  // this panel size) surfaces as a real error instead of looping.
-  function makeRunEventHandler({ startedAt, allowRetry }) {
+  // seconds, re-request it with ?cached=true -- but only at the one panel
+  // size its recording covers, and never silently: the page says the
+  // live run failed and why, and labels what follows as a recorded run.
+  // allowRetry is false on the retry's own handler so a failing cached
+  // replay surfaces as a real error instead of looping. `text` is what
+  // this run was started with, not whatever the textarea holds by now.
+  function makeRunEventHandler({ startedAt, allowRetry, text }) {
     return (event) => {
       switch (event.type) {
         case 'run_started':
@@ -258,6 +266,7 @@ export default function App() {
           // "Apply and compare" has something to edit.
           if (event.data.artifact_text) {
             dispatch({ type: 'SET_ARTIFACT_TEXT', text: event.data.artifact_text })
+            dispatch({ type: 'SET_RUN_TEXT', text: event.data.artifact_text })
           }
           break
         case 'reaction':
@@ -281,9 +290,11 @@ export default function App() {
           break
         case 'error': {
           const withinRetryWindow = Date.now() - startedAt < 10_000
-          const matchedExample = examples.find((ex) => ex.text === state.artifactText)
+          const matchedExample = examples.find(
+            (ex) => ex.text === text && ex.cached_persona_count === state.personaCount,
+          )
           if (allowRetry && withinRetryWindow && matchedExample) {
-            runCachedExample(matchedExample)
+            runCachedExample(matchedExample, event.data?.message ?? 'unknown error')
           } else {
             dispatch({ type: 'SET_RETRYING', retrying: false })
             dispatch({ type: 'ERROR', message: event.data?.message ?? 'unknown error' })
@@ -298,8 +309,8 @@ export default function App() {
 
   // Replays the server's known-good cached result for an example instead
   // of a real run (the auto-retry above).
-  function runCachedExample(example) {
-    dispatch({ type: 'SET_RETRYING', retrying: true })
+  function runCachedExample(example, reason) {
+    dispatch({ type: 'CACHED_REPLAY', reason })
     runHandleRef.current?.cancel()
     const startedAt = Date.now()
     runHandleRef.current = startRun({
@@ -307,7 +318,7 @@ export default function App() {
       label: example.label,
       personaCount: state.personaCount,
       cached: true,
-      onEvent: makeRunEventHandler({ startedAt, allowRetry: false }),
+      onEvent: makeRunEventHandler({ startedAt, allowRetry: false, text: example.text }),
     })
   }
 
@@ -375,10 +386,13 @@ export default function App() {
   function handleCancelConfirmed() {
     setConfirmCancel(false)
     // Cancels locally AND server-side (api.js's handle) -- the credits
-    // stop, which is the only version of this button worth having.
+    // stop, which is the only version of this button worth having. The
+    // handle's cancel stops its events, so each run's state is updated
+    // here; Run A's is left alone when only the compare run was going.
     runHandleRef.current?.cancel()
     compareRunHandleRef.current?.cancel()
-    dispatch({ type: 'CANCELLED' })
+    if (isRunning) dispatch({ type: 'CANCELLED' })
+    if (compareIsRunning) dispatch({ type: 'COMPARE_ERROR', message: 'The compare run was cancelled.' })
   }
 
   function startRunNow() {
@@ -387,20 +401,24 @@ export default function App() {
     setViewMode('A')
     setSortedByReaction(false)
     setApplyError(null)
-    dispatch({ type: 'RUN_START' })
+    // In URL mode the server fetches and extracts the text itself, and
+    // POST /run accepts exactly one of text or url; run_started reports
+    // the extracted text back as runText.
+    const text = state.inputMode === 'url' ? undefined : state.artifactText
+    dispatch({ type: 'RUN_START', text })
     const startedAt = Date.now()
     runHandleRef.current = startRun({
-      // In URL mode the server fetches and extracts the text itself, and
-      // POST /run accepts exactly one of text or url.
-      text: state.inputMode === 'url' ? undefined : state.artifactText,
+      text,
       url: state.inputMode === 'url' ? state.artifactUrl.trim() : undefined,
       label: state.label,
       personaCount: state.personaCount,
-      onEvent: makeRunEventHandler({ startedAt, allowRetry: true }),
+      onEvent: makeRunEventHandler({ startedAt, allowRetry: true, text }),
     })
   }
 
-  // Writes proposed_text over current_text into the second textarea and
+  // Writes proposed_text over current_text in the text Run A read (not
+  // the textarea, which may have been edited since) into the second
+  // textarea and
   // starts the compare immediately. Both runs of a compare use the same
   // N, so this reuses state.personaCount/state.personas as-is rather than
   // resampling. If the phrase can't be found the compare doesn't start:
@@ -409,7 +427,7 @@ export default function App() {
   function handleApplyAndCompare() {
     if (!state.synthesis) return
     const edit = state.synthesis.highest_leverage_edit
-    const editedText = applyEdit(state.artifactText, edit.current_text, edit.proposed_text)
+    const editedText = applyEdit(state.runText, edit.current_text, edit.proposed_text)
     if (editedText === null) {
       setApplyError(
         "Couldn't find the phrase this edit replaces in your copy, so there is nothing to compare. " +
@@ -484,6 +502,7 @@ export default function App() {
   // Run A's stats are kept separately: the verdict belongs to Run A, so its
   // "N of M aren't convinced" must not switch to Run B with the view.
   const statsA = selectLiveStats(state, filteredIds)
+  const answeredA = filteredIds ? selectLiveStats(state).usable : statsA.usable
   const liveStats = viewMode === 'A' ? statsA : selectCompareLiveStats(state, filteredIds)
   const elapsedSeconds = viewMode === 'A' ? selectElapsedSeconds(state) : selectCompareElapsedSeconds(state)
   const statsStripStatus = viewMode === 'A' ? state.status : state.compare.status
@@ -553,20 +572,28 @@ export default function App() {
               {isRunning && <span className="run-spinner" aria-hidden="true" />}
               {isRunning ? 'Running' : anyRunStarted ? 'Run again' : 'Run panel'}
             </button>
-            {isRunning && (
+            {(isRunning || compareIsRunning) && (
               <button
                 type="button"
                 className="cancel-button"
                 onClick={() => setConfirmCancel(true)}
               >
-                Cancel run
+                {isRunning ? 'Cancel run' : 'Cancel compare run'}
               </button>
             )}
             {/* The one place run errors, retries and cancellation
                 surface. A failed run must say so rather than stopping
                 silently with the grid half-full. */}
-            {state.retrying && (
-              <p className="run-note run-note-busy">Retrying with a cached example...</p>
+            {state.retrying && state.cachedReplay && (
+              <p className="run-note run-note-busy">
+                The live run failed ({state.cachedReplay.reason}). Loading a recorded run of this example instead...
+              </p>
+            )}
+            {!state.retrying && state.cachedReplay && state.status !== STATUS.ERROR && (
+              <p className="run-note run-note-replay" role="status">
+                <strong>Recorded run, not live.</strong> The live run failed ({state.cachedReplay.reason}), so this
+                is a saved run of the same example on the same {state.personaCount} people.
+              </p>
             )}
             {!state.retrying && state.status === STATUS.CANCELLED && (
               <p className="run-note">
@@ -625,7 +652,9 @@ export default function App() {
               Cancel this run?
             </h2>
             <p className="modal-body">
-              {doneCount > 0
+              {!isRunning
+                ? "The compare run stops here. Your first run's results are kept, but there will be no comparison."
+                : doneCount > 0
                 ? `${doneCount} of ${total} people have already read it. Those reactions are kept, but the run stops here and there will be no verdict.`
                 : 'The run stops here and there will be no verdict.'}
             </p>
@@ -672,7 +701,8 @@ export default function App() {
           wouldActPct={statsA.wouldActPct}
           total={statsA.usable}
           onApplyAndCompare={handleApplyAndCompare}
-          applyDisabled={state.compare.visible}
+          // Re-enabled after a compare run fails or is cancelled, so it can be retried.
+          applyDisabled={state.compare.visible && state.compare.status !== STATUS.ERROR}
           applyError={applyError ?? state.compare.error}
         />
 
@@ -711,7 +741,7 @@ export default function App() {
             runStats={runStats}
             elapsedSeconds={elapsedSeconds}
             status={statsStripStatus}
-            panelSize={state.personas.length}
+            answered={answeredA}
           />
 
           <Grid
@@ -770,7 +800,7 @@ export default function App() {
             to compare, and reads as "and here is how that sits against
             everyone else" rather than competing with the verdict. Hidden
             in mock mode, which has no backend to search with. */}
-        {state.synthesis && (state.runId || isMockMode()) && (
+        {features.market && state.synthesis && (state.runId || isMockMode()) && (
           <MarketPanel
             status={market?.status}
             query={market?.query ?? ''}

@@ -24,3 +24,8 @@ infra/*.tfstate
 infra/*.tfstate.*
 infra/terraform.tfvars
 data/personas.partial.json
+
+# Local sandbox and agent tooling, not part of the app. Already-tracked
+# copies also need `git rm -r --cached .sbx .claude` to leave the repo.
+.sbx/
+.claude/

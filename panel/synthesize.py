@@ -279,14 +279,15 @@ def _invalid_evidence(synthesis: Synthesis, personas_by_id: dict[str, Persona]) 
     return problems
 
 
-def _patch_headline(headline: str, old_pct: int, new_pct: int) -> str:
-    """The headline usually quotes a finding's number verbatim ("85% of
-    ..."), so it is patched too. Only when that number appears exactly
-    once: a second occurrence might be a different statistic."""
+def _patch_pct(text: str, old_pct: int, new_pct: int) -> str:
+    """The headline and a finding's claim usually quote its number
+    verbatim ("85% of ..."), so they are patched to the counted one too.
+    Only when that number appears exactly once: a second occurrence might
+    be a different statistic."""
     pattern = rf"(?<![\d.]){old_pct}%"
-    if len(re.findall(pattern, headline)) != 1:
-        return headline
-    return re.sub(pattern, f"{new_pct}%", headline)
+    if len(re.findall(pattern, text)) != 1:
+        return text
+    return re.sub(pattern, f"{new_pct}%", text)
 
 
 def _apply_recounted_pct(
@@ -327,11 +328,12 @@ def _apply_recounted_pct(
                 f"synthesize: affected_pct {finding.affected_pct} -> {affected} for segment "
                 f"{finding.affected_segment!r}"
             )
-            headline = _patch_headline(headline, finding.affected_pct, affected)
+            headline = _patch_pct(headline, finding.affected_pct, affected)
         new_findings.append(
             finding.model_copy(
                 update={
                     "affected_pct": affected,
+                    "claim": _patch_pct(finding.claim, finding.affected_pct, affected),
                     "segment_size": len(members),
                     "segment_pct": round(100 * len(members) / total, 1) if total else 0.0,
                 }

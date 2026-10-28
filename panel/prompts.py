@@ -226,7 +226,9 @@ def synthesis_user(
 
 
 COMPARE_SUMMARY_USER_TEMPLATE = """Artifact A and B differ as follows:
+---
 {unified_diff}
+---
 Between A and B, {flipped_positive} personas moved to would_act and {flipped_negative} moved away. Those who flipped positive: {flipped_pos_summary}. Those who flipped negative: {flipped_neg_summary}.
 In one sentence, state what the edit did and for whom, with the numbers.
 """

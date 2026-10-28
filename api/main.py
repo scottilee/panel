@@ -24,6 +24,7 @@ from panel.classify import check_artifact
 from panel.compare import delta
 from panel.market import (
     COMPETITOR_PAGES,
+    TAVILY_API_KEY,
     build_comparison,
     derive_query,
     pick_pages,
@@ -49,7 +50,7 @@ from panel.schemas import (
     RunStats,
     Synthesis,
 )
-from panel.stats import mean_sentiment, would_act_pct
+from panel.stats import mean_sentiment, usable, would_act_pct
 from panel.synthesize import _apply_recounted_pct, synthesize, theme_breakdown
 from panel.tf_client import track_calls
 
@@ -93,6 +94,8 @@ class RunContext:
     compares: dict[str, asyncio.Task] = field(default_factory=dict)
     # Who started it, for the one-active-run-per-client rule.
     client_ip: str = ""
+    # This run's charge against the daily budgets; None for a cached replay.
+    spend: _Spend | None = None
 
 
 RUNS: dict[str, RunContext] = {}
@@ -155,6 +158,9 @@ class BenchmarkContext:
     error_message: str | None = None
     subscribers: list[asyncio.Queue] = field(default_factory=list)
     task: asyncio.Task | None = None
+    spend: _Spend | None = None
+    # Competitor-page reactions actually requested, for settling `spend`.
+    personas_sent: int = 0
 
 
 BENCHMARKS: dict[str, BenchmarkContext] = {}
@@ -172,14 +178,36 @@ RATE_LIMIT_RUNS = int(config.env("RATE_LIMIT_RUNS") or "20")
 RATE_LIMIT_CHECKS = int(config.env("RATE_LIMIT_CHECKS") or "120")
 RATE_LIMIT_COMPARES = int(config.env("RATE_LIMIT_COMPARES") or "60")
 RATE_LIMIT_WINDOW_S = int(config.env("RATE_LIMIT_WINDOW_S") or "3600")
-# Service-wide ceiling on persona reactions started in any rolling 24
-# hours, counting live runs only (a cached replay costs nothing). The
-# per-client limits bound one caller; this bounds the total, so the
-# credits last until judging ends however many callers there are.
-# 10,000 is a hundred default-size runs a day.
+# Ceilings on persona reactions in any rolling 24 hours, counting live
+# runs and benchmarks only (a cached replay costs nothing). The service
+# figure bounds the total, so the credits last until judging ends however
+# many callers there are; the per-client figure stops one caller spending
+# all of it. 10,000 is a hundred default-size runs a day; 2,000 is two
+# full 1,000-persona runs per client.
 DAILY_PERSONA_BUDGET = int(config.env("DAILY_PERSONA_BUDGET") or "10000")
+DAILY_CLIENT_PERSONA_BUDGET = int(config.env("DAILY_CLIENT_PERSONA_BUDGET") or "2000")
+# Service-wide daily ceilings on the two endpoints that cost a model call
+# per request but aren't panel runs. A compare is one Ultra call per pair
+# of runs, and pairs of free cached replays are unlimited without this.
+DAILY_COMPARE_BUDGET = int(config.env("DAILY_COMPARE_BUDGET") or "500")
+DAILY_CHECK_BUDGET = int(config.env("DAILY_CHECK_BUDGET") or "5000")
 _DAY_S = 24 * 3600
-_LIVE_RUN_SPEND: list[tuple[float, int]] = []
+
+
+@dataclass
+class _Spend:
+    """One live run's (or benchmark's) charge against the daily budgets.
+    `personas` starts as the full reservation and is settled down to what
+    was actually sent once the work stops, so a cancelled or failed run is
+    charged for the calls it made, not the ones it never got to."""
+
+    at: float
+    client_ip: str
+    personas: int
+
+
+_LIVE_RUN_SPEND: list[_Spend] = []
+_SERVICE_CALLS: dict[str, list[float]] = defaultdict(list)
 
 # How many reverse proxies in front of this app append to X-Forwarded-For.
 # 0 trusts nothing and keys rate limits on the socket peer, which is right
@@ -190,6 +218,8 @@ _LIVE_RUN_SPEND: list[tuple[float, int]] = []
 TRUSTED_PROXY_HOPS = int(config.env("TRUSTED_PROXY_HOPS") or "0")
 
 _RATE_WINDOWS: dict[str, list[float]] = defaultdict(list)
+# Clients with a POST /run URL fetch in progress (see create_run).
+_FETCHING_CLIENTS: set[str] = set()
 # Above this many tracked clients, windows with no recent requests are
 # swept so the table can't grow without bound over weeks of uptime.
 _RATE_SWEEP_THRESHOLD = 10_000
@@ -226,9 +256,51 @@ def _check_rate_limit(client_ip: str, bucket: str = "run", limit: int | None = N
     window.append(now)
 
 
-def _daily_spend(now: float) -> int:
-    _LIVE_RUN_SPEND[:] = [(t, n) for t, n in _LIVE_RUN_SPEND if now - t < _DAY_S]
-    return sum(n for _, n in _LIVE_RUN_SPEND)
+def _daily_spend(now: float, client_ip: str | None = None) -> int:
+    _LIVE_RUN_SPEND[:] = [s for s in _LIVE_RUN_SPEND if now - s.at < _DAY_S]
+    return sum(s.personas for s in _LIVE_RUN_SPEND if client_ip in (None, s.client_ip))
+
+
+def _reserve_spend(client_ip: str, personas: int) -> _Spend:
+    """Checks both daily persona budgets and reserves `personas` against
+    them, or raises 429. Reserving the whole amount up front is what stops
+    concurrent requests from each fitting under the ceiling separately."""
+    now = time.monotonic()
+    if _daily_spend(now) + personas > DAILY_PERSONA_BUDGET:
+        raise HTTPException(
+            429,
+            "daily panel budget used up for this demo; try a smaller panel, or come back tomorrow",
+        )
+    if _daily_spend(now, client_ip) + personas > DAILY_CLIENT_PERSONA_BUDGET:
+        raise HTTPException(
+            429,
+            f"you have used your daily allowance of {DAILY_CLIENT_PERSONA_BUDGET:,} persona "
+            "reactions; try a smaller panel, or come back tomorrow",
+        )
+    spend = _Spend(at=now, client_ip=client_ip, personas=personas)
+    _LIVE_RUN_SPEND.append(spend)
+    return spend
+
+
+def _settled_personas(reserved: int, answered: int, finished: bool) -> int:
+    """What a run actually cost, in persona reactions. A run stopped early
+    also paid for the calls in flight when it stopped (up to the
+    concurrency cap), which never produced a reaction."""
+    if finished:
+        return reserved
+    return min(reserved, answered + config.MAX_CONCURRENCY)
+
+
+def _check_service_cap(bucket: str, cap: int) -> None:
+    """Service-wide rolling-24h ceiling on one endpoint, across every
+    client. Kept apart from _RATE_WINDOWS, whose hourly sweep would drop
+    entries that still count here."""
+    now = time.monotonic()
+    window = _SERVICE_CALLS[bucket]
+    window[:] = [t for t in window if now - t < _DAY_S]
+    if len(window) >= cap:
+        raise HTTPException(429, f"the demo's daily {bucket} budget is used up; try again tomorrow")
+    window.append(now)
 
 
 def _new_run_id() -> str:
@@ -334,10 +406,31 @@ async def _fail_run(ctx: RunContext, exc: Exception) -> None:
     its text (provider auth failures, paths) must not reach a public SSE
     stream or GET /run."""
     print(f"run {ctx.run.run_id} failed: {type(exc).__name__}: {exc}", flush=True)
+    await _end_with_error(ctx, "the run failed; see server logs for details")
+
+
+async def _end_with_error(ctx: RunContext, message: str) -> None:
+    """`message` goes out on the public stream, so it is always ours."""
     ctx.run.status = "error"
-    message = "the run failed; see server logs for details"
     ctx.error_message = message
     await _broadcast(ctx, "error", {"message": message})
+
+
+# A report needs most of the panel to have answered. Below this, Ultra
+# would be summarising a handful of people (or, if every call failed,
+# nobody) while the headline speaks for the whole panel.
+MIN_USABLE_SHARE = 0.5
+
+
+def _too_few_answered(ctx: RunContext) -> str | None:
+    answered = len(usable(ctx.run.reactions))
+    total = len(ctx.personas)
+    if answered >= total * MIN_USABLE_SHARE and answered > 0:
+        return None
+    return (
+        f"only {answered} of {total} personas answered (the other model calls failed), "
+        "too few for a report; try again in a minute"
+    )
 
 
 async def _execute_cached_run(ctx: RunContext, cached_data: dict, skip_synthesis: bool) -> None:
@@ -390,18 +483,29 @@ async def _execute_run(ctx: RunContext, skip_synthesis: bool) -> None:
         async for reaction in fan_out(run.artifact.text, ctx.personas, run.run_id):
             await _record_reaction(ctx, reaction)
 
+        def stats(ultra_ms: int = 0) -> RunStats:
+            return _compute_stats(
+                run.reactions,
+                calls,
+                nano_ms_total=sum(r.latency_ms or 0 for r in run.reactions),
+                ultra_ms=ultra_ms,
+            )
+
+        # Checked for Run B of a compare too: a compare over a handful of
+        # survivors would report flips the panel never made.
+        shortfall = _too_few_answered(ctx)
+        if shortfall:
+            print(f"run {run.run_id}: {shortfall}", flush=True)
+            run.stats = stats()
+            await _end_with_error(ctx, shortfall)
+            return
+
         synthesis = None
         synthesis_start = time.monotonic()
         if not skip_synthesis:
             await _start_synthesizing(ctx)
             synthesis = await synthesize(run.artifact.text, ctx.personas, run.reactions)
-        stats = _compute_stats(
-            run.reactions,
-            calls,
-            nano_ms_total=sum(r.latency_ms or 0 for r in run.reactions),
-            ultra_ms=int((time.monotonic() - synthesis_start) * 1000),
-        )
-        await _finish(ctx, synthesis, stats)
+        await _finish(ctx, synthesis, stats(int((time.monotonic() - synthesis_start) * 1000)))
     except asyncio.CancelledError:
         # A deliberate stop: broadcast a terminal event before re-raising
         # so open streams don't wait forever.
@@ -414,11 +518,22 @@ async def _execute_run(ctx: RunContext, skip_synthesis: bool) -> None:
 
 
 def _cache_covers(cached_data: dict, personas: list[Persona]) -> bool:
-    """Whether a cached result has a reaction for every selected persona.
-    The caches were recorded at 100 personas; a bigger panel is declined
-    rather than half-served."""
+    """Whether a cached result was recorded for exactly this panel. A
+    bigger panel would be half-served; a smaller one would replay a report
+    whose headline, claims and evidence ids describe people who aren't on
+    screen. Recounting fixes the percentages but not the prose."""
     have = {r["persona_id"] for r in cached_data.get("reactions", [])}
-    return all(p.id in have for p in personas)
+    return have == {p.id for p in personas}
+
+
+def _cached_persona_count(example_stem: str) -> int | None:
+    path = config.CACHED_DIR / f"{example_stem}.json"
+    if not path.is_file():
+        return None
+    try:
+        return len(json.loads(path.read_text()).get("reactions", []))
+    except (OSError, ValueError):
+        return None
 
 
 def _active_run_count() -> int:
@@ -445,26 +560,25 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
         raise HTTPException(
             429, "you already have a run in progress; wait for it to finish or cancel it"
         )
+    # The run isn't registered until its page has been fetched, so the
+    # rule above can't see a fetch in progress; without this one client
+    # could hold a thread per request for the whole fetch timeout.
+    if req.url and client_ip in _FETCHING_CLIENTS:
+        raise HTTPException(429, "already fetching a page for you; wait for it to finish")
     # A cached replay makes no model calls, so the spend ceilings don't
     # apply to it -- it stays available as the fallback even when the
     # service is busy.
-    if not cached:
-        if _active_run_count() >= MAX_CONCURRENT_RUNS:
-            raise HTTPException(
-                429, f"too many runs in flight (limit {MAX_CONCURRENT_RUNS}); try again shortly"
-            )
-        if _daily_spend(time.monotonic()) + persona_count > DAILY_PERSONA_BUDGET:
-            raise HTTPException(
-                429,
-                "daily panel budget used up for this demo; try a smaller panel, "
-                "or come back tomorrow",
-            )
+    if not cached and _active_run_count() >= MAX_CONCURRENT_RUNS:
+        raise HTTPException(
+            429, f"too many runs in flight (limit {MAX_CONCURRENT_RUNS}); try again shortly"
+        )
 
     # Charged before the URL fetch and the cached lookup, so neither can
     # be probed for free.
     _check_rate_limit(client_ip)
 
     if req.url:
+        _FETCHING_CLIENTS.add(client_ip)
         try:
             text = await asyncio.to_thread(fetch_url_text, req.url)
         except UnsafeURLError as e:
@@ -474,6 +588,8 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
             # host/port oracle for whatever the container can reach.
             print(f"URL fetch failed for {req.url!r}: {type(e).__name__}: {e}", flush=True)
             raise HTTPException(400, "could not fetch that URL") from e
+        finally:
+            _FETCHING_CLIENTS.discard(client_ip)
         text = text.strip()
         if len(text) < MIN_ARTIFACT_CHARS:
             raise HTTPException(
@@ -503,6 +619,10 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
             )
         raise HTTPException(404, detail)
 
+    # Last check before anything is registered: a refused run leaves
+    # nothing behind, and the reservation can't be orphaned.
+    spend = _reserve_spend(client_ip, persona_count) if cached_data is None else None
+
     run_id = _new_run_id()
     run = Run(
         run_id=run_id,
@@ -510,10 +630,8 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
         persona_set=f"v1-{persona_count}",
         status="pending",
     )
-    ctx = RunContext(run=run, personas=personas, client_ip=client_ip)
+    ctx = RunContext(run=run, personas=personas, client_ip=client_ip, spend=spend)
     RUNS[run_id] = ctx
-    if cached_data is None:
-        _LIVE_RUN_SPEND.append((time.monotonic(), persona_count))
     _evict_old_runs()
     _prune_run_files()
     _persist(ctx)
@@ -531,7 +649,18 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
         else _execute_run(ctx, req.skip_synthesis)
     )
     ctx.task = asyncio.create_task(coro)
+    if spend is not None:
+        # A done callback rather than the task's own finally: a task
+        # cancelled before its first step never runs that finally.
+        ctx.task.add_done_callback(lambda _t: _settle_run_spend(ctx))
     return {"run_id": run_id}
+
+
+def _settle_run_spend(ctx: RunContext) -> None:
+    if ctx.spend is not None:
+        ctx.spend.personas = _settled_personas(
+            ctx.spend.personas, len(ctx.run.reactions), ctx.run.status == "done"
+        )
 
 
 @app.get("/run/{run_id}/stream")
@@ -705,6 +834,7 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
         await _broadcast_benchmark(ctx, "page_done", {"label": "Your page"})
 
         for page, text in fetched:
+            ctx.personas_sent += len(personas)
             reactions = await _panel_on_text(text, personas, f"{ctx.benchmark_id}:{page.label}")
             breakdowns[page.label] = await theme_breakdown(reactions)
             await _broadcast_benchmark(ctx, "page_done", {"label": page.label})
@@ -741,6 +871,8 @@ async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
     is three panel runs plus Tavily calls, so it costs more than a run,
     not less.
     """
+    if not TAVILY_API_KEY:
+        raise HTTPException(503, "the market comparison is not configured on this server")
     parent = RUNS.get(req.run_id)
     if parent is None:
         raise HTTPException(404, "run not found")
@@ -748,19 +880,28 @@ async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
         raise HTTPException(409, "the run must finish before comparing it to the market")
     if not parent.run.reactions:
         raise HTTPException(409, "that run has no reactions to compare")
-    _check_rate_limit(request.client.host if request.client else "unknown")
+    client_ip = _client_ip(request)
     if _active_run_count() >= MAX_CONCURRENT_RUNS:
         raise HTTPException(429, "too many runs in flight; try again shortly")
+    _check_rate_limit(client_ip)
+    # Reserved for the most it can read; settled to the pages it actually
+    # ran once it stops (a search can find fewer pages, or none).
+    spend = _reserve_spend(
+        client_ip, COMPETITOR_PAGES * min(MARKET_PANEL_SIZE, len(parent.personas))
+    )
 
     # Unguessable for the same reason run ids are (see _new_run_id): a
     # benchmark id is the only credential for reading the comparison,
     # which embeds the user's own copy's themes.
     benchmark_id = f"b_{secrets.token_urlsafe(16)}"
-    ctx = BenchmarkContext(benchmark_id=benchmark_id, run_id=req.run_id)
+    ctx = BenchmarkContext(benchmark_id=benchmark_id, run_id=req.run_id, spend=spend)
     BENCHMARKS[benchmark_id] = ctx
     for stale in list(BENCHMARKS)[:-MAX_RETAINED_RUNS]:
         BENCHMARKS.pop(stale, None)
     ctx.task = asyncio.create_task(_execute_benchmark(ctx))
+    ctx.task.add_done_callback(
+        lambda _t: setattr(spend, "personas", min(spend.personas, ctx.personas_sent))
+    )
     return {"benchmark_id": benchmark_id}
 
 
@@ -829,6 +970,7 @@ async def compare_runs(request: Request, req: CompareRequest) -> CompareResult:
     task = ctx_b.compares.get(req.run_a)
     if task is None or task.cancelled() or (task.done() and task.exception() is not None):
         _check_rate_limit(_client_ip(request), bucket="compare", limit=RATE_LIMIT_COMPARES)
+        _check_service_cap("compare", DAILY_COMPARE_BUDGET)
         task = asyncio.create_task(delta(ctx_a.run, ctx_b.run))
         ctx_b.compares[req.run_a] = task
     # Shielded: one client disconnecting must not cancel a result another
@@ -847,7 +989,15 @@ async def check_text(request: Request, req: CheckRequest) -> ArtifactCheck:
     """Advisory pre-submission check (panel/classify.py). Deliberately not
     called from inside POST /run: it advises, and the user decides."""
     _check_rate_limit(_client_ip(request), bucket="check", limit=RATE_LIMIT_CHECKS)
+    _check_service_cap("check", DAILY_CHECK_BUDGET)
     return await check_artifact(req.text)
+
+
+@app.get("/features")
+async def get_features() -> dict:
+    """What this deployment can do, so the UI hides what it can't rather
+    than offering a button that fails."""
+    return {"market": bool(TAVILY_API_KEY)}
 
 
 @app.get("/personas")
@@ -871,6 +1021,9 @@ async def get_examples() -> list[dict]:
             "id": path.stem,
             "label": EXAMPLE_LABELS.get(path.stem, path.stem),
             "text": path.read_text(),
+            # The one panel size its cached fallback can replay (see
+            # _cache_covers), so the client only offers it there.
+            "cached_persona_count": _cached_persona_count(path.stem),
         }
         for path in sorted(config.EXAMPLES_DIR.glob("*.txt"))
     ]

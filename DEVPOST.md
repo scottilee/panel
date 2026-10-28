@@ -46,6 +46,16 @@ lands. At the default 100 people, you have a verdict in about a minute:
   proposed replacement.
 - **Who you're winning and who you're losing**, in a sentence each.
 
+**Compare against the market**, powered by Tavily. One more click and the
+same people read two or three competitors' pages for the same kind of
+product: Nemotron Nano turns your copy into a search, Tavily Search finds
+candidates, a filter and a Nano call throw out the listicles and review
+sites, and Tavily Extract pulls each page's text. The report says which
+confusions and objections readers hit on every page in the category, and
+which only on yours: the half you can fix. Every URL used is listed with
+the exact text the panel read. There's deliberately no conversion
+scoreboard, since a competitor can win on price rather than writing.
+
 Then the part that makes it a tool rather than a demo: **Apply and
 compare**. One click rewrites that phrase, reruns the *same*
 people against the edited copy, and shows you who changed their mind and
@@ -56,8 +66,8 @@ occupation, household, seven numeric personality traits (tech comfort,
 skepticism, and the Big Five), concrete values and pet peeves, and a voice
 describing how they personally read marketing. Click any tile to read them.
 
-**The counterintuitive part: 97 of 100 say "I wouldn't buy this," and
-that's the product.** A panel that tells you your copy is great is worth
+**The counterintuitive part: more than nine in ten say "I wouldn't act on
+this," and that's the product.** A panel that tells you your copy is great is worth
 nothing. See below.
 
 ## The problem it solves
@@ -82,7 +92,7 @@ of NVIDIA's Nemotron 3:
 | Model | Job | Calls per run |
 | --- | --- | --- |
 | **Nemotron Nano 30B** | Each persona's reaction: stay in character, react in one sentence, fill six short fields | 100-1,000 |
-| **Nemotron Super 120B** | Writes the 1,000-persona pool offline. At large N, condenses reactions into themes | 0 (or ~100 above N=150) |
+| **Nemotron Super 120B** | Writes the 1,000-persona pool offline. At large N, condenses reactions into themes | 0 at N≤150; one per 10 reactions above (100 at N=1,000) |
 | **Nemotron Ultra 550B** | The synthesis: find the non-obvious pattern, name the segment, quote the copy verbatim | 1 |
 
 Python 3.14 / FastAPI with SSE streaming, React 18 + Vite, Pydantic schemas
@@ -213,7 +223,7 @@ product.
 `python` · `fastapi` · `pydantic` · `server-sent-events` · `asyncio` ·
 `react` · `vite` · `javascript` · `docker` · `terraform` ·
 `google-cloud-run` · `nebius-token-factory` · `nvidia-nemotron-3` ·
-`nemotron-nano` · `nemotron-super` · `nemotron-ultra`
+`nemotron-nano` · `nemotron-super` · `nemotron-ultra` · `tavily`
 
 ## Links
 
@@ -238,9 +248,12 @@ The run order that shows the most in the least time:
    the thousand people feel like people.
 5. **Apply and compare.** Show the delta view: who flipped, who didn't.
    Say the real number out loud — it is more convincing than a big one.
-6. **If there is time:** drag the slider to 1,000 and let it start, just to
+6. **Compare against the market.** Click it under the findings and show
+   the URLs Tavily found and the "only on your page" list. This is the
+   Tavily bonus on camera, so do it on a live deploy with the key set.
+7. **If there is time:** drag the slider to 1,000 and let it start, just to
    show the 32-column grid. Don't wait for it to finish on camera.
 
 Worth saying on camera, because it is the thing judges will wonder about:
-the panel disagrees with you by design, and 97 of 100 saying "no" is the
+the panel disagrees with you by design, and nine in ten saying "no" is the
 measured baseline, not a failure of the copy.

@@ -65,6 +65,13 @@ export const initialState = {
   elapsedMs: 0,
   error: null,
   retrying: false,
+  // The text Run A actually read, frozen at RUN_START (or, in URL mode,
+  // when the server reports what it extracted). The textarea stays
+  // editable after a run, so "Apply and compare" must edit this, not it.
+  runText: '',
+  // Set when the live run failed and a recorded run of the same example
+  // is being shown instead: { reason } names why, so the page can say so.
+  cachedReplay: null,
   compare: initialCompareState,
 }
 
@@ -133,6 +140,8 @@ export function reducer(state, action) {
     case 'RUN_START':
       return {
         ...state,
+        runText: action.text ?? '',
+        cachedReplay: null,
         status: STATUS.PENDING,
         reactionsById: {},
         progress: { done: 0, total: state.personas.length },
@@ -149,6 +158,12 @@ export function reducer(state, action) {
     // error that triggered the cached-example fallback.
     case 'SET_RETRYING':
       return { ...state, retrying: action.retrying }
+
+    case 'SET_RUN_TEXT':
+      return { ...state, runText: action.text }
+
+    case 'CACHED_REPLAY':
+      return { ...state, retrying: true, cachedReplay: { reason: action.reason } }
 
     case 'REACTION':
       return {

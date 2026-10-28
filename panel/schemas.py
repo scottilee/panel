@@ -32,11 +32,10 @@ INCOME_BANDS = Literal["<25k", "25-40k", "40-75k", "75-150k", "150k+"]
 #
 # Wider than what the synthesis prompt actually offers Ultra, on purpose:
 # the prompt lists only region/age_band/income_band/tech_comfort/
-# skepticism, because those are the five the UI has filter chips for
-# (web/src/state.js's SEGMENT_FIELD_TO_GROUP) and so the five where
-# clicking a finding's segment does something. A Big Five clause still
-# validates and still recounts correctly (synthesize.py's
-# NUMERIC_SEGMENT_FIELDS covers all seven) -- it just isn't clickable.
+# skepticism, the five the UI also has filter chips for. A Big Five
+# clause still validates and still recounts correctly (synthesize.py's
+# NUMERIC_SEGMENT_FIELDS covers all seven), and clicking it still filters
+# the grid exactly (web/src/segment.js); it just has no chip of its own.
 SEGMENT_FIELDS = Literal[
     "region",
     "age_band",

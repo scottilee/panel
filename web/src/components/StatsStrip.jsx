@@ -8,11 +8,13 @@ import { STATUS } from '../state.js'
 // the reactions into themes and Ultra reads those, not every reaction.
 const SHARD_THRESHOLD = 150
 
-function synthesizingLine(panelSize) {
-  if (panelSize > SHARD_THRESHOLD) {
-    return `Nemotron Super is condensing ${panelSize} reactions into themes for Nemotron Ultra...`
+// Over usable reactions, as the backend counts them: failed calls are
+// never sent to synthesis, so they neither trigger sharding nor get read.
+function synthesizingLine(answered) {
+  if (answered > SHARD_THRESHOLD) {
+    return `Nemotron Super is condensing ${answered} reactions into themes for Nemotron Ultra...`
   }
-  return `Nemotron Ultra is reading all ${panelSize} reactions...`
+  return `Nemotron Ultra is reading all ${answered} reactions...`
 }
 
 function modelCallsLine(runStats) {
@@ -27,9 +29,9 @@ function modelCallsLine(runStats) {
   return parts.length ? `Nemotron calls: ${parts.join(' · ')}` : null
 }
 
-// panelSize is the whole run's size, not the filtered `total`: the
+// answered is the whole run's usable reactions, not the filtered count: the
 // synthesis covers the whole panel whatever filter is on screen.
-export default function StatsStrip({ liveStats, runStats, elapsedSeconds, status, panelSize }) {
+export default function StatsStrip({ liveStats, runStats, elapsedSeconds, status, answered }) {
   const { done, total, failed, meanSentiment, wouldActPct } = liveStats
   const callsLine = status === STATUS.DONE ? modelCallsLine(runStats) : null
 
@@ -59,7 +61,7 @@ export default function StatsStrip({ liveStats, runStats, elapsedSeconds, status
         </div>
       )}
       {status === STATUS.SYNTHESIZING && (
-        <div className="synthesizing-line">{synthesizingLine(panelSize)}</div>
+        <div className="synthesizing-line">{synthesizingLine(answered)}</div>
       )}
     </div>
   )

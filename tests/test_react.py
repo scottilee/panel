@@ -85,6 +85,19 @@ async def test_one_failing_persona_does_not_stall_the_run(monkeypatch, personas)
     assert "(no response)" in failed[0].gut_reaction
 
 
+async def test_a_failed_reaction_does_not_publish_the_error_text(monkeypatch, personas):
+    """Reactions go out on the public stream and GET /run; provider error
+    text (401s naming the account, internal hosts) must stay in the log."""
+
+    async def fake(**kwargs):
+        raise RuntimeError("AuthenticationError: Error code: 401 key sk-live-123 at tf-internal-7")
+
+    monkeypatch.setattr(react_mod, "chat_json", fake)
+    out = await collect("artifact", personas[:1])
+    assert out[0].raw_error == react_mod.REACTION_FAILED
+    assert "sk-live" not in out[0].model_dump_json()
+
+
 async def test_respects_the_concurrency_cap(monkeypatch, personas):
     in_flight = {"now": 0, "peak": 0}
 

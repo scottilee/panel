@@ -15,7 +15,7 @@ from panel.synthesize import (
     _apply_recounted_pct,
     _invalid_evidence,
     _normalize_evidence,
-    _patch_headline,
+    _patch_pct,
     _tri_band,
     build_persona_summary_csv,
     segment_share_pct,
@@ -220,10 +220,27 @@ def test_apply_recounted_pct_also_fixes_the_headline(pool):
     assert "90%" not in out.headline
 
 
-def test_patch_headline_leaves_ambiguous_numbers_alone():
-    assert _patch_headline("90% balk and 90% leave", 90, 33) == "90% balk and 90% leave"
-    assert _patch_headline("12.90% balk", 90, 33) == "12.90% balk"
-    assert _patch_headline("90% balk", 90, 33) == "33% balk"
+def test_patch_pct_leaves_ambiguous_numbers_alone():
+    assert _patch_pct("90% balk and 90% leave", 90, 33) == "90% balk and 90% leave"
+    assert _patch_pct("12.90% balk", 90, 33) == "12.90% balk"
+    assert _patch_pct("90% balk", 90, 33) == "33% balk"
+
+
+def test_recount_patches_the_claim_as_well_as_the_headline(pool):
+    """The claim sits next to the counted bar in the UI, so a claim still
+    quoting Ultra's estimate contradicts the number beside it."""
+    reactions = _reactions_for(pool, {"p001"})
+    synthesis = make_synthesis(["p001", "p002", "p003"], affected_pct=90, headline="90% of people balk")
+    synthesis = synthesis.model_copy(
+        update={
+            "findings": [
+                f.model_copy(update={"claim": "90% of low-comfort readers balk at the price."})
+                for f in synthesis.findings
+            ]
+        }
+    )
+    out = _apply_recounted_pct(synthesis, pool, reactions)
+    assert out.findings[0].claim == "33% of low-comfort readers balk at the price."
 
 
 # --- Sharded digest stage (the 1000-persona scale-up, 2026-10-28) -----------

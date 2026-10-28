@@ -32,6 +32,10 @@ REACTION_MAX_TOKENS = 3000
 REACTION_TEMPERATURE = 0.4
 
 
+# The public value of Reaction.raw_error. Only its presence means anything.
+REACTION_FAILED = "the model call failed"
+
+
 async def react_one(
     persona: Persona, artifact_text: str, run_id: str, sem: asyncio.Semaphore
 ) -> Reaction:
@@ -63,6 +67,10 @@ async def react_one(
             # Any failure -- not just ChatJsonError -- becomes a placeholder
             # reaction with raw_error set, so one bad call never discards the
             # reactions already paid for. Aggregates skip these (panel/stats.py).
+            # The exception text goes to the log only: a reaction is public
+            # (SSE stream, GET /run), and provider errors name the account,
+            # the auth failure and internal hosts.
+            print(f"reaction {run_id}/{persona.id} failed: {type(e).__name__}: {e}", flush=True)
             return Reaction(
                 persona_id=persona.id,
                 sentiment=0,
@@ -73,7 +81,7 @@ async def react_one(
                 what_would_change_my_mind="(no response)",
                 run_id=run_id,
                 latency_ms=getattr(e, "latency_ms", None),
-                raw_error=f"{type(e).__name__}: {e}",
+                raw_error=REACTION_FAILED,
             )
 
 

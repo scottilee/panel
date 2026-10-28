@@ -14,7 +14,7 @@ A real 100-person copy test costs thousands of dollars and takes a week.
 This costs about ten cents and takes a minute: 35 seconds for the panel to
 read, the rest for the synthesis.
 
-**97 of 100 personas say "I wouldn't buy this." That's the point.** The
+**More than nine in ten personas say "I wouldn't act on this." That's the point.** The
 panel is deliberately built to be hard to please (see
 [Anti-sycophancy](#anti-sycophancy-why-the-panel-says-no)) — a panel that
 tells you your copy is great is worth nothing.
@@ -100,6 +100,30 @@ costs well under a dollar.
 - **Visible per run.** After every run the UI shows how many Nano, Super
   and Ultra calls it actually made, retries included.
 
+### Compare against the market (Tavily)
+
+After a run, one button puts the same people in front of two or three
+competitors' pages for the same kind of product, and reports which
+confusions and objections readers raised on every page (a problem with the
+category) versus only on yours (a problem you can fix). It calls Tavily at
+runtime, twice over (`panel/market.py`):
+
+1. Nano turns your copy into a search, and **Tavily Search** finds
+   candidate pages, with review sites and aggregators excluded up front.
+2. Most results are still listicles, so candidates pass a local filter on
+   host, path and title, then one Nano call that picks companies' own
+   product pages and may pick none.
+3. **Tavily Extract** pulls each page's text, and the same personas (up to
+   50) read each one. Super condenses each page's reactions into themes,
+   one Nano call aligns differently worded themes across pages, and Python
+   counts which page raised what.
+
+There is deliberately no head-to-head conversion score: a reader who would
+buy from a competitor may be reacting to their price or brand, not their
+writing. The panel lists every URL it used and the exact text it read from
+each. Without `TAVILY_API_KEY` the button is hidden and URL input uses the
+direct fetch.
+
 ---
 
 ## Setup
@@ -147,6 +171,11 @@ run spends real credits. So:
   spend — generous for a person, useless for a script. Clients are keyed by
   the address Cloud Run appends to `X-Forwarded-For`
   (`TRUSTED_PROXY_HOPS=1`), never by a client-supplied one.
+- Daily budgets on top of that: 10,000 persona reactions per rolling 24
+  hours across the whole service (`DAILY_PERSONA_BUDGET`) and 2,000 per
+  client (`DAILY_CLIENT_PERSONA_BUDGET`), plus service-wide daily caps on
+  compares and checks. A run is charged for the calls it actually sent, so
+  cancelling one gives the rest back. Cached replays are free and exempt.
 - A compare result is computed once per pair of runs and reused.
 - Run ids are 128-bit random tokens, since an id is the only key to a run's
   pasted text.
@@ -327,8 +356,10 @@ decisions are reproducible with `python scripts/probe_nemotron.py`.
   on an instance that doesn't know the run.
 - **Compare requires identical persona counts** on both runs, enforced in
   the UI by locking the control once a compare starts.
-- **The Tavily URL-extraction path is unverified.** We had no key; the
-  `requests` + `readability-lxml` fallback is what's tested.
+- **The market comparison is only as good as its page picks.** Search
+  results for a category are mostly listicles and reviews; the filters
+  described above catch most of them, not all, which is why the panel
+  shows every URL it used and the exact text it read from each.
 - **A 1,000-person run takes about eight minutes**, because throughput is
   concurrency-bound (50 concurrent Nano calls) and the panel size is the
   numerator. The default stays at 100 for that reason; the slider goes to

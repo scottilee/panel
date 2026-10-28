@@ -23,15 +23,13 @@ def _reset_server_state():
     this file counts against the per-client window -- without this, adding
     a seventh POST test would make an unrelated test start getting 429s.
     """
-    from api.main import _LIVE_RUN_SPEND, _RATE_WINDOWS
+    from api.main import _LIVE_RUN_SPEND, _RATE_WINDOWS, _SERVICE_CALLS
 
-    _RATE_WINDOWS.clear()
-    _LIVE_RUN_SPEND.clear()
-    RUNS.clear()
+    for state in (_RATE_WINDOWS, _LIVE_RUN_SPEND, _SERVICE_CALLS, RUNS):
+        state.clear()
     yield
-    _RATE_WINDOWS.clear()
-    _LIVE_RUN_SPEND.clear()
-    RUNS.clear()
+    for state in (_RATE_WINDOWS, _LIVE_RUN_SPEND, _SERVICE_CALLS, RUNS):
+        state.clear()
 
 
 def test_personas_returns_the_whole_pool():
@@ -266,6 +264,14 @@ def test_cache_coverage_is_required():
     cached = {"reactions": [{"persona_id": p.id} for p in covered]}
     assert _cache_covers(cached, covered)
     assert not _cache_covers(cached, PERSONA_POOL[:3])
+    # Nor into a smaller one: the report's prose and evidence ids describe
+    # the whole recorded panel, and recounting only fixes the numbers.
+    assert not _cache_covers(cached, PERSONA_POOL[:1])
+
+
+def test_examples_say_which_panel_size_their_cache_replays():
+    for ex in client.get("/examples").json():
+        assert "cached_persona_count" in ex
 
 
 def test_unsafe_url_is_rejected_before_any_fetch():
@@ -311,11 +317,11 @@ def test_cached_404_names_the_size_the_fallback_covers():
     assert str(covered) in detail and str(covered + 10) in detail
 
 
-def test_cached_replay_reports_zero_cost():
-    """A replay makes no model calls, so every cost figure must read zero.
-    _compute_stats would otherwise sum the cached reactions' recorded
-    latencies -- half an hour of Nano time printed next to nano_calls=0,
-    describing calls made on a different run days earlier."""
+def test_cached_replay_reports_zero_cost(monkeypatch):
+    """A replay makes no model calls, so every cost figure must read zero,
+    even though the cached reactions carry latencies recorded on the
+    original run. Drives the real replay path end to end."""
+    import asyncio
     import json
 
     from api import main as M
@@ -323,21 +329,27 @@ def test_cached_replay_reports_zero_cost():
     example = next(M.config.EXAMPLES_DIR.glob("*.txt"))
     cache_path = M.config.CACHED_DIR / f"{example.stem}.json"
     if not cache_path.is_file():
-        import pytest as _pytest
-
-        _pytest.skip("no cached example on disk")
+        pytest.skip("no cached example on disk")
     cached = json.loads(cache_path.read_text())
-    reactions = [M.Reaction.model_validate(r) for r in cached["reactions"]]
-    # The cached reactions do carry real recorded latencies, or this test
-    # would pass for the wrong reason.
-    assert sum(r.latency_ms or 0 for r in reactions) > 0
+    ids = {r["persona_id"] for r in cached["reactions"]}
+    # The recorded latencies are real, or this test would pass for the
+    # wrong reason.
+    assert sum(r.get("latency_ms") or 0 for r in cached["reactions"]) > 0
 
-    stats = M._compute_stats(reactions, {}, nano_ms_total=0, ultra_ms=0)
-    assert stats.nano_calls == 0
-    assert stats.nano_ms_total == 0
-    assert stats.ultra_ms == 0
+    ctx = _finished_ctx("replay", status="pending")
+    ctx.run.reactions = []
+    ctx.personas = [p for p in PERSONA_POOL if p.id in ids]
+    monkeypatch.setattr(M, "CACHED_REACTION_INTERVAL_S", 0)
+    monkeypatch.setattr(M, "_persist", lambda ctx: None)
+    asyncio.run(M._execute_cached_run(ctx, cached, skip_synthesis=False))
+
+    stats = ctx.run.stats
+    assert ctx.run.status == "done"
+    assert (stats.nano_calls, stats.super_calls, stats.ultra_calls) == (0, 0, 0)
+    assert stats.nano_ms_total == 0 and stats.ultra_ms == 0
     # The sentiment figures stay real -- they describe what is on screen.
     assert stats.mean_sentiment != 0
+    assert ctx.run.synthesis is not None
 
 
 # --- Pre-submission check (POST /check) ------------------------------------
@@ -627,13 +639,127 @@ def test_daily_budget_refuses_live_runs_once_spent(monkeypatch):
     from api import main as M
 
     monkeypatch.setattr(M, "DAILY_PERSONA_BUDGET", 150)
-    M._LIVE_RUN_SPEND.append((__import__("time").monotonic(), 100))
+    M._LIVE_RUN_SPEND.append(M._Spend(at=__import__("time").monotonic(), client_ip="other", personas=100))
     r = client.post("/run", json={"text": LONG_ENOUGH, "persona_count": 100})
     assert r.status_code == 429
     assert "daily panel budget" in r.json()["detail"]
     # A smaller panel still fits.
     monkeypatch.setattr(M, "_execute_run", lambda ctx, skip: __import__("asyncio").sleep(0))
     assert client.post("/run", json={"text": LONG_ENOUGH, "persona_count": 50}).status_code == 200
+
+
+def test_one_client_cannot_spend_the_whole_daily_budget(monkeypatch):
+    """The service budget alone let one caller exhaust it for everyone."""
+    from api import main as M
+
+    monkeypatch.setattr(M, "DAILY_CLIENT_PERSONA_BUDGET", 150)
+    M._LIVE_RUN_SPEND.append(
+        M._Spend(at=__import__("time").monotonic(), client_ip="testclient", personas=100)
+    )
+    r = client.post("/run", json={"text": LONG_ENOUGH, "persona_count": 100})
+    assert r.status_code == 429
+    assert "daily allowance" in r.json()["detail"]
+    # Another client's spend doesn't count against this one.
+    M._LIVE_RUN_SPEND[0].client_ip = "someone-else"
+    monkeypatch.setattr(M, "_execute_run", lambda ctx, skip: __import__("asyncio").sleep(0))
+    assert client.post("/run", json={"text": LONG_ENOUGH, "persona_count": 100}).status_code == 200
+
+
+def test_a_cancelled_run_is_charged_for_what_it_sent_not_what_it_reserved():
+    """Charging the full reservation let a chain of cancelled 1,000-persona
+    runs burn the day's budget in seconds while spending almost nothing."""
+    import asyncio
+
+    from api import main as M
+
+    async def scenario():
+        ctx = _finished_ctx("partial", status="streaming")
+        ctx.personas = PERSONA_POOL[:1000]
+        ctx.spend = M._reserve_spend("testclient", 1000)
+
+        async def never_finishes():
+            await asyncio.sleep(3600)
+
+        ctx.task = asyncio.create_task(never_finishes())
+        ctx.task.add_done_callback(lambda _t: M._settle_run_spend(ctx))
+        await asyncio.sleep(0)
+        await M._cancel(ctx)
+        await asyncio.gather(ctx.task, return_exceptions=True)
+        await asyncio.sleep(0)
+        return ctx
+
+    ctx = asyncio.run(scenario())
+    # Two reactions in (from _finished_ctx) plus up to a full batch in flight.
+    assert ctx.spend.personas == len(ctx.run.reactions) + M.config.MAX_CONCURRENCY
+    assert M._settled_personas(1000, 1000, finished=True) == 1000
+    assert M._settled_personas(30, 2, finished=False) == 30
+
+
+def test_compare_and_check_have_service_wide_daily_caps(monkeypatch):
+    from api import main as M
+
+    monkeypatch.setattr(M, "DAILY_CHECK_BUDGET", 0)
+    r = client.post("/check", json={"text": LONG_ENOUGH})
+    assert r.status_code == 429
+    assert "daily check budget" in r.json()["detail"]
+
+    monkeypatch.setattr(M, "DAILY_COMPARE_BUDGET", 0)
+    RUNS["a"] = _finished_ctx("a")
+    RUNS["b"] = _finished_ctx("b")
+    r = client.post("/compare", json={"run_a": "a", "run_b": "b"})
+    assert r.status_code == 429
+    assert "daily compare budget" in r.json()["detail"]
+    M._SERVICE_CALLS.clear()
+
+
+def test_a_url_fetch_in_progress_blocks_a_second_from_the_same_client():
+    from api import main as M
+
+    M._FETCHING_CLIENTS.add("testclient")
+    try:
+        r = client.post("/run", json={"url": "https://example.com/"})
+        assert r.status_code == 429
+        assert "already fetching" in r.json()["detail"]
+    finally:
+        M._FETCHING_CLIENTS.clear()
+
+
+def test_no_report_is_written_when_most_of_the_panel_failed(monkeypatch):
+    """Ultra used to synthesize even when every reaction had failed,
+    producing a confident report about nobody."""
+    import asyncio
+
+    from api import main as M
+    from panel.react import REACTION_FAILED
+
+    ctx = _finished_ctx("broken", status="streaming")
+    ctx.personas = PERSONA_POOL[:10]
+    ctx.run.reactions = []
+
+    async def fake_fan_out(text, personas, run_id):
+        for i, p in enumerate(personas):
+            r = M.Reaction(
+                persona_id=p.id,
+                sentiment=1,
+                would_act=True,
+                gut_reaction="ok",
+                top_confusion="none",
+                top_objection="none",
+                what_would_change_my_mind="none",
+            )
+            yield r if i < 3 else r.model_copy(update={"raw_error": REACTION_FAILED})
+
+    async def must_not_synthesize(*a, **k):
+        raise AssertionError("synthesize was called")
+
+    monkeypatch.setattr(M, "fan_out", fake_fan_out)
+    monkeypatch.setattr(M, "synthesize", must_not_synthesize)
+    monkeypatch.setattr(M, "_persist", lambda ctx: None)
+    asyncio.run(M._execute_run(ctx, skip_synthesis=False))
+    assert ctx.run.status == "error"
+    assert "only 3 of 10" in ctx.error_message
+    assert ctx.run.synthesis is None
+    assert ctx.run.stats is not None and ctx.run.stats.failed_reactions == 7
 
 
 def test_label_and_url_lengths_are_bounded():
@@ -734,3 +860,41 @@ def test_the_benchmark_driver_can_reach_everything_it_calls():
         "MarketComparison",
     ):
         assert hasattr(M, name), f"api.main is missing {name}"
+
+
+def test_benchmark_is_refused_and_hidden_without_a_tavily_key(monkeypatch):
+    from api import main as M
+
+    monkeypatch.setattr(M, "TAVILY_API_KEY", None)
+    assert client.get("/features").json() == {"market": False}
+    RUNS["done"] = _finished_ctx("done")
+    r = client.post("/benchmark", json={"run_id": "done"})
+    assert r.status_code == 503
+
+
+def test_benchmark_is_charged_to_the_callers_daily_budget(monkeypatch):
+    """A benchmark is three more panel reads, so it draws on the same
+    budgets as a run, keyed on the same resolved client address."""
+    from api import main as M
+
+    monkeypatch.setattr(M, "TAVILY_API_KEY", "test-key")
+    monkeypatch.setattr(M, "DAILY_CLIENT_PERSONA_BUDGET", 100)
+    parent = _finished_ctx("parent")
+    parent.personas = PERSONA_POOL[:50]
+    parent.run.reactions = [
+        M.Reaction(
+            persona_id=p.id,
+            sentiment=0,
+            would_act=False,
+            gut_reaction="meh",
+            top_confusion="none",
+            top_objection="none",
+            what_would_change_my_mind="none",
+        )
+        for p in parent.personas
+    ]
+    RUNS["parent"] = parent
+    # 3 pages x 50 personas is over this client's 100.
+    r = client.post("/benchmark", json={"run_id": "parent"})
+    assert r.status_code == 429
+    assert "daily allowance" in r.json()["detail"]
