@@ -19,7 +19,7 @@ Find out who you're losing, and why — before you ship.
 Paste a landing page, ad, or pricing page. A hundred distinct synthetic
 people — up to a thousand if you want — read it and react the way they actually would in the first twenty
 seconds — bored, confused, suspicious, indifferent. Then one much larger
-model reads every reaction and tells you the three things costing you
+model reads their reactions and tells you the three things costing you
 customers, which segment each one affects, and one specific edit to try.
 
 ---
@@ -41,7 +41,7 @@ lands. At the default 100 people, you have a verdict in about a minute:
   segment is and what share of the panel it makes up.
 - **Three findings ranked by severity**, each naming the affected segment
   and citing the specific people whose objections support it. Click a
-  segment and the grid filters to exactly those readers.
+  segment and the grid filters to exactly the readers in it.
 - **One highest-leverage edit** — a verbatim phrase from your copy and a
   proposed replacement.
 - **Who you're winning and who you're losing**, in a sentence each.
@@ -90,12 +90,16 @@ as the contract between them, Docker, and Terraform onto Google Cloud Run.
 
 **Three design decisions did most of the work:**
 
-**1. Every number is counted in Python, never by a model.** Ultra proposes
+**1. Every finding's number is counted in Python, never by a model.** Ultra proposes
 *which* segment a finding affects as a machine-checkable filter
 (`{field, op, value}` clauses); Python counts how many personas match it
 and what share of them actually reacted negatively. We did this because Ultra's own percentage claims were
 off by 12-70 points, and retrying with the discrepancy spelled out
-produced identical wrong numbers. Every figure on screen is a count.
+produced identical wrong numbers. Each finding's percentage and segment
+size are counts, and the prompt bars the headline and claims from citing
+any other figure. When a filter can't be recounted (it names a band that
+doesn't exist, say), the card is labelled an estimate rather than shown as
+a count.
 
 **2. The panel is built to be hard to please.** Persona generation requires
 at least 3 in every 10 to have skepticism ≥70/100, and the build *fails*
@@ -103,8 +107,11 @@ unless the pool stays within bounds on three example artifacts. Measured on
 the shipped pool: 97%, 98% and 100% say they wouldn't act.
 
 **3. Compare mode reruns rather than predicts.** Both runs use the same
-personas in the same order, so a flip is a real change of mind, not a
-sampling artifact.
+personas with the same per-persona seeds, so the difference is the edit
+rather than a different sample of people. Model sampling still adds some
+noise: an unchanged rerun moved 4-7 people in 100 at our earlier
+temperature of 0.7, and the compare view shows that scale next to every
+flip count. `scripts/measure_noise.py` re-measures it at the shipped 0.4.
 
 ## Challenges we ran into
 

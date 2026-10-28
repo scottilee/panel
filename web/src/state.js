@@ -1,5 +1,7 @@
 // useReducer reducer + selectors (stats, filters, deltas), plus the two
 // enumerated Persona fields the filters depend on the order of.
+
+import { matchesSegment } from './segment.js'
 //
 // state.personas is the fixed, ordered sample for the current run (the
 // same count always selects the same personas). It's kept in sync with
@@ -282,8 +284,7 @@ export function scoreBand(value) {
 
 // The two enumerated Persona fields, in the same order as
 // panel/schemas.py's REGIONS / INCOME_BANDS literals. Owned here because
-// the filter logic below is what depends on their order; mock.js
-// re-exports them.
+// the filter logic below is what depends on their order.
 export const REGIONS = [
   'Northeast US',
   'Southeast US',
@@ -297,8 +298,9 @@ export const REGIONS = [
 
 export const INCOME_BANDS = ['<25k', '25-40k', '40-75k', '75-150k', '150k+']
 
-// region/techComfort/skepticism are chip-style ({group, value}, exact
-// match). ageBand/incomeBand are range-style ({group, min, max} /
+// segment is a finding's affected_segment_filter, applied exactly
+// ({group, clauses, label}; see segment.js). region/techComfort/skepticism
+// are chip-style ({group, value}, exact match). ageBand/incomeBand are range-style ({group, min, max} /
 // {group, minIndex, maxIndex}): age filters on the real persona.age
 // number, not the derived band; income filters on the band's ordinal
 // position in INCOME_BANDS, since income has no raw number. Each range group has at most one entry in activeFilters (the
@@ -306,6 +308,8 @@ export const INCOME_BANDS = ['<25k', '25-40k', '40-75k', '75-150k', '150k+']
 // selectFilteredPersonaIds's OR-within-group/AND-across-groups grouping.
 export function personaMatchesFilter(persona, filter) {
   switch (filter.group) {
+    case 'segment':
+      return matchesSegment(persona, filter.clauses)
     case 'region':
       return persona.region === filter.value
     case 'ageBand':
@@ -355,11 +359,13 @@ export function selectIsRunning(state) {
 
 // --- Compare (run B) ---------------------------------------------------
 
-export function selectCompareLiveStats(state) {
-  return statsOver(
-    Object.values(state.compare.reactionsById),
-    state.compare.progress.total || state.personas.length,
-  )
+// Same filter semantics as selectLiveStats, so switching the view to Run B
+// or Delta keeps describing the segment on screen.
+export function selectCompareLiveStats(state, filteredIds = null) {
+  const allReactions = Object.values(state.compare.reactionsById)
+  const reactions = filteredIds ? allReactions.filter((r) => filteredIds.has(r.persona_id)) : allReactions
+  const total = filteredIds ? filteredIds.size : state.compare.progress.total || state.personas.length
+  return statsOver(reactions, total)
 }
 
 export function selectCompareElapsedSeconds(state) {
@@ -394,117 +400,15 @@ export function selectDeltaByPersonaId(state) {
   return byId
 }
 
-// Clicking a finding's affected_segment chip applies that filter
-// (reusing the same activeFilters shape). affected_segment_filter's
-// fields don't map 1:1 onto filter chip groups -- age_band has no
-// Persona field (it's derived from age), and the Big Five traits have no
-// chip group at all -- clauses on those are
-// skipped rather than erroring, since "apply what can be applied" is
-// more useful than refusing the whole chip for one unmappable clause.
-const SEGMENT_FIELD_TO_GROUP = {
-  region: 'region',
-  age_band: 'ageBand',
-  income_band: 'incomeBand',
-  tech_comfort: 'techComfort',
-  skepticism: 'skepticism',
-}
-
-// age_band clauses only ever carry band names (via '==' or 'in'), never a
-// raw numeric threshold against age itself -- there's no <=/>= case to
-// handle for this field. Matches the AGE_MAX bound Filters.jsx's slider
-// uses for "65+" (85), so a clause built from the UI and one built here
-// agree on what "65+" means.
-const AGE_BAND_RANGES = {
-  '18-24': [18, 24],
-  '25-34': [25, 34],
-  '35-49': [35, 49],
-  '50-64': [50, 64],
-  '65+': [65, 85],
-}
-
-// Chips are positive selections with no negation, so a '!=' clause has to
-// be turned into the complement set before it can be expressed as chips;
-// treating it like '==' would select exactly the personas the finding
-// excludes. SEGMENT_OPS in panel/schemas.py permits '!='.
-//
-// Complements are only expressible for the two unordered groups (region,
-// and the tri-sected score bands). The age and income chips are a single
-// contiguous range, so "every band except a middle one" cannot be
-// represented at all -- those clauses are skipped, consistently with how
-// unmappable fields are already handled.
-function complementNames(all, excluded) {
-  const drop = new Set(Array.isArray(excluded) ? excluded : [excluded])
-  return all.filter((v) => !drop.has(v))
-}
-
-function ageRangeForClause(op, value) {
-  if (op === '!=') return null
-  const names = op === 'in' ? value : [value]
-  const ranges = names.map((n) => AGE_BAND_RANGES[n]).filter(Boolean)
-  if (!ranges.length) return null
-  return { min: Math.min(...ranges.map((r) => r[0])), max: Math.max(...ranges.map((r) => r[1])) }
-}
-
-function incomeRangeForClause(op, value) {
-  const names = op === 'in' ? value : [value]
-  let idxs = names.map((n) => INCOME_BANDS.indexOf(n)).filter((i) => i >= 0)
-  if (op === '!=') {
-    // Only when the excluded band sits at one end, leaving the rest
-    // contiguous.
-    if (idxs.length !== 1) return null
-    const excluded = idxs[0]
-    if (excluded === 0) idxs = [1, INCOME_BANDS.length - 1]
-    else if (excluded === INCOME_BANDS.length - 1) idxs = [0, INCOME_BANDS.length - 2]
-    else return null
-  }
-  if (!idxs.length) return null
-  return { minIndex: Math.min(...idxs), maxIndex: Math.max(...idxs) }
+// Clicking a finding's segment applies its affected_segment_filter
+// exactly, as one removable filter, rather than approximating it with the
+// band chips: "skepticism >= 70" is not the same people as the "high"
+// band (67+), and the grid has to show the people segment_size counted.
+export function segmentFilter(finding) {
+  return { group: 'segment', clauses: finding.affected_segment_filter, label: finding.affected_segment }
 }
 
 export const SCORE_BANDS = ['low', 'mid', 'high']
-
-function scoreBandsForClause(op, value) {
-  if (op === '==') return [scoreBand(value)]
-  if (op === '!=') return complementNames(SCORE_BANDS, scoreBand(value))
-  if (op === 'in') return [...new Set(value.map(scoreBand))]
-  if (op === '<=' || op === '<') {
-    if (value <= 33) return ['low']
-    if (value <= 66) return ['low', 'mid']
-    return SCORE_BANDS
-  }
-  if (op === '>=' || op === '>') {
-    if (value >= 67) return ['high']
-    if (value >= 34) return ['mid', 'high']
-    return SCORE_BANDS
-  }
-  return []
-}
-
-export function segmentFilterToChips(clauses) {
-  const chips = []
-  for (const clause of clauses) {
-    const group = SEGMENT_FIELD_TO_GROUP[clause.field]
-    if (!group) continue // Big Five or any other unmapped field -- skip
-    if (group === 'techComfort' || group === 'skepticism') {
-      for (const band of scoreBandsForClause(clause.op, clause.value)) {
-        chips.push({ group, value: band })
-      }
-    } else if (group === 'ageBand') {
-      const range = ageRangeForClause(clause.op, clause.value)
-      if (range) chips.push({ group, ...range })
-    } else if (group === 'incomeBand') {
-      const range = incomeRangeForClause(clause.op, clause.value)
-      if (range) chips.push({ group, ...range })
-    } else if (clause.op === 'in') {
-      for (const v of clause.value) chips.push({ group, value: v })
-    } else if (clause.op === '!=') {
-      for (const v of complementNames(REGIONS, clause.value)) chips.push({ group, value: v })
-    } else {
-      chips.push({ group, value: clause.value })
-    }
-  }
-  return chips
-}
 
 // Grid column count and tile size (px) for N tiles. Anchored at N=100 ->
 // 10 cols / 44px and N=1000 -> 32 cols / 12px and interpolated on a log scale beyond N=100; below N=100, tiles

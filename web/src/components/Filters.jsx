@@ -3,7 +3,8 @@
 //
 // Region is a multi-select dropdown, age and income are dual-handle range
 // sliders (DualRangeSlider.jsx), and tech comfort and skepticism are
-// chips.
+// chips. A segment applied from a finding shows as its own removable chip,
+// since it is an exact filter none of the controls below can express.
 
 import { useEffect, useRef, useState } from 'react'
 import { INCOME_BANDS, REGIONS, SCORE_BANDS } from '../state.js'
@@ -79,7 +80,16 @@ function RegionDropdown({ options, selected, onToggleValue }) {
   )
 }
 
-export default function Filters({ activeFilters, onToggle, onRangeChange, onClearAll, matchCount, totalCount }) {
+export default function Filters({
+  activeFilters,
+  onToggle,
+  onRangeChange,
+  onRemoveSegment,
+  onClearAll,
+  matchCount,
+  totalCount,
+}) {
+  const segments = activeFilters.filter((f) => f.group === 'segment')
   const selectedRegions = activeFilters.filter((f) => f.group === 'region').map((f) => f.value)
   const [ageMin, ageMax] = rangeFor(activeFilters, 'ageBand', AGE_MIN, AGE_MAX)
   const [incomeMinIdx, incomeMaxIdx] = rangeFor(
@@ -104,6 +114,25 @@ export default function Filters({ activeFilters, onToggle, onRangeChange, onClea
       <span className="filters-match">
         {activeFilters.length > 0 ? `${matchCount} of ${totalCount} people match` : `Showing all ${totalCount} people`}
       </span>
+
+      {segments.length > 0 && (
+        <div className="filter-group">
+          <span className="filter-group-label">SEGMENT FROM A FINDING</span>
+          <div className="filter-chips">
+            {segments.map((f) => (
+              <button
+                key={f.label}
+                type="button"
+                className="filter-chip active"
+                onClick={() => onRemoveSegment(f)}
+                title="Remove this segment filter"
+              >
+                {f.label} &times;
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="filter-group">
         <span className="filter-group-label">REGION</span>

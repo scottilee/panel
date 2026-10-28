@@ -1499,6 +1499,12 @@ input::placeholder {
   gap: 24px;
 }
 
+.compare-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
 .compare-stat {
   display: flex;
   flex-direction: column;

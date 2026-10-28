@@ -5,8 +5,8 @@
 Paste a landing page, ad, pricing page, or policy notice. A panel of
 distinct synthetic people — 100 by default, up to 1,000 — reads it in
 parallel and reacts the way they actually would in the first twenty seconds:
-bored, confused, suspicious, indifferent. One stronger model reads every
-reaction and tells you the three things that are costing you, which segment
+bored, confused, suspicious, indifferent. One stronger model reads their
+reactions (or, above 150 people, themes condensed from them) and tells you the three things that are costing you, which segment
 each one affects, and one specific edit to try. Apply the edit and it reruns
 the same people so you can see who changed their mind.
 
@@ -263,8 +263,10 @@ decisions are reproducible with `python scripts/probe_nemotron.py`.
   out produced identical wrong numbers. So Ultra proposes *which* segment
   matters as a structured filter, and Python computes the percentage from
   the actual reactions: how many people match the filter, and what share of
-  them reacted negatively. Every number in the findings panel is counted,
-  not estimated. (Counting the right thing took a second pass: our first
+  them reacted negatively. Every finding's number is counted, not
+  estimated, and the prompt bars the headline and claims from citing any
+  other figure; a filter that can't be recounted is shown labelled as an
+  estimate. (Counting the right thing took a second pass: our first
   recount measured the segment's share of the *panel*, a true number
   answering a different question than the sentence printed above it.)
 - **…and asking anyway isn't merely unreliable, it's destructive.** We
@@ -278,7 +280,7 @@ decisions are reproducible with `python scripts/probe_nemotron.py`.
   for over eight minutes, because exhaustively classifying 50 reactions into
   three categories is the same long serial task wearing a different hat.
   v3 asks for themes plus **2-5 examples**, capped in the schema, and prints
-  no quantity at all. Every number in the report comes from recounting
+  no quantity at all. Every finding's number comes from recounting
   Ultra's segment filter against the real personas — which is where this
   project's numbers came from in the first place.
 - **Benchmark at the configuration you ship.** "Condense a batch of
@@ -314,6 +316,10 @@ decisions are reproducible with `python scripts/probe_nemotron.py`.
   models role-playing demographics, not humans. Use it to catch the
   confusions and objections you can't see in your own copy, not to forecast
   conversion rates.
+- **Flip counts sit close to the noise floor.** An unchanged rerun moved
+  4-7 people in 100 at temperature 0.7 (the shipped 0.4 should be quieter;
+  `scripts/measure_noise.py` measures it), so a small flip count is not
+  evidence on its own. The compare view says so next to every count.
 - **One edit moves few people.** See above — expect a few percent. The
   diagnosis is the value; the flip count is a sanity check on it.
 - **Run state is in memory.** A server restart loses in-flight runs, and the

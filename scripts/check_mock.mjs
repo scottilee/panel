@@ -108,5 +108,59 @@ for (const ex of M.EXAMPLES) {
   console.log((ok ? 'OK   ' : 'WRONG') + ' stats exclude failed reactions')
 }
 
+// Clicking a finding's segment filters to exactly the people its
+// segment_size counted -- not an approximation by band chips.
+{
+  const S = await import(join(here, '../web/src/state.js'))
+  const people = M.buildMockPersonas(300)
+  const syn = M.buildMockSynthesis(people, pricing, M.buildMockReactions(people, pricing))
+  let ok = true
+  for (const f of syn.findings) {
+    const ids = S.selectFilteredPersonaIds(people, [S.segmentFilter(f)])
+    if (ids.size !== f.segment_size) ok = false
+  }
+  if (!ok) bad++
+  console.log((ok ? 'OK   ' : 'WRONG') + ' a finding\'s segment filter matches its segment_size')
+}
+
+// The clause semantics match panel/synthesize.py's recount, including the
+// cases band chips got wrong.
+{
+  const G = await import(join(here, '../web/src/segment.js'))
+  const p = { age: 52, region: 'West US', income_band: '40-75k', tech_comfort: 70, skepticism: 40 }
+  const cases = [
+    [[{ field: 'tech_comfort', op: '>', value: 66 }], true],
+    [[{ field: 'tech_comfort', op: '>=', value: '71' }], false], // string coerced
+    [[{ field: 'skepticism', op: '>=', value: 34 }, { field: 'skepticism', op: '<=', value: 50 }], true],
+    [[{ field: 'skepticism', op: '>=', value: 34 }, { field: 'skepticism', op: '<=', value: 39 }], false],
+    [[{ field: 'age_band', op: 'in', value: ['50-64', '65+'] }], true],
+    [[{ field: 'age_band', op: '==', value: '50-59' }], false], // invented band matches nobody
+    [[{ field: 'region', op: '!=', value: 'West US' }], false],
+    [[{ field: 'tech_comfort', op: '==', value: 'low' }], false], // non-numeric matches nobody
+  ]
+  const ok = cases.every(([clauses, want]) => G.matchesSegment(p, clauses) === want)
+  if (!ok) bad++
+  console.log((ok ? 'OK   ' : 'WRONG') + ' segment clauses evaluate like the backend recount')
+}
+
+// Compare numbers share one denominator: personas usable in both runs.
+{
+  const people = M.buildMockPersonas(100)
+  const a = byId(M.buildMockReactions(people, pricing))
+  a[people[0].id] = { ...a[people[0].id], raw_error: 'boom' }
+  const b = byId(M.buildMockReactionsB(people, a))
+  const r = M.buildMockCompareResult(people, a, b)
+  const shared = people.filter((p) => !a[p.id].raw_error && !b[p.id].raw_error)
+  const actA = shared.filter((p) => a[p.id].would_act).length
+  const actB = shared.filter((p) => b[p.id].would_act).length
+  const ok =
+    r.compared === shared.length &&
+    r.deltas.length === shared.length &&
+    Math.abs(r.would_act_delta_pct - (100 * (actB - actA)) / shared.length) < 1e-9 &&
+    r.flipped_positive - r.flipped_negative === actB - actA
+  if (!ok) bad++
+  console.log((ok ? 'OK   ' : 'WRONG') + ' compare flips and would-act change share one denominator')
+}
+
 console.log(bad ? `\n${bad} PROBLEM(S)` : '\nmock mode asserts nothing it cannot support')
 process.exit(bad ? 1 : 0)

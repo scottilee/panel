@@ -190,6 +190,7 @@ def test_compare_result_round_trip():
                 flipped_to_act=True,
             )
         ],
+        compared=100,
         flipped_positive=22,
         flipped_negative=3,
         would_act_delta_pct=19.0,

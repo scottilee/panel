@@ -94,6 +94,7 @@ async def delta(run_a: Run, run_b: Run) -> CompareResult:
         run_a=run_a.run_id,
         run_b=run_b.run_id,
         deltas=deltas,
+        compared=len(shared_ids),
         flipped_positive=len(flipped_positive_ids),
         flipped_negative=len(flipped_negative_ids),
         would_act_delta_pct=act_pct(by_id_b) - act_pct(by_id_a),

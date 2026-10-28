@@ -198,6 +198,9 @@ class CompareResult(BaseModel):
     run_a: str
     run_b: str
     deltas: list[CompareDelta]
+    # Personas with a usable reaction in both runs: the shared denominator
+    # of the flips and of would_act_delta_pct.
+    compared: int
     flipped_positive: int
     flipped_negative: int
     would_act_delta_pct: float
@@ -230,9 +233,19 @@ class RunRequest(BaseModel):
     text: str | None = Field(
         default=None, min_length=MIN_ARTIFACT_CHARS, max_length=MAX_ARTIFACT_CHARS
     )
-    url: str | None = None
-    label: str | None = None
+    # Bounded because every field of a run is held in memory and persisted
+    # to RUNS_DIR (tmpfs on Cloud Run), including on free cached replays.
+    url: str | None = Field(default=None, max_length=2048)
+    label: str | None = Field(default=None, max_length=200)
     persona_count: int | None = Field(default=None, ge=10)
+    # The edited run of a compare only needs reactions: its report is
+    # never shown, and skipping it saves an Ultra call (plus ~100 Super
+    # calls above 150 personas) on every compare.
+    skip_synthesis: bool = False
+    # A run of this page's that the new one supersedes. Cancelled first, so
+    # starting over isn't refused by the one-active-run-per-client rule.
+    # The run id is the credential, exactly as for POST /run/{id}/cancel.
+    replaces: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def _text_xor_url(self) -> "RunRequest":

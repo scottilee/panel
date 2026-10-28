@@ -157,6 +157,36 @@ def unknown_clause_values(clauses: list[SegmentClause]) -> list[str]:
     return unknown
 
 
+def _is_int_like(value) -> bool:
+    try:
+        int(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def unrecountable_reasons(clauses: list[SegmentClause]) -> list[str]:
+    """Why a filter can't be recounted honestly, or [] if it can.
+
+    Beyond invented enum values: a numeric field compared against a word
+    (Ultra has seen "low"/"mid"/"high" buckets in the prompt's sentiment
+    breakdown, so {"field": "tech_comfort", "op": "==", "value": "low"} is
+    a plausible output), and a list value with anything but "in". Each of
+    those either raises in the comparison or silently matches nobody, and
+    both happen after every call in the run has been paid for.
+    """
+    reasons = [f"unknown value {v!r}" for v in unknown_clause_values(clauses)]
+    for clause in clauses:
+        values = clause.value if isinstance(clause.value, list) else [clause.value]
+        if isinstance(clause.value, list) and clause.op != "in":
+            reasons.append(f"list value with op {clause.op!r}")
+        if clause.field in NUMERIC_SEGMENT_FIELDS:
+            reasons.extend(
+                f"non-numeric {clause.field} value {v!r}" for v in values if not _is_int_like(v)
+            )
+    return reasons
+
+
 def _tri_band(value: int) -> str:
     """low / mid / high over a 1-100 trait scale."""
     return "low" if value <= 33 else "mid" if value <= 66 else "high"
@@ -274,17 +304,23 @@ def _apply_recounted_pct(
     new_findings = []
     headline = synthesis.headline
     for finding in synthesis.findings:
-        unknown = unknown_clause_values(finding.affected_segment_filter)
-        if unknown:
-            # An unverified number beats a verified-wrong one.
+        reasons = unrecountable_reasons(finding.affected_segment_filter)
+        members: list[str] | None = None
+        if not reasons:
+            try:
+                members = segment_members(personas_by_id, finding.affected_segment_filter)
+            except (TypeError, ValueError) as e:
+                reasons = [f"{type(e).__name__}: {e}"]
+        if members is None:
+            # An unverified number beats a verified-wrong one, and either
+            # beats failing a run whose every call is already paid for.
+            # segment_size stays None, so the UI labels it an estimate.
             print(
                 f"synthesize: keeping Ultra's affected_pct {finding.affected_pct} for segment "
-                f"{finding.affected_segment!r} -- its filter cites value(s) that match no "
-                f"persona attribute: {unknown}"
+                f"{finding.affected_segment!r} -- its filter can't be recounted: {reasons}"
             )
             new_findings.append(finding)
             continue
-        members = segment_members(personas_by_id, finding.affected_segment_filter)
         affected = round(negative_share_pct(members, reactions_by_id))
         if affected != finding.affected_pct:
             print(
@@ -326,9 +362,10 @@ SHARD_THRESHOLD = 150
 
 # Small and wide: runaway reasoning gets likelier the more there is to
 # read, so short shards are both more reliable and faster per call
-# (single digest call, 4 trials each: 50 reactions 3/4 at 48s median,
-# 25 1/4, 10 4/4 at 42s, 5 4/4 at 31s). 100 shards for a 1,000 panel run
-# in two waves at 50 concurrent.
+# (single digest call, 8000 budget, 10 trials each -- FEEDBACK.md section 5:
+# 50 reactions 0/10, 25 3/10, 10 10/10 at 46s median, 5 10/10 at 31s but
+# too few people per batch for recurring themes). 100 shards for a 1,000
+# panel run in two waves at 50 concurrent.
 SHARD_SIZE = 10
 SHARD_CONCURRENCY = 50
 # Super at 10 reactions per call measured 10/10 within 4.3-5.7k tokens.

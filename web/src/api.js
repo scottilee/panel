@@ -119,16 +119,46 @@ export function previewPersonas(n) {
 // cached: real mode only. Appends ?cached=true, which the backend honors
 // only when `text` matches one of the example files exactly.
 //
+// skipSynthesis: for a compare's Run B, whose report is never shown. The
+// run streams its reactions and goes straight to `done`, saving the Ultra
+// call (and, above 150 personas, the Super condensing pass).
+//
 // Returns a handle synchronously ({cancel()}), even though a real run
 // needs an async POST before its run_id exists -- `cancelled` covers the
 // gap, so a cancel issued before the POST resolves still reaches the
 // server once the id is known.
-export function startRun({ text, url, label, personaCount, onEvent, previousReactionsById, cached }) {
-  if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById, text })
-  return startRealRun({ text, url, label, personaCount, onEvent, cached })
+export function startRun({
+  text,
+  url,
+  label,
+  personaCount,
+  onEvent,
+  previousReactionsById,
+  cached,
+  skipSynthesis,
+}) {
+  if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById, text, skipSynthesis })
+  return startRealRun({ text, url, label, personaCount, onEvent, cached, skipSynthesis })
 }
 
-function startRealRun({ text, url, label, personaCount, onEvent, cached = false }) {
+// FastAPI's `detail` is a string for errors the app raises (429 limits,
+// 400s) but a list of {msg, ...} objects for request validation (422).
+function errorDetail(body, fallback) {
+  const { detail } = body ?? {}
+  if (typeof detail === 'string' && detail) return detail
+  if (Array.isArray(detail) && detail.length) {
+    return detail.map((d) => d?.msg ?? String(d)).join('; ')
+  }
+  return fallback
+}
+
+// The most recent real run this page started. A new run names it in
+// `replaces`, so the server stops it before applying its one-active-run-
+// per-client rule -- otherwise clicking Run again would race the previous
+// run's fire-and-forget cancel and could be refused with a 429.
+let lastRealRunId = null
+
+function startRealRun({ text, url, label, personaCount, onEvent, cached = false, skipSynthesis = false }) {
   let cancelled = false
   let es = null
   let runId = null
@@ -152,14 +182,17 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false 
           url: url || undefined,
           label: label || undefined,
           persona_count: personaCount,
+          skip_synthesis: skipSynthesis || undefined,
+          replaces: lastRealRunId || undefined,
         }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        onEvent({ type: 'error', data: { message: body.detail || `POST /run failed: HTTP ${res.status}` } })
+        onEvent({ type: 'error', data: { message: errorDetail(body, `POST /run failed: HTTP ${res.status}`) } })
         return
       }
       ;({ run_id: runId } = await res.json())
+      lastRealRunId = runId
     } catch (e) {
       onEvent({ type: 'error', data: { message: String(e) } })
       return
@@ -262,7 +295,7 @@ export async function getCompareResult({ personas, reactionsAById, runA, runB })
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `POST /compare failed: HTTP ${res.status}`)
+    throw new Error(errorDetail(body, `POST /compare failed: HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -280,7 +313,7 @@ function completionOrder(n) {
   return order
 }
 
-function startMockRun({ personaCount, onEvent, previousReactionsById, text }) {
+function startMockRun({ personaCount, onEvent, previousReactionsById, text, skipSynthesis }) {
   const personas = buildMockPersonas(personaCount)
   const reactions = previousReactionsById
     ? buildMockReactionsB(personas, previousReactionsById)
@@ -296,6 +329,10 @@ function startMockRun({ personaCount, onEvent, previousReactionsById, text }) {
     if (cancelled) return
 
     if (idx >= total) {
+      if (skipSynthesis) {
+        onEvent({ type: 'done', data: { stats: buildMockStats(reactions) } })
+        return
+      }
       onEvent({ type: 'synthesizing' })
       timeoutId = setTimeout(() => {
         if (cancelled) return

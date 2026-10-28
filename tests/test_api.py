@@ -23,12 +23,14 @@ def _reset_server_state():
     this file counts against the per-client window -- without this, adding
     a seventh POST test would make an unrelated test start getting 429s.
     """
-    from api.main import _RATE_WINDOWS
+    from api.main import _LIVE_RUN_SPEND, _RATE_WINDOWS
 
     _RATE_WINDOWS.clear()
+    _LIVE_RUN_SPEND.clear()
     RUNS.clear()
     yield
     _RATE_WINDOWS.clear()
+    _LIVE_RUN_SPEND.clear()
     RUNS.clear()
 
 
@@ -561,7 +563,7 @@ def test_compare_is_computed_once_per_pair(monkeypatch):
     async def fake_delta(a, b):
         calls.append((a.run_id, b.run_id))
         return CompareResult(
-            run_a=a.run_id, run_b=b.run_id, deltas=[], flipped_positive=0,
+            run_a=a.run_id, run_b=b.run_id, deltas=[], compared=0, flipped_positive=0,
             flipped_negative=0, would_act_delta_pct=0.0, summary="s",
         )
 
@@ -585,12 +587,105 @@ def test_compare_has_a_rate_limit(monkeypatch):
     monkeypatch.setattr(M, "delta", fake_delta)
     RUNS["ra"] = _finished_ctx("ra")
     RUNS["rb"] = _finished_ctx("rb")
-    # A failed compare is retried (not cached), and each retry is charged.
-    nonfatal = TestClient(app, raise_server_exceptions=False)
-    codes = [nonfatal.post("/compare", json={"run_a": "ra", "run_b": "rb"}).status_code for _ in range(3)]
-    assert codes[-1] == 429
+    # A failed compare is a readable 502, is retried (not cached), and each
+    # retry is charged.
+    codes = [client.post("/compare", json={"run_a": "ra", "run_b": "rb"}).status_code for _ in range(3)]
+    assert codes == [502, 502, 429]
 
 
 def test_no_cors_headers_by_default():
     r = client.get("/examples", headers={"Origin": "https://evil.example"})
     assert "access-control-allow-origin" not in {k.lower() for k in r.headers}
+
+
+def test_one_client_cannot_hold_two_runs_at_once():
+    """Otherwise one caller can fill every service-wide slot with
+    1,000-persona runs and lock every other visitor out for minutes."""
+    busy = _finished_ctx("mine", status="streaming")
+    busy.client_ip = "testclient"
+    RUNS["mine"] = busy
+    r = client.post("/run", json={"text": LONG_ENOUGH})
+    assert r.status_code == 429
+    assert "already have a run" in r.json()["detail"]
+
+
+def test_cached_replay_is_not_blocked_by_a_busy_service():
+    """The cached fallback makes no model calls, so it must still work
+    when other people's runs fill every slot."""
+    from api.main import MAX_CONCURRENT_RUNS
+
+    for i in range(MAX_CONCURRENT_RUNS):
+        ctx = _finished_ctx(f"busy{i}", status="streaming")
+        ctx.client_ip = f"10.0.0.{i}"
+        RUNS[f"busy{i}"] = ctx
+    example = client.get("/examples").json()[0]
+    r = client.post("/run?cached=true", json={"text": example["text"], "persona_count": 100})
+    assert r.status_code == 200
+
+
+def test_daily_budget_refuses_live_runs_once_spent(monkeypatch):
+    from api import main as M
+
+    monkeypatch.setattr(M, "DAILY_PERSONA_BUDGET", 150)
+    M._LIVE_RUN_SPEND.append((__import__("time").monotonic(), 100))
+    r = client.post("/run", json={"text": LONG_ENOUGH, "persona_count": 100})
+    assert r.status_code == 429
+    assert "daily panel budget" in r.json()["detail"]
+    # A smaller panel still fits.
+    monkeypatch.setattr(M, "_execute_run", lambda ctx, skip: __import__("asyncio").sleep(0))
+    assert client.post("/run", json={"text": LONG_ENOUGH, "persona_count": 50}).status_code == 200
+
+
+def test_label_and_url_lengths_are_bounded():
+    """Every field is held in RUNS and persisted to tmpfs, including on a
+    free cached replay, so an unbounded label was a memory-exhaustion path."""
+    assert client.post("/run", json={"text": LONG_ENOUGH, "label": "x" * 201}).status_code == 422
+    assert client.post("/run", json={"url": "https://e.com/" + "a" * 2048}).status_code == 422
+
+
+def test_skip_synthesis_finishes_without_a_report():
+    """The compare's edited run never shows its report, so it shouldn't
+    pay for one."""
+    import asyncio
+
+    from api import main as M
+
+    ctx = _finished_ctx("skip", status="pending")
+    ctx.personas = PERSONA_POOL[:2]
+
+    async def fake_fan_out(text, personas, run_id):
+        from panel.schemas import Reaction
+
+        for p in personas:
+            yield Reaction(
+                persona_id=p.id, sentiment=0, would_act=False, gut_reaction="g",
+                top_confusion="c", top_objection="o", what_would_change_my_mind="w",
+            )
+
+    async def boom(*a, **k):
+        raise AssertionError("synthesize must not run")
+
+    orig_fan, orig_syn = M.fan_out, M.synthesize
+    M.fan_out, M.synthesize = fake_fan_out, boom
+    try:
+        asyncio.run(M._execute_run(ctx, skip_synthesis=True))
+    finally:
+        M.fan_out, M.synthesize = orig_fan, orig_syn
+    assert ctx.run.status == "done"
+    assert ctx.run.synthesis is None
+    assert len(ctx.run.reactions) == 2
+
+
+def test_a_new_run_can_replace_the_clients_previous_one(monkeypatch):
+    """Clicking Run again cancels the old run with a fire-and-forget
+    request that can lose the race to the new POST; naming the old run in
+    `replaces` makes the server stop it first instead of answering 429."""
+    from api import main as M
+
+    busy = _finished_ctx("old", status="streaming")
+    busy.client_ip = "testclient"
+    RUNS["old"] = busy
+    monkeypatch.setattr(M, "_execute_run", lambda ctx, skip: __import__("asyncio").sleep(0))
+    r = client.post("/run", json={"text": LONG_ENOUGH, "replaces": "old"})
+    assert r.status_code == 200
+    assert RUNS["old"].run.status == "cancelled"

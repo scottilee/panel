@@ -30,6 +30,13 @@ variable "tf_api_key" {
   sensitive   = true
 }
 
+variable "tavily_api_key" {
+  description = "Optional Tavily key for URL input. Empty = the app fetches pages itself."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "min_instances" {
   description = <<-EOT
     0 scales to zero (effectively free, but a cold start on the first
@@ -51,7 +58,7 @@ variable "max_concurrency" {
 #
 # The pool is 1,000 personas and one request can ask for all of them, so a
 # single POST is up to 1,000 Nano calls plus ~100 Super digests plus one
-# Ultra call. These three are what stop a loop against the demo URL from
+# Ultra call. These limits are what stop a loop against the demo URL from
 # draining the hackathon credits before judging ends on Dec 15.
 
 variable "max_persona_count" {
@@ -70,4 +77,10 @@ variable "rate_limit_runs" {
   description = "Runs one client IP may start per hour."
   type        = number
   default     = 20
+}
+
+variable "daily_persona_budget" {
+  description = "Persona reactions all live runs together may start per rolling 24h. 10,000 is a hundred default-size runs."
+  type        = number
+  default     = 10000
 }

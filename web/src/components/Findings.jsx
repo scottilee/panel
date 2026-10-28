@@ -45,8 +45,8 @@ function FindingRow({ finding, onSegmentClick, onEvidenceHoverStart, onEvidenceH
           <button
             type="button"
             className="finding-segment-chip"
-            onClick={() => onSegmentClick(finding.affected_segment_filter)}
-            title="Apply this segment as a filter"
+            onClick={() => onSegmentClick(finding)}
+            title="Show exactly this segment in the grid"
           >
             {finding.affected_segment}
           </button>

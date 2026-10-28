@@ -3,6 +3,7 @@
 // timed SSE-shaped event emission on top of this data is api.js's
 // startMockRun; this file only produces valid shapes.
 
+import { matchesSegment } from './segment.js'
 import { REGIONS, INCOME_BANDS } from './state.js'
 
 const FIRST_NAMES = [
@@ -326,24 +327,13 @@ function longestSentence(artifactText) {
   return sentences.reduce((a, b) => (b.length > a.length ? b : a))
 }
 
-// The same AND-ed clause semantics as panel/synthesize.py, over the
-// handful of fields the mock findings use.
-function matchesClauses(persona, clauses) {
-  return clauses.every(({ field, op, value }) => {
-    const v = persona[field]
-    if (op === '<=') return v <= value
-    if (op === '>=') return v >= value
-    if (op === 'in') return value.includes(v)
-    return v === value
-  })
-}
 
 // affected_pct = share of the segment's members (with a usable reaction)
 // who reacted negatively; segment_size/segment_pct = how big the segment
 // is. Computed the way the backend recounts real findings, so mock mode
 // shows numbers that mean what the UI says they mean.
 function recount(personas, reactionsById, clauses) {
-  const members = personas.filter((p) => matchesClauses(p, clauses))
+  const members = personas.filter((p) => matchesSegment(p, clauses))
   const answered = members.map((p) => reactionsById[p.id]).filter((r) => r && !r.raw_error)
   const negative = answered.filter((r) => r.sentiment < 0).length
   return {
@@ -505,24 +495,28 @@ export function buildMockReactionsB(personas, reactionsAById) {
   })
 }
 
-// Computed from the ACTUAL reactionsA/reactionsB a run produced (whatever
-// N was chosen), not a fixed N=100 constant -- so it stays correct at any
-// persona count instead of silently mismatching smaller/larger runs.
+// Computed from the reactions both runs actually produced, with
+// panel/compare.py's rules: only personas with a usable reaction in BOTH
+// runs are compared, and the flips and the would-act change share that one
+// denominator (`compared`).
 export function buildMockCompareResult(personas, reactionsAById, reactionsBById) {
-  const { positiveIds, negativeIds } = flipGroupsFor(personas)
-  const targeted = personas.filter((p) => positiveIds.has(p.id) || negativeIds.has(p.id))
-  // A targeted persona whose would_act was already at its target value is
-  // a non-event, not a flip in either direction, so both directions are
-  // checked explicitly rather than one inferred from "not the other".
+  const shared = personas.filter((p) => {
+    const a = reactionsAById[p.id]
+    const b = reactionsBById[p.id]
+    return a && b && !a.raw_error && !b.raw_error
+  })
   let flippedPositive = 0
   let flippedNegative = 0
-  const deltas = targeted.map((p) => {
+  let actA = 0
+  let actB = 0
+  const deltas = shared.map((p) => {
     const a = reactionsAById[p.id]
     const b = reactionsBById[p.id]
     const toAct = !a.would_act && b.would_act
-    const awayFromAct = a.would_act && !b.would_act
     if (toAct) flippedPositive++
-    if (awayFromAct) flippedNegative++
+    if (a.would_act && !b.would_act) flippedNegative++
+    if (a.would_act) actA++
+    if (b.would_act) actB++
     return {
       persona_id: p.id,
       sentiment_before: a.sentiment,
@@ -530,17 +524,15 @@ export function buildMockCompareResult(personas, reactionsAById, reactionsBById)
       flipped_to_act: toAct,
     }
   })
-  // Percentage points of the whole panel, matching panel/compare.py's
-  // `would_act_pct_b - would_act_pct_a`.
-  const n = personas.length || 1
-  const deltaPct = (100 * (flippedPositive - flippedNegative)) / n
+  const compared = shared.length
   return {
     run_a: 'mock-run',
     run_b: 'mock-run-b',
     deltas,
+    compared,
     flipped_positive: flippedPositive,
     flipped_negative: flippedNegative,
-    would_act_delta_pct: deltaPct,
+    would_act_delta_pct: compared ? (100 * (actB - actA)) / compared : 0,
     // Built from the numbers just computed, since CompareBar shows the
     // sentence and the counters side by side. Generic wording: this
     // function doesn't know which artifact was edited.

@@ -78,3 +78,42 @@ def test_read_capped_passes_a_normal_body_through():
 def test_read_capped_survives_undeclared_encoding():
     resp = _FakeResponse([b"caf\xc3\xa9"], encoding=None)
     assert _read_capped(resp) == "café"
+
+
+def test_shared_address_space_is_not_public():
+    """100.64.0.0/10 (carrier-grade NAT, some cloud internals) passed the
+    old exclusion list."""
+    from panel.fetch import _is_public_address
+
+    assert not _is_public_address("100.64.1.1")
+    assert not _is_public_address("::ffff:127.0.0.1")
+    assert _is_public_address("8.8.8.8")
+
+
+def test_tavily_failure_falls_back_to_the_direct_fetch(monkeypatch):
+    from panel import fetch as F
+
+    monkeypatch.setattr(F, "TAVILY_API_KEY", "k")
+
+    def tavily_down(url):
+        raise ValueError("Tavily returned no content")
+
+    monkeypatch.setattr(F, "_fetch_via_tavily", tavily_down)
+    monkeypatch.setattr(F, "_fetch_via_readability", lambda url: "direct text")
+    assert F.fetch_url_text("https://example.com") == "direct text"
+
+
+def test_an_unsafe_url_is_not_retried_without_tavily(monkeypatch):
+    import pytest as _pytest
+
+    from panel import fetch as F
+
+    monkeypatch.setattr(F, "TAVILY_API_KEY", "k")
+
+    def unsafe(url):
+        raise F.UnsafeURLError("non-public")
+
+    monkeypatch.setattr(F, "_fetch_via_tavily", unsafe)
+    monkeypatch.setattr(F, "_fetch_via_readability", lambda url: _pytest.fail("must not fall back"))
+    with _pytest.raises(F.UnsafeURLError):
+        F.fetch_url_text("http://10.0.0.1")

@@ -14,7 +14,7 @@ import {
   STATUS,
   initialState,
   reducer,
-  segmentFilterToChips,
+  segmentFilter,
   selectCompareElapsedSeconds,
   selectCompareIsRunning,
   selectCompareLiveStats,
@@ -139,11 +139,15 @@ export default function App() {
       return isDefault ? withoutGroup : [...withoutGroup, { group, ...range }]
     })
   }, [])
-  // A finding's segment chip applies that filter outright
-  // (replaces activeFilters) rather than toggling/merging -- it's "show
-  // me this segment", not "add one more condition to what I already had".
-  const handleSegmentClick = useCallback((clauses) => {
-    setActiveFilters(segmentFilterToChips(clauses))
+  // A finding's segment chip replaces activeFilters rather than merging --
+  // it's "show me this segment", not "add one more condition" -- and is
+  // applied exactly (state.js's segmentFilter), so the grid shows the same
+  // people the finding's segment_size counted.
+  const handleSegmentClick = useCallback((finding) => {
+    setActiveFilters([segmentFilter(finding)])
+  }, [])
+  const handleRemoveSegment = useCallback(() => {
+    setActiveFilters((filters) => filters.filter((f) => f.group !== 'segment'))
   }, [])
   const handleEvidenceHoverStart = useCallback((evidence) => setHighlightedIds(new Set(evidence)), [])
   const handleEvidenceHoverEnd = useCallback(() => setHighlightedIds(null), [])
@@ -379,6 +383,8 @@ export default function App() {
       label: state.label,
       personaCount: state.personaCount,
       previousReactionsById: reactionsAById,
+      // Run B's own report is never shown, only its reactions.
+      skipSynthesis: true,
       onEvent: (event) => {
         switch (event.type) {
           case 'run_started':
@@ -417,7 +423,10 @@ export default function App() {
   // view toggle -- switching views never re-fetches, it just changes which
   // already-in-memory data is being looked at.
   const gridReactionsById = viewMode === 'A' ? state.reactionsById : state.compare.reactionsById
-  const liveStats = viewMode === 'A' ? selectLiveStats(state, filteredIds) : selectCompareLiveStats(state)
+  // Run A's stats are kept separately: the verdict belongs to Run A, so its
+  // "N of M aren't convinced" must not switch to Run B with the view.
+  const statsA = selectLiveStats(state, filteredIds)
+  const liveStats = viewMode === 'A' ? statsA : selectCompareLiveStats(state, filteredIds)
   const elapsedSeconds = viewMode === 'A' ? selectElapsedSeconds(state) : selectCompareElapsedSeconds(state)
   const statsStripStatus = viewMode === 'A' ? state.status : state.compare.status
   const runStats = viewMode === 'A' ? state.stats : state.compare.stats
@@ -443,7 +452,8 @@ export default function App() {
   } else if (state.status === STATUS.PENDING || state.status === STATUS.STREAMING || state.status === STATUS.SYNTHESIZING) {
     statusText = `Reading... ${doneCount} of ${total}`
   } else if (viewMode === 'delta' && state.compare.result) {
-    statusText = `${state.compare.result.flipped_positive} people changed their mind`
+    const { flipped_positive: yes, flipped_negative: no } = state.compare.result
+    statusText = `${yes} moved to yes, ${no} moved to no`
   } else {
     statusText = `${doneCount} of ${total} have answered`
   }
@@ -503,7 +513,7 @@ export default function App() {
             {!state.retrying && state.status === STATUS.CANCELLED && (
               <p className="run-note">
                 Run cancelled.
-                {liveStats.done > 0 && ` The ${liveStats.done} reactions already in are kept below.`}
+                {doneCount > 0 && ` The ${doneCount} reactions already in are kept below.`}
               </p>
             )}
             {!state.retrying && state.status === STATUS.ERROR && state.error && (
@@ -557,8 +567,8 @@ export default function App() {
               Cancel this run?
             </h2>
             <p className="modal-body">
-              {liveStats.done > 0
-                ? `${liveStats.done} of ${liveStats.total} people have already read it. Those reactions are kept, but the run stops here and there will be no verdict.`
+              {doneCount > 0
+                ? `${doneCount} of ${total} people have already read it. Those reactions are kept, but the run stops here and there will be no verdict.`
                 : 'The run stops here and there will be no verdict.'}
             </p>
             <div className="modal-actions">
@@ -591,6 +601,7 @@ export default function App() {
           activeFilters={activeFilters}
           onToggle={handleToggleFilter}
           onRangeChange={handleRangeFilterChange}
+          onRemoveSegment={handleRemoveSegment}
           onClearAll={handleClearFilters}
           matchCount={filteredIds ? filteredIds.size : state.personas.length}
           totalCount={state.personas.length}
@@ -600,8 +611,8 @@ export default function App() {
         <Verdict
           synthesis={state.synthesis}
           runLabel={state.label || 'Untitled run'}
-          wouldActPct={liveStats.wouldActPct}
-          total={liveStats.usable}
+          wouldActPct={statsA.wouldActPct}
+          total={statsA.usable}
           onApplyAndCompare={handleApplyAndCompare}
           applyDisabled={state.compare.visible}
           applyError={applyError ?? state.compare.error}
@@ -642,6 +653,7 @@ export default function App() {
             runStats={runStats}
             elapsedSeconds={elapsedSeconds}
             status={statsStripStatus}
+            panelSize={state.personas.length}
           />
 
           <Grid
@@ -685,8 +697,7 @@ export default function App() {
             compareResult={state.compare.result}
             viewMode={viewMode}
             onSetViewMode={setViewMode}
-            statsA={selectLiveStats(state)}
-            statsB={selectCompareLiveStats(state)}
+            reactionsAById={state.reactionsById}
           />
         )}
 

@@ -1,4 +1,7 @@
+# Local secrets. .env.example is the committed template.
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.pyc

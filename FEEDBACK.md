@@ -106,8 +106,8 @@ propose **which** set matters as a machine-checkable filter, and compute
 the quantity in code. In our schema `Finding` carries both
 `affected_segment` (prose, the model's judgment) and
 `affected_segment_filter` (a list of `{field, op, value}` clauses), and
-Python recounts the percentage over the real population. Every number
-displayed is counted; the model only decides what to count.
+Python counts the segment and the share of it that reacted negatively.
+Every finding's number is counted; the model only decides what to count.
 
 **Condensing a batch of 50 reactions.** We asked for recurring themes,
 the persona IDs expressing each, *and* a count, ordered most-common-first.
@@ -182,7 +182,7 @@ pointed us at batch size on day one instead of at the model.
 ## 5. Shorter inputs reduce runaway reasoning
 
 Once we knew runaway reasoning was the failure mode, we measured its
-incidence against input length. Same prompt shape, same 8,000 budget, four
+incidence against input length. Same prompt shape, same 8,000 budget, ten
 trials each, real reaction data:
 
 | Reactions per call | Succeeded | Median latency | Usable themes returned |

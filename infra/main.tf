@@ -95,6 +95,32 @@ resource "google_secret_manager_secret_iam_member" "runtime_access" {
   member    = "serviceAccount:${google_service_account.runtime.email}"
 }
 
+# Optional Tavily key for URL input. Without it the app fetches pages
+# itself (requests + readability); with it, Tavily Extract is tried first
+# and the direct fetch is the fallback. Same Secret Manager handling, and
+# the same Terraform-state caveat, as the Token Factory key above.
+resource "google_secret_manager_secret" "tavily_api_key" {
+  count     = var.tavily_api_key == "" ? 0 : 1
+  secret_id = "${var.service_name}-tavily-api-key"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_version" "tavily_api_key" {
+  count       = var.tavily_api_key == "" ? 0 : 1
+  secret      = google_secret_manager_secret.tavily_api_key[0].id
+  secret_data = var.tavily_api_key
+}
+
+resource "google_secret_manager_secret_iam_member" "runtime_tavily_access" {
+  count     = var.tavily_api_key == "" ? 0 : 1
+  secret_id = google_secret_manager_secret.tavily_api_key[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
+}
+
 resource "google_cloud_run_v2_service" "panel" {
   name     = var.service_name
   location = var.region
@@ -152,6 +178,24 @@ resource "google_cloud_run_v2_service" "panel" {
             version = "latest"
           }
         }
+      }
+
+      dynamic "env" {
+        for_each = google_secret_manager_secret.tavily_api_key
+        content {
+          name = "TAVILY_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = env.value.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+
+      env {
+        name  = "DAILY_PERSONA_BUDGET"
+        value = tostring(var.daily_persona_budget)
       }
 
       env {
@@ -213,6 +257,8 @@ resource "google_cloud_run_v2_service" "panel" {
   depends_on = [
     google_project_service.services,
     google_secret_manager_secret_version.tf_api_key,
+    google_secret_manager_secret_version.tavily_api_key,
+    google_secret_manager_secret_iam_member.runtime_tavily_access,
   ]
 }
 

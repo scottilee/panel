@@ -10,6 +10,9 @@ image = "us-central1-docker.pkg.dev/your-gcp-project-id/panel/panel:latest"
 
 tf_api_key = "your-nebius-token-factory-key"
 
+# Optional: Tavily Extract for URL input (falls back to a direct fetch).
+# tavily_api_key = "your-tavily-key"
+
 # 1 = stay warm (instant first click, ~$10-15/month)
 # 0 = scale to zero (free, cold start on first request)
 min_instances = 1

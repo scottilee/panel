@@ -81,6 +81,8 @@ class RunContext:
     # Each compare costs an Ultra call, so a repeat request reuses the
     # first (or joins it while it is still in flight).
     compares: dict[str, asyncio.Task] = field(default_factory=dict)
+    # Who started it, for the one-active-run-per-client rule.
+    client_ip: str = ""
 
 
 RUNS: dict[str, RunContext] = {}
@@ -137,6 +139,14 @@ RATE_LIMIT_RUNS = int(config.env("RATE_LIMIT_RUNS") or "20")
 RATE_LIMIT_CHECKS = int(config.env("RATE_LIMIT_CHECKS") or "120")
 RATE_LIMIT_COMPARES = int(config.env("RATE_LIMIT_COMPARES") or "60")
 RATE_LIMIT_WINDOW_S = int(config.env("RATE_LIMIT_WINDOW_S") or "3600")
+# Service-wide ceiling on persona reactions started in any rolling 24
+# hours, counting live runs only (a cached replay costs nothing). The
+# per-client limits bound one caller; this bounds the total, so the
+# credits last until judging ends however many callers there are.
+# 10,000 is a hundred default-size runs a day.
+DAILY_PERSONA_BUDGET = int(config.env("DAILY_PERSONA_BUDGET") or "10000")
+_DAY_S = 24 * 3600
+_LIVE_RUN_SPEND: list[tuple[float, int]] = []
 
 # How many reverse proxies in front of this app append to X-Forwarded-For.
 # 0 trusts nothing and keys rate limits on the socket peer, which is right
@@ -181,6 +191,11 @@ def _check_rate_limit(client_ip: str, bucket: str = "run", limit: int | None = N
             f"{RATE_LIMIT_WINDOW_S // 60} minutes from one client",
         )
     window.append(now)
+
+
+def _daily_spend(now: float) -> int:
+    _LIVE_RUN_SPEND[:] = [(t, n) for t, n in _LIVE_RUN_SPEND if now - t < _DAY_S]
+    return sum(n for _, n in _LIVE_RUN_SPEND)
 
 
 def _new_run_id() -> str:
@@ -264,10 +279,11 @@ async def _start_synthesizing(ctx: RunContext) -> None:
     await _broadcast(ctx, "synthesizing", {})
 
 
-async def _finish(ctx: RunContext, synthesis: Synthesis, stats: RunStats) -> None:
+async def _finish(ctx: RunContext, synthesis: Synthesis | None, stats: RunStats) -> None:
     ctx.run.synthesis = synthesis
     ctx.run.stats = stats
-    await _broadcast(ctx, "synthesis", synthesis)
+    if synthesis is not None:
+        await _broadcast(ctx, "synthesis", synthesis)
     ctx.run.status = "done"
     await _broadcast(ctx, "done", {"stats": stats.model_dump(mode="json")})
 
@@ -291,7 +307,7 @@ async def _fail_run(ctx: RunContext, exc: Exception) -> None:
     await _broadcast(ctx, "error", {"message": message})
 
 
-async def _execute_cached_run(ctx: RunContext, cached_data: dict) -> None:
+async def _execute_cached_run(ctx: RunContext, cached_data: dict, skip_synthesis: bool) -> None:
     """Demo fallback: replays a known-good cached result with no model
     calls. create_run only gets here after _find_cached_example matched
     the text exactly and _cache_covers confirmed every selected persona
@@ -307,6 +323,10 @@ async def _execute_cached_run(ctx: RunContext, cached_data: dict) -> None:
             await asyncio.sleep(CACHED_REACTION_INTERVAL_S)
             await _record_reaction(ctx, reaction)
 
+        stats = _compute_stats(reactions, {}, nano_ms_total=0, ultra_ms=0)
+        if skip_synthesis:
+            await _finish(ctx, None, stats)
+            return
         await _start_synthesizing(ctx)
         await asyncio.sleep(CACHED_REACTION_INTERVAL_S)
 
@@ -320,7 +340,7 @@ async def _execute_cached_run(ctx: RunContext, cached_data: dict) -> None:
         )
         # No model calls, so every cost figure is zero; the sentiment
         # figures are real, since they describe the reactions shown.
-        await _finish(ctx, synthesis, _compute_stats(reactions, {}, nano_ms_total=0, ultra_ms=0))
+        await _finish(ctx, synthesis, stats)
     except asyncio.CancelledError:
         await _mark_cancelled(ctx)
         raise
@@ -330,16 +350,18 @@ async def _execute_cached_run(ctx: RunContext, cached_data: dict) -> None:
         _persist(ctx)
 
 
-async def _execute_run(ctx: RunContext) -> None:
+async def _execute_run(ctx: RunContext, skip_synthesis: bool) -> None:
     run = ctx.run
     calls = track_calls()
     try:
         async for reaction in fan_out(run.artifact.text, ctx.personas, run.run_id):
             await _record_reaction(ctx, reaction)
 
-        await _start_synthesizing(ctx)
+        synthesis = None
         synthesis_start = time.monotonic()
-        synthesis = await synthesize(run.artifact.text, ctx.personas, run.reactions)
+        if not skip_synthesis:
+            await _start_synthesizing(ctx)
+            synthesis = await synthesize(run.artifact.text, ctx.personas, run.reactions)
         stats = _compute_stats(
             run.reactions,
             calls,
@@ -374,18 +396,39 @@ def _active_run_count() -> int:
 async def create_run(request: Request, req: RunRequest, cached: bool = False) -> dict:
     # Free checks first, so a request rejected for its own shape or for
     # server load doesn't use up the client's allowance.
-    if _active_run_count() >= MAX_CONCURRENT_RUNS:
-        raise HTTPException(
-            429, f"too many runs in flight (limit {MAX_CONCURRENT_RUNS}); try again shortly"
-        )
     persona_count = req.persona_count or config.DEFAULT_PERSONA_COUNT
     ceiling = min(MAX_PERSONA_COUNT, len(PERSONA_POOL))
     if persona_count > ceiling:
         raise HTTPException(400, f"persona_count {persona_count} exceeds the limit ({ceiling})")
 
+    client_ip = _client_ip(request)
+    if req.replaces:
+        previous = RUNS.get(req.replaces)
+        if previous is not None and previous.run.status in ACTIVE_STATUSES:
+            await _cancel(previous)
+    # One run at a time per client, so a single caller can't fill every
+    # service-wide slot and lock everyone else out for minutes.
+    if any(c.client_ip == client_ip and c.run.status in ACTIVE_STATUSES for c in RUNS.values()):
+        raise HTTPException(
+            429, "you already have a run in progress; wait for it to finish or cancel it"
+        )
+    # A cached replay makes no model calls, so the spend ceilings don't
+    # apply to it -- it stays available as the fallback even when the
+    # service is busy.
+    if not cached:
+        if _active_run_count() >= MAX_CONCURRENT_RUNS:
+            raise HTTPException(
+                429, f"too many runs in flight (limit {MAX_CONCURRENT_RUNS}); try again shortly"
+            )
+        if _daily_spend(time.monotonic()) + persona_count > DAILY_PERSONA_BUDGET:
+            raise HTTPException(
+                429,
+                "daily panel budget used up for this demo; try a smaller panel, "
+                "or come back tomorrow",
+            )
+
     # Charged before the URL fetch and the cached lookup, so neither can
     # be probed for free.
-    client_ip = _client_ip(request)
     _check_rate_limit(client_ip)
 
     if req.url:
@@ -434,8 +477,10 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
         persona_set=f"v1-{persona_count}",
         status="pending",
     )
-    ctx = RunContext(run=run, personas=personas)
+    ctx = RunContext(run=run, personas=personas, client_ip=client_ip)
     RUNS[run_id] = ctx
+    if cached_data is None:
+        _LIVE_RUN_SPEND.append((time.monotonic(), persona_count))
     _evict_old_runs()
     _prune_run_files()
     _persist(ctx)
@@ -447,7 +492,11 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
         flush=True,
     )
 
-    coro = _execute_cached_run(ctx, cached_data) if cached_data is not None else _execute_run(ctx)
+    coro = (
+        _execute_cached_run(ctx, cached_data, req.skip_synthesis)
+        if cached_data is not None
+        else _execute_run(ctx, req.skip_synthesis)
+    )
     ctx.task = asyncio.create_task(coro)
     return {"run_id": run_id}
 
@@ -506,6 +555,15 @@ async def get_run(run_id: str) -> Run:
     return ctx.run
 
 
+async def _cancel(ctx: RunContext) -> None:
+    if ctx.task is not None:
+        ctx.task.cancel()
+    # Marked here as well as in the task's handler, so the caller already
+    # sees the new status while the task unwinds.
+    await _mark_cancelled(ctx)
+    _persist(ctx)
+
+
 @app.post("/run/{run_id}/cancel")
 async def cancel_run(run_id: str) -> dict:
     """Stops the server-side work, not just the client's stream: cancelling
@@ -517,12 +575,7 @@ async def cancel_run(run_id: str) -> dict:
     if ctx.run.status not in ACTIVE_STATUSES:
         # Idempotent: a double-click, or a cancel racing completion.
         return {"run_id": run_id, "status": ctx.run.status, "cancelled": False}
-    if ctx.task is not None:
-        ctx.task.cancel()
-    # Marked here as well as in the task's handler, so this response
-    # already shows the new status while the task unwinds.
-    await _mark_cancelled(ctx)
-    _persist(ctx)
+    await _cancel(ctx)
     return {"run_id": run_id, "status": ctx.run.status, "cancelled": True}
 
 
@@ -544,7 +597,13 @@ async def compare_runs(request: Request, req: CompareRequest) -> CompareResult:
         ctx_b.compares[req.run_a] = task
     # Shielded: one client disconnecting must not cancel a result another
     # request is waiting on.
-    return await asyncio.shield(task)
+    try:
+        return await asyncio.shield(task)
+    except Exception as e:  # noqa: BLE001 -- a failed summary call is a 502, not a crash
+        # Logged in full, reported generically (same reasoning as
+        # _fail_run). The failed task isn't reused, so a retry recomputes.
+        print(f"compare {req.run_a} -> {req.run_b} failed: {type(e).__name__}: {e}", flush=True)
+        raise HTTPException(502, "the comparison could not be summarised; try again") from e
 
 
 @app.post("/check")

@@ -826,3 +826,22 @@ async def test_failed_reactions_never_reach_ultra_or_the_stats(monkeypatch, pool
     assert "secret-internal-detail" not in captured["user"]
     assert "raw_error" not in captured["user"]
     assert "mean sentiment 1.000" in captured["user"]
+
+
+@pytest.mark.parametrize(
+    "clause",
+    [
+        SegmentClause(field="tech_comfort", op="==", value="low"),
+        SegmentClause(field="skepticism", op=">=", value=[70]),
+        SegmentClause(field="region", op="==", value=["West US"]),
+    ],
+)
+def test_an_unrecountable_filter_keeps_the_estimate_instead_of_failing_the_run(pool, clause):
+    """Each of these used to raise (or silently match nobody) inside the
+    recount, after every call in the run was already paid for."""
+    synth = make_synthesis(["p001", "p002", "p003"], affected_pct=40, headline="40% balk")
+    synth = synth.model_copy(
+        update={"findings": [f.model_copy(update={"affected_segment_filter": [clause]}) for f in synth.findings]}
+    )
+    out = _apply_recounted_pct(synth, pool, _reactions_for(pool, set()))
+    assert all(f.affected_pct == 40 and f.segment_size is None for f in out.findings)

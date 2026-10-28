@@ -54,15 +54,11 @@ class UnsafeURLError(ValueError):
 
 
 def _is_public_address(addr: str) -> bool:
+    # is_global rather than a list of exclusions: it also rejects shared
+    # address space (100.64.0.0/10, carrier-grade NAT and some cloud
+    # internals), documentation ranges and IPv4-mapped private addresses.
     ip = ipaddress.ip_address(addr)
-    return not (
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    )
+    return ip.is_global and not ip.is_multicast
 
 
 def _assert_public_url(url: str) -> None:
@@ -91,7 +87,7 @@ def _assert_public_url(url: str) -> None:
             raise UnsafeURLError("that host resolves to a non-public address")
 
 
-def _read_capped(resp: requests.Response) -> str:
+def _read_capped_bytes(resp: requests.Response) -> bytes:
     declared = resp.headers.get("Content-Length")
     if declared and declared.isdigit() and int(declared) > MAX_BYTES:
         raise UnsafeURLError(f"response is larger than {MAX_BYTES} bytes")
@@ -102,8 +98,11 @@ def _read_capped(resp: requests.Response) -> str:
         if total > MAX_BYTES:
             raise UnsafeURLError(f"response is larger than {MAX_BYTES} bytes")
         chunks.append(chunk)
-    body = b"".join(chunks)
-    return body.decode(resp.encoding or "utf-8", errors="replace")
+    return b"".join(chunks)
+
+
+def _read_capped(resp: requests.Response) -> str:
+    return _read_capped_bytes(resp).decode(resp.encoding or "utf-8", errors="replace")
 
 
 def _get_checked(url: str, **kwargs) -> requests.Response:
@@ -156,7 +155,11 @@ def _fetch_via_readability(url: str) -> str:
     resp = _get_checked(url, headers={"User-Agent": "Mozilla/5.0 (compatible; PanelBot/1.0)"})
     try:
         resp.raise_for_status()
-        html = _read_capped(resp)
+        # Without a charset in Content-Type, requests assumes ISO-8859-1
+        # for text/*, which garbles most UTF-8 pages. Hand readability the
+        # raw bytes instead, so it reads the page's own <meta charset>.
+        declared = "charset=" in resp.headers.get("Content-Type", "").lower()
+        html = _read_capped(resp) if declared else _read_capped_bytes(resp)
     finally:
         resp.close()
     doc = Document(html)
@@ -170,5 +173,13 @@ def fetch_url_text(url: str) -> str:
     """Raises UnsafeURLError / requests.RequestException / ValueError on
     failure; api/main.py turns that into a user-facing 400.
     """
-    text = _fetch_via_tavily(url) if TAVILY_API_KEY else _fetch_via_readability(url)
-    return text[:MAX_CHARS]
+    if TAVILY_API_KEY:
+        try:
+            return _fetch_via_tavily(url)[:MAX_CHARS]
+        except UnsafeURLError:
+            raise
+        except Exception as e:  # noqa: BLE001 -- any Tavily failure falls back
+            # A Tavily outage or an empty extraction shouldn't cost the user
+            # the run; the direct fetch has the same SSRF checks.
+            print(f"fetch: Tavily failed ({type(e).__name__}: {e}); falling back to direct fetch")
+    return _fetch_via_readability(url)[:MAX_CHARS]

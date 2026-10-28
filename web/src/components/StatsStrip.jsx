@@ -4,7 +4,16 @@
 
 import { STATUS } from '../state.js'
 
-const ULTRA_MODEL_LABEL = 'Nemotron Ultra'
+// Matches panel/synthesize.py's SHARD_THRESHOLD: above it, Super condenses
+// the reactions into themes and Ultra reads those, not every reaction.
+const SHARD_THRESHOLD = 150
+
+function synthesizingLine(panelSize) {
+  if (panelSize > SHARD_THRESHOLD) {
+    return `Nemotron Super is condensing ${panelSize} reactions into themes for Nemotron Ultra...`
+  }
+  return `Nemotron Ultra is reading all ${panelSize} reactions...`
+}
 
 function modelCallsLine(runStats) {
   if (!runStats) return null
@@ -18,7 +27,9 @@ function modelCallsLine(runStats) {
   return parts.length ? `Nemotron calls: ${parts.join(' · ')}` : null
 }
 
-export default function StatsStrip({ liveStats, runStats, elapsedSeconds, status }) {
+// panelSize is the whole run's size, not the filtered `total`: the
+// synthesis covers the whole panel whatever filter is on screen.
+export default function StatsStrip({ liveStats, runStats, elapsedSeconds, status, panelSize }) {
   const { done, total, failed, meanSentiment, wouldActPct } = liveStats
   const callsLine = status === STATUS.DONE ? modelCallsLine(runStats) : null
 
@@ -48,9 +59,7 @@ export default function StatsStrip({ liveStats, runStats, elapsedSeconds, status
         </div>
       )}
       {status === STATUS.SYNTHESIZING && (
-        <div className="synthesizing-line">
-          Reading all {total} reactions with {ULTRA_MODEL_LABEL}...
-        </div>
+        <div className="synthesizing-line">{synthesizingLine(panelSize)}</div>
       )}
     </div>
   )
