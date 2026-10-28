@@ -1,10 +1,19 @@
-import { useEffect, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { getPoolSize, previewPersonas, startRun } from './api.js'
 import ArtifactInput from './components/ArtifactInput.jsx'
+import Filters from './components/Filters.jsx'
 import Grid from './components/Grid.jsx'
+import PersonaCard from './components/PersonaCard.jsx'
 import PersonaCountControl from './components/PersonaCountControl.jsx'
 import StatsStrip from './components/StatsStrip.jsx'
-import { initialState, reducer, selectElapsedSeconds, selectIsRunning, selectLiveStats } from './state.js'
+import {
+  initialState,
+  reducer,
+  selectElapsedSeconds,
+  selectFilteredPersonaIds,
+  selectIsRunning,
+  selectLiveStats,
+} from './state.js'
 
 const DEFAULT_PERSONA_COUNT = 100
 const TICK_INTERVAL_MS = 250
@@ -36,10 +45,48 @@ export default function App() {
     return () => runHandleRef.current?.cancel()
   }, [])
 
+  // Pinned card + segment filters, section 6.3/6.5. UI-only state, not
+  // "run state", so a plain useState rather than squeezing it into the
+  // reducer.
+  const [pinnedPersonaId, setPinnedPersonaId] = useState(null)
+  const [activeFilters, setActiveFilters] = useState([])
+
+  const handleTileClick = useCallback((persona) => {
+    setPinnedPersonaId((id) => (id === persona.id ? null : persona.id))
+  }, [])
+  const handleBackgroundClick = useCallback(() => setPinnedPersonaId(null), [])
+  const handleToggleFilter = useCallback((filter) => {
+    setActiveFilters((filters) =>
+      filters.some((f) => f.group === filter.group && f.value === filter.value)
+        ? filters.filter((f) => !(f.group === filter.group && f.value === filter.value))
+        : [...filters, filter],
+    )
+  }, [])
+
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (e.key === 'Escape') setPinnedPersonaId(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  const filteredIds = useMemo(
+    () => selectFilteredPersonaIds(state.personas, activeFilters),
+    [state.personas, activeFilters],
+  )
+  const pinnedPersona = useMemo(
+    () => state.personas.find((p) => p.id === pinnedPersonaId) ?? null,
+    [state.personas, pinnedPersonaId],
+  )
+
   function handlePersonaCountChange(n) {
     if (isRunning) return
     runHandleRef.current?.cancel()
     dispatch({ type: 'SET_PERSONA_COUNT', n, personas: previewPersonas(n) })
+    // Changing N (section 6.10) invalidates any pin/filters from the old set.
+    setPinnedPersonaId(null)
+    setActiveFilters([])
   }
 
   function handleRun() {
@@ -74,7 +121,7 @@ export default function App() {
     })
   }
 
-  const liveStats = selectLiveStats(state)
+  const liveStats = selectLiveStats(state, filteredIds)
   const elapsedSeconds = selectElapsedSeconds(state)
 
   return (
@@ -101,9 +148,23 @@ export default function App() {
         />
       </div>
       <div className="app-column app-column-right">
-        <Grid personas={state.personas} reactionsById={state.reactionsById} />
+        <Filters activeFilters={activeFilters} onToggle={handleToggleFilter} />
+        <Grid
+          personas={state.personas}
+          reactionsById={state.reactionsById}
+          filteredIds={filteredIds}
+          onTileClick={handleTileClick}
+          onBackgroundClick={handleBackgroundClick}
+        />
         <StatsStrip liveStats={liveStats} elapsedSeconds={elapsedSeconds} status={state.status} />
       </div>
+      {pinnedPersona && (
+        <PersonaCard
+          persona={pinnedPersona}
+          reaction={state.reactionsById[pinnedPersona.id]}
+          onClose={handleBackgroundClick}
+        />
+      )}
     </div>
   )
 }

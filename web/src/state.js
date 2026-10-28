@@ -109,14 +109,79 @@ export function reducer(state, action) {
 
 // --- Selectors ---------------------------------------------------------
 
-export function selectLiveStats(state) {
-  const reactions = Object.values(state.reactionsById)
+// filteredIds: null means no filter active (everyone counted, same
+// behavior as before Stage 2); a Set restricts both `total` and the
+// reactions averaged in to that segment (section 6.5: "recomputes the
+// stats strip for the segment only").
+export function selectLiveStats(state, filteredIds = null) {
+  const allReactions = Object.values(state.reactionsById)
+  const reactions = filteredIds ? allReactions.filter((r) => filteredIds.has(r.persona_id)) : allReactions
   const done = reactions.length
-  const total = state.progress.total || state.personas.length
+  const total = filteredIds ? filteredIds.size : state.progress.total || state.personas.length
   if (done === 0) return { done, total, meanSentiment: 0, wouldActPct: 0 }
   const meanSentiment = reactions.reduce((sum, r) => sum + r.sentiment, 0) / done
   const wouldActPct = (100 * reactions.filter((r) => r.would_act).length) / done
   return { done, total, meanSentiment, wouldActPct }
+}
+
+// --- Segment filters, section 6.5 ---------------------------------------
+
+export function ageBandFor(age) {
+  if (age <= 24) return '18-24'
+  if (age <= 34) return '25-34'
+  if (age <= 49) return '35-49'
+  if (age <= 64) return '50-64'
+  return '65+'
+}
+
+// tech_comfort and skepticism are 1-100 (section 3 said 1-5; widened by
+// request on 2026-10-28). Tri-section matches panel/synthesize.py's
+// _tech_band/_skepticism_band exactly -- the spec's literal "low 1-2, mid
+// 3, high 4-5" text is stale, not a second source of truth.
+export function scoreBand(value) {
+  if (value <= 33) return 'low'
+  if (value <= 66) return 'mid'
+  return 'high'
+}
+
+export function personaMatchesFilter(persona, filter) {
+  switch (filter.group) {
+    case 'region':
+      return persona.region === filter.value
+    case 'ageBand':
+      return ageBandFor(persona.age) === filter.value
+    case 'incomeBand':
+      return persona.income_band === filter.value
+    case 'techComfort':
+      return scoreBand(persona.tech_comfort) === filter.value
+    case 'skepticism':
+      return scoreBand(persona.skepticism) === filter.value
+    default:
+      return true
+  }
+}
+
+// Same-group chips OR together (picking two regions widens the segment to
+// either); different groups AND (picking a region and a tech_comfort band
+// narrows to both) -- the spec's "multiple chips combine with AND" reads
+// most sensibly this way, since AND-ing two values from the same
+// mutually-exclusive field (e.g. two regions) would always be empty.
+// Returns null when no filters are active, meaning "everyone" -- callers
+// treat that distinctly from an empty-but-filtered Set.
+export function selectFilteredPersonaIds(personas, activeFilters) {
+  if (activeFilters.length === 0) return null
+  const byGroup = {}
+  for (const f of activeFilters) {
+    (byGroup[f.group] ??= []).push(f)
+  }
+  const groups = Object.values(byGroup)
+  const ids = new Set()
+  for (const persona of personas) {
+    if (groups.every((groupFilters) => groupFilters.some((f) => personaMatchesFilter(persona, f)))) {
+      ids.add(persona.id)
+    }
+  }
+  return ids
 }
 
 export function selectElapsedSeconds(state) {

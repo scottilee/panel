@@ -1,7 +1,4 @@
-// React.memo'd single tile, keyed by persona_id, section 6.2-6.3. Stage 1-2, Agent B.
-//
-// Hover tooltip and click-to-pin (section 6.3) land in stage 2; this stage
-// only renders the fill/color/dot/error states and the 150ms scale-in.
+// React.memo'd single tile, keyed by persona_id, section 6.2-6.3.
 
 import { memo } from 'react'
 
@@ -13,26 +10,51 @@ const SENTIMENT_CLASS = {
   2: 'tile-sentiment-pos2',
 }
 
-function Tile({ persona, reaction }) {
-  if (!reaction) {
-    return <div className="tile tile-empty" title={persona.name} />
-  }
+function Tooltip({ persona, reaction }) {
+  return (
+    <div className="tile-tooltip" role="tooltip">
+      <div className="tile-tooltip-name">{persona.name}</div>
+      <div className="tile-tooltip-meta">
+        {persona.age} &middot; {persona.occupation} &middot; {persona.location}
+      </div>
+      {reaction && !reaction.raw_error && (
+        <div className="tile-tooltip-gut">&ldquo;{reaction.gut_reaction}&rdquo;</div>
+      )}
+    </div>
+  )
+}
 
-  if (reaction.raw_error) {
-    return <div className="tile tile-error" title={`${persona.name} — no response`} />
-  }
-
-  const sentimentClass = SENTIMENT_CLASS[reaction.sentiment] ?? 'tile-sentiment-0'
+function Tile({ persona, reaction, dimmed = false, onClick }) {
+  const className = [
+    'tile',
+    !reaction ? 'tile-empty' : reaction.raw_error ? 'tile-error' : 'tile-filled',
+    reaction && !reaction.raw_error ? SENTIMENT_CLASS[reaction.sentiment] ?? 'tile-sentiment-0' : '',
+    dimmed ? 'tile-dimmed' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
-    <div className={`tile tile-filled ${sentimentClass}`} title={persona.name}>
-      {reaction.would_act && <span className="tile-dot" />}
+    <div
+      className={className}
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick?.(persona)
+      }}
+    >
+      {reaction && !reaction.raw_error && reaction.would_act && <span className="tile-dot" />}
+      <Tooltip persona={persona} reaction={reaction} />
     </div>
   )
 }
 
 function propsAreEqual(prev, next) {
-  return prev.persona.id === next.persona.id && prev.reaction === next.reaction
+  return (
+    prev.persona.id === next.persona.id &&
+    prev.reaction === next.reaction &&
+    prev.dimmed === next.dimmed &&
+    prev.onClick === next.onClick
+  )
 }
 
 export default memo(Tile, propsAreEqual)
