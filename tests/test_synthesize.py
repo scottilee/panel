@@ -345,12 +345,13 @@ async def test_large_panel_shards_through_super(monkeypatch, pool):
     monkeypatch.setattr(S, "_digest_shard", fake_digest_shard)
     monkeypatch.setattr(S, "_synthesis_call", fake_call)
 
-    reactions = [_reaction(i) for i in range(1, 251)]
+    n = 25 * S.SHARD_SIZE
+    reactions = [_reaction(i) for i in range(1, n + 1)]
     await S.synthesize("some artifact text", list(pool.values()), reactions)
 
-    assert shard_sizes == [50, 50, 50, 50, 50]
-    assert "digested by a first-pass model in 5 batches" in captured["user"]
-    assert "covering 250 of the 250 reactions" in captured["user"]
+    assert shard_sizes == [S.SHARD_SIZE] * 25
+    assert "digested by a first-pass model in 25 batches" in captured["user"]
+    assert f"covering {n} of the {n} reactions" in captured["user"]
     # The raw reactions must NOT also be in the prompt -- that's the whole
     # point of digesting them.
     assert '"gut_reaction": "Hm."' not in captured["user"]
@@ -385,9 +386,11 @@ async def test_one_failed_shard_does_not_lose_the_run(monkeypatch, pool):
     monkeypatch.setattr(S, "_digest_shard", flaky_digest_shard)
     monkeypatch.setattr(S, "_synthesis_call", fake_call)
 
-    reactions = [_reaction(i) for i in range(1, 301)]
-    await S.synthesize("t", list(pool.values()), reactions)
-    assert "in 5 batches covering 250 of the 300 reactions" in captured["user"]
+    n = 30 * S.SHARD_SIZE
+    await S.synthesize("t", list(pool.values()), [_reaction(i) for i in range(1, n + 1)])
+    # One shard of thirty lost, so the coverage claim drops by its size.
+    kept = n - S.SHARD_SIZE
+    assert f"in 29 batches covering {kept} of the {n} reactions" in captured["user"]
 
 
 @pytest.mark.asyncio
@@ -546,9 +549,13 @@ async def test_an_empty_digest_is_dropped_not_counted_as_coverage(monkeypatch, p
     monkeypatch.setattr(S, "_digest_shard", digest)
     monkeypatch.setattr(S, "_synthesis_call", fake_call)
 
-    # 200 reactions at SHARD_SIZE 50 = 4 shards, the first one unusable.
-    await S.synthesize("t", list(pool.values()), [_reaction(i) for i in range(1, 201)])
-    assert "in 3 batches covering 150 of the 200 reactions" in captured["user"]
+    # Enough reactions to be over SHARD_THRESHOLD and so actually shard.
+    shards = 20
+    n = shards * S.SHARD_SIZE
+    assert n > S.SHARD_THRESHOLD
+    await S.synthesize("t", list(pool.values()), [_reaction(i) for i in range(1, n + 1)])
+    kept = n - S.SHARD_SIZE  # the first shard was unusable
+    assert f"in {shards - 1} batches covering {kept} of the {n} reactions" in captured["user"]
     assert "ghost" not in captured["user"]
 
 

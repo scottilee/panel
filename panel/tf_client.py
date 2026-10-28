@@ -56,6 +56,13 @@ _BACKOFF_SECONDS = [0.5, 1.0, 2.0, 4.0]
 # to a dropped socket.
 _RETRYABLE = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
 
+# Truncation retries, each at double the previous budget -- so the total
+# spend of a fully failed call is ~2^(n+1) times the starting budget.
+# 2 keeps that bounded at 7x while still reaching 4x the initial ceiling,
+# which the measurements in chat_json show is where the success rate
+# actually improves.
+MAX_TRUNCATION_RETRIES = 2
+
 
 def _load_dotenv_fallback() -> dict[str, str]:
     """Reads repo-root .env for any var not already in os.environ.
@@ -208,34 +215,52 @@ async def chat_json(
         latency_ms = int((time.monotonic() - start) * 1000)
 
         if choice.finish_reason == "length":
-            # Empirically, Super and Ultra are both reasoning models that
-            # burn a *stochastic* share of the token budget on hidden
-            # reasoning_content before ever emitting content — the same
-            # prompt at the same max_tokens can finish cleanly one call
-            # and truncate with zero content the next (observed: Super,
-            # 10-persona batch, max_tokens=8000, reasoning_tokens ranged
-            # from ~3350 on a success to consuming the entire budget on a
-            # truncated retry). So this isn't "the budget was wrong," it's
-            # "this budget wasn't enough this time" — worth a couple of
-            # retries at a bigger budget rather than failing immediately.
-            if truncation_retries >= 2:
+            # All three models spend a *stochastic* share of the budget on
+            # hidden reasoning before emitting any content, so the same
+            # prompt at the same max_tokens succeeds on one call and
+            # truncates with nothing on the next.
+            #
+            # Measured (2026-10-28, Nano, one fixed prompt, 10 trials per
+            # budget -- scripts/probe_nemotron.py):
+            #
+            #    8000  3/10 ok, successes used 3.3-6.8k
+            #   16000  3/10 ok, successes used 6.0-11.5k
+            #   24000  5/10 ok, successes used 6.3-16.2k
+            #   48000  7/10 ok, successes used 4.1-8.9k
+            #
+            # So a bigger ceiling does genuinely help, and doubling on
+            # truncation is the right response. Note the successes at the
+            # top of that range: a call needing 16k emits *nothing at all*
+            # at 8k, because content only starts after reasoning finishes.
+            #
+            # An earlier version of this branch split on whether the
+            # truncated response had partial content, retrying "empty"
+            # cases at the same budget on the theory that they were
+            # runaways a bigger budget could not rescue. That came from a
+            # 3-trial sample which happened to show 0/3 at 24000; at 10
+            # trials the same budget is the second *best*. Empty content
+            # cannot distinguish "ran away" from "needed slightly more",
+            # so the distinction was deleted rather than kept on a
+            # premise that did not survive measurement.
+            if truncation_retries >= MAX_TRUNCATION_RETRIES:
                 raise ChatJsonTruncatedError(
-                    f"truncated at max_tokens={current_max_tokens} before content "
-                    f"(finish_reason=length) after {truncation_retries} retries; "
+                    f"truncated at max_tokens={current_max_tokens} "
+                    f"after {truncation_retries} retries; "
                     f"raw content so far: {content[:200]!r}",
                     latency_ms,
                 )
             truncation_retries += 1
-            # Logged, not silent. This retry doubles both the latency and
-            # the token spend of the call, and it used to leave no trace
-            # at all -- a stage running at 2-3x its expected cost looked
-            # simply "slow", which is exactly how persona generation came
-            # to pace at 110 minutes instead of 25 without anyone able to
-            # see why from the output.
+            # Logged, not silent. Each retry costs a full extra call at a
+            # doubled budget, and this used to leave no trace at all -- a
+            # stage running at 2-3x its expected cost looked simply
+            # "slow", which is exactly how persona generation came to pace
+            # at 110 minutes instead of 25 with nothing in the output to
+            # say why.
             print(
                 f"tf_client: {model} truncated at max_tokens={current_max_tokens} "
-                f"with no content; retrying at {current_max_tokens * 2} "
-                f"(retry {truncation_retries} of 2)",
+                f"({len(content)} chars of content); retrying at "
+                f"{current_max_tokens * 2} "
+                f"(retry {truncation_retries} of {MAX_TRUNCATION_RETRIES})",
                 flush=True,
             )
             current_max_tokens *= 2

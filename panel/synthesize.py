@@ -13,7 +13,7 @@ from typing import get_args
 
 from pydantic import BaseModel, Field
 
-from panel.config import MODEL_NANO, MODEL_ULTRA
+from panel.config import MODEL_SUPER, MODEL_ULTRA
 from panel.personas import AGE_BANDS, age_band_for
 from panel.prompts import SYNTHESIS_SYSTEM, synthesis_user
 from panel.schemas import INCOME_BANDS, Persona, REGIONS, Reaction, SegmentClause, Synthesis
@@ -342,46 +342,67 @@ def _apply_recounted_pct(synthesis: Synthesis, personas_by_id: dict[str, Persona
 # way imaginable to ask one question. Above SHARD_THRESHOLD the reactions
 # are condensed into themes in batches first, and Ultra reads those.
 #
-# Condensed by NANO, not Super, which is not where this started. Super is
-# the mid tier and "summarize a batch" looks like a mid-tier job, so it
-# got the work first. Raced head to head on the same real 50-reaction
-# shard (2026-10-28):
+# Condensed by Super, the mid tier, which is where this started and where
+# it ended up -- but only after a detour worth recording, because the
+# detour is a lesson about measurement rather than about models.
 #
-#   Nano   83s, 10 themes, 5 quotes
-#   Super  157s, 13 themes, 0 quotes  (dropped a required field)
+# At 50 reactions a batch, Super looked clearly wrong for the job: a
+# single head-to-head gave Nano 83s with 10 themes against Super's 157s
+# with 13 themes and zero quotes, and live runs had Super exhausting the
+# whole truncation ladder. So the work moved to Nano.
 #
-# Twice the wall-clock for a worse answer, and in a live N=200 run Super
-# exhausted the entire truncation ladder (12000 -> 24000 -> 48000) on some
-# shards. Super keeps the job it is genuinely needed for -- writing the
-# persona pool offline, where quality compounds into every future run --
-# and the per-batch condensing goes to the cheap tier that measurably does
-# it better.
+# Then the batch size came down to 10 for unrelated reasons (see
+# SHARD_SIZE), and a paired 10-trial comparison on the *new* size
+# reversed the result completely:
+#
+#   Nano   9/10 ok, 54s median, 5.1 themes, 5.2 quotes
+#   Super 10/10 ok, 38s median, 7.8 themes, 5.6 quotes
+#
+# Super is better on reliability, latency and richness at this size. The
+# original single-trial comparison had measured a batch-size problem and
+# blamed the model. Super costs more per token, which is the one axis it
+# loses on; at ~100 calls for a full 1,000-persona panel that is cents.
+MODEL_DIGEST = MODEL_SUPER
 #
 # Below the threshold nothing changes at all -- the 100-persona demo path
 # is byte-for-byte the prompt it has always been.
 
 SHARD_THRESHOLD = 150
-# 50, not the 100 this started at, with the concurrency raised to match so
-# the smaller shards cost no extra wall-clock. The real fix for the
-# failures described above _DIGEST_USER_TEMPLATE was simplifying the task,
-# not shrinking the batch -- but a shorter batch is less to get through
-# whatever reasoning the model does do, and at 20 shards for a full 1,000
-# panel they still run in two waves.
-SHARD_SIZE = 50
-SHARD_CONCURRENCY = 10
-# 24000. Measured, not guessed, and larger than it looks like it should
-# be: the prompt for a 50-reaction shard is only ~5k tokens and the output
-# well under 2k, yet Nano truncated with *zero* content at 8000 and
-# succeeded at 16000. (Super, before it lost this job, truncated at 8000,
-# 12000 and 24000 alike.)
+# 10 per shard at 50 concurrent, which is small and wide rather than the
+# large and narrow this started at (100 at 5). Measured success rate for a
+# single digest call, same budget and prompt, 4 trials each:
 #
-# This is the third time on this project that a budget which looked
-# generous against prompt-plus-output was far too small against reasoning
-# (reactions 400 -> 3000, persona batches 8000 -> 16000, digests 8000 ->
-# 24000). Size Nemotron budgets from measured truncation, never from how
-# big the visible text is: max_tokens is a ceiling, not a charge, so
-# erring high costs nothing and erring low costs ~2.3x in silent retry.
-DIGEST_MAX_TOKENS = 24000
+#   50 reactions  3/4 (2/4 in a live run)   48s median
+#   25 reactions  1/4                       69s
+#   10 reactions  4/4                       42s
+#    5 reactions  4/4                       31s
+#
+# Runaway reasoning gets likelier the more there is to read, so a short
+# shard is both more reliable and faster per call. The cost is more calls
+# -- 100 of them for a full 1,000 panel -- which is why the concurrency
+# goes to the ceiling stage 5 measured for Nano (50, zero 429s). Two waves
+# instead of ten.
+#
+# It does mean Ultra reads ~100 short theme blocks rather than ~10 long
+# ones, with real repetition between them. That is the right trade: the
+# repetition is cheap for Ultra to see through, whereas a failed shard is
+# reactions nobody reads at all.
+SHARD_SIZE = 10
+SHARD_CONCURRENCY = 50
+# 8000 is ample at SHARD_SIZE 10 and would not be at 50. Measured 10
+# trials per configuration (scripts/probe_nemotron.py), same budget:
+#
+#   50 reactions per call:  0/10 succeeded
+#   25 reactions per call:  3/10
+#   10 reactions per call: 10/10, successes used 3.6-8.0k tokens
+#
+# (Those are Nano; Super at 10 per call measured 10/10 using 4.3-5.7k.)
+#
+# Short batches simply do not trigger the runaway reasoning that eats a
+# whole budget and returns nothing, so the fix for this stage was the
+# shard size rather than the ceiling. chat_json still doubles on the rare
+# truncation, which gives 32000 by the last attempt.
+DIGEST_MAX_TOKENS = 8000
 
 # Example ids per theme. Enforced in the schema AND stated in the prompt
 # from this one constant, so the two cannot drift: the cap is what keeps
@@ -475,7 +496,7 @@ def _reactions_for_digest(reactions: list[Reaction]) -> str:
 async def _digest_shard(
     shard: list[Reaction], sem: asyncio.Semaphore
 ) -> _ShardDigest | None:
-    """One Nano call per shard. Returns None on failure rather than
+    """One Super call per shard. Returns None on failure rather than
     raising: a lost shard narrows the themes Ultra sees (and is declared
     to it in the label), while raising would throw away the whole run
     after every Nano call has already been paid for. Verified on a real
@@ -495,7 +516,7 @@ async def _digest_shard(
     async with sem:
         try:
             result = await chat_json(
-                model=MODEL_NANO,
+                model=MODEL_DIGEST,
                 system=_DIGEST_SYSTEM,
                 user=user,
                 schema=_ShardDigest,
@@ -566,7 +587,7 @@ async def _digest_reactions(reactions: list[Reaction]) -> tuple[str, str]:
     """-> (block, label) for the synthesis prompt's reactions section."""
     shards = [reactions[i : i + SHARD_SIZE] for i in range(0, len(reactions), SHARD_SIZE)]
     sem = asyncio.Semaphore(SHARD_CONCURRENCY)
-    print(f"synthesize: digesting {len(reactions)} reactions in {len(shards)} shards via Nano")
+    print(f"synthesize: digesting {len(reactions)} reactions in {len(shards)} shards via Super")
     results = await asyncio.gather(*(_digest_shard(s, sem) for s in shards))
     digests = []
     for shard, d in zip(shards, results):

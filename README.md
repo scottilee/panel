@@ -38,7 +38,7 @@ flowchart LR
     D --> E["3 findings<br/>+ 1 highest-leverage edit"]
     E -->|"apply edit"| A
 
-    C -. "N > 150 only" .-> H["Nemotron Nano<br/>1 call per 50<br/>condense to themes"]
+    C -. "N > 150 only" .-> H["Nemotron Super<br/>1 call per 10<br/>condense to themes"]
     H -.-> D
 
     F["Nemotron Super<br/>offline, run once"] -.->|"generates"| G[("1,000 personas<br/>data/personas.json")]
@@ -54,12 +54,12 @@ flowchart LR
 
 | Model | Role | Why this size |
 | --- | --- | --- |
-| **Nemotron Nano** (`NVIDIA-Nemotron-3-Nano-30B-A3B`) | One reaction call per persona per run (100–1,000); above N=150, also condenses the reactions into themes, 50 at a time | The work is "stay in character, react in one sentence, fill six short fields." Cheap and fast matters far more than depth — and it's the call that happens N× per run. The condensing job started on Super and was **taken away from it** after a head-to-head on the same shard: Nano was twice as fast and returned a required field Super dropped (see below). |
-| **Nemotron Super** (`nemotron-3-super-120b-a12b`) | Writes the 1,000-persona pool, once, offline | Persona quality is a one-time cost that every future run inherits, so it's worth a mid-size model. Needs enough capability to write people who feel specific rather than demographic averages. |
+| **Nemotron Nano** (`NVIDIA-Nemotron-3-Nano-30B-A3B`) | One reaction call per persona per run (100–1,000) | The work is "stay in character, react in one sentence, fill six short fields." Cheap and fast matters far more than depth — and it's the call that happens N× per run. |
+| **Nemotron Super** (`nemotron-3-super-120b-a12b`) | Writes the 1,000-persona pool, once, offline. Above N=150, condenses the reactions into themes, 10 at a time | Persona quality is a one-time cost every future run inherits, so it's worth a mid-size model. The condensing job we twice assigned wrongly before measuring properly — it left for Nano and came back (see [what we learned](#what-we-learned-building-this)); paired over 10 trials at the shipped batch size, Super wins on reliability, latency and richness alike. |
 | **Nemotron Ultra** (`Nemotron-3-Ultra-550b-a55b`) | 1 synthesis call per run | Reads the reactions (or, at large N, the themes condensed from them) plus a persona table and has to find the non-obvious pattern, name the affected segment, and quote the artifact verbatim. This is the one call where reasoning depth is worth paying for. |
 
-At N ≤ 150 Ultra reads the raw reactions directly; above it, Nano makes one
-extra pass to condense them first, because 1,000 raw reactions is a
+At N ≤ 150 Ultra reads the raw reactions directly; above it, Super makes
+one extra pass to condense them first, because 1,000 raw reactions is a
 400k-token prompt. That split is the whole reason a 1,000-person panel
 costs well under a dollar.
 
@@ -130,6 +130,13 @@ a synthetic panel worthless. Three things push against it:
    every 10 personas to have skepticism ≥ 70/100 — the shipped pool lands
    at 386 of 1,000 — and the pool spans the full 1-100 range on seven
    numeric traits (tech comfort, skepticism, and the Big Five).
+
+   The pool is also exactly stratified and globally unique, which the
+   generator checks and fails on: **125 personas per region** across 8
+   regions, **200 per age band** across 5, **200 per income band** across
+   5, **zero duplicate names** in 1,000, and no occupation held by more
+   than **0.9%** of the pool. Verify with
+   `python -c "from panel.personas import *; print(len(find_duplicate_names(load_personas())))"`.
 2. **The reaction prompt forbids helpfulness.** It asks for the real first-20-seconds
    reaction, tells the model indifference is an acceptable answer, and
    defaults `would_act` to false unless something specifically moved them.
@@ -164,18 +171,35 @@ Zero 429s at every level tested, so `MAX_CONCURRENCY=50` — **100 reactions in
 35.3 seconds.** A full run including synthesis lands around 40-90s depending
 on how long Ultra reasons.
 
-Above N=150 the condensing pass is added, and it is the slowest part per
-token: a 50-reaction shard takes ~83s because the model spends five figures
-of completion tokens reasoning over a 5k-token prompt. Shards run 10 at a
-time, so a 1,000-persona run is roughly 6 minutes of reading, 2-4 minutes of
-condensing, and a final synthesis — about 10 minutes end to end, against a
-1,800s request timeout. That is why the default stays at 100.
+Above N=150 a condensing pass is added. Measured end to end at N=200:
+
+| Condensing design | Shards lost | Condense + synthesis | Total |
+| --- | --- | --- | --- |
+| Super, 50 per shard | 2 of 4 | 644s | 721s |
+| Nano, 50 per shard | 2 of 4 | 239s | 321s |
+| Nano, 10 per shard | 0 of 20 | 97s | 181s |
+| **Super, 10 per shard** (shipped) | **0 of 20** | **48s** | **130s** |
+
+Five and a half times faster than where it started, and only the
+small-batch rows read the whole panel rather than half of it. All of that
+came from the batch size, not the model — note that the same model which
+was worst at 50 per shard is best at 10
+(see [what we learned](#what-we-learned-building-this) — getting this
+wrong twice is the most instructive thing in the project).
+
+Extrapolating to a full 1,000-persona panel: ~6 minutes of reading, ~1
+minute of condensing (100 calls in two waves of 50), plus the synthesis —
+roughly 8 minutes, against an 1,800s request timeout. The default stays at
+100 because 35 seconds is a different kind of experience.
 
 ---
 
 ## What we learned building this
 
-The non-obvious findings, because they shaped the architecture:
+The non-obvious findings, because they shaped the architecture. The
+model-behaviour ones are written up properly, with full measurement
+tables, in [FEEDBACK.md](FEEDBACK.md) — and the two that drove design
+decisions are reproducible with `python scripts/probe_nemotron.py`.
 
 - **All three Nemotron models spend completion-token budget on hidden
   reasoning before emitting content, and how much is stochastic.** The spec

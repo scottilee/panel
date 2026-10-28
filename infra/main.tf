@@ -70,13 +70,30 @@ resource "google_secret_manager_secret_version" "tf_api_key" {
   secret_data = var.tf_api_key
 }
 
-data "google_project" "current" {}
+# A dedicated identity for the service, rather than the Compute Engine
+# default service account.
+#
+# The default SA was the original choice and it is a trap on a fresh
+# project: PROJECT_NUMBER-compute@developer.gserviceaccount.com only
+# exists once the Compute Engine API has been enabled, which this stack
+# never enables. The IAM binding then attaches to a principal that is not
+# there, the revision comes up without TF_API_KEY, and every run fails on
+# an auth error -- a miserable thing to diagnose, and it would only ever
+# have shown up on the very first real deploy.
+#
+# Explicit is also least-privilege: this account holds exactly one
+# permission, read this one secret. The default compute SA is Editor on
+# the whole project in most setups.
+resource "google_service_account" "runtime" {
+  account_id   = "${var.service_name}-runtime"
+  display_name = "Panel Cloud Run runtime"
+  depends_on   = [google_project_service.services]
+}
 
-# Cloud Run's default compute service account needs to read the secret.
 resource "google_secret_manager_secret_iam_member" "runtime_access" {
   secret_id = google_secret_manager_secret.tf_api_key.id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+  member    = "serviceAccount:${google_service_account.runtime.email}"
 }
 
 resource "google_cloud_run_v2_service" "panel" {
@@ -89,6 +106,10 @@ resource "google_cloud_run_v2_service" "panel" {
   ingress             = "INGRESS_TRAFFIC_ALL"
 
   template {
+    # The identity above, not the project default -- see the comment on
+    # google_service_account.runtime.
+    service_account = google_service_account.runtime.email
+
     scaling {
       # BOTH limits are load-bearing, not tuning knobs.
       #
@@ -167,7 +188,7 @@ resource "google_cloud_run_v2_service" "panel" {
     # One long-lived SSE connection per run, held open for the whole run:
     # ~40-90s at the default 100 personas (100 Nano calls, then one Ultra
     # call), and ~10 minutes at the 1,000-persona maximum (1,000 Nano
-    # calls, then 20 Super digest calls in two waves, then Ultra). The
+    # calls, then 20 Nano condensing calls in two waves, then Ultra). The
     # default 5-minute request timeout would cut the large end off
     # mid-stream.
     #

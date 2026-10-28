@@ -66,13 +66,30 @@ export default function App() {
 
   const [examples, setExamples] = useState([])
 
+  // The pool fetch is load-bearing for the whole setup card: poolSize is
+  // the N slider's maximum, and previewPersonas() throws outright until
+  // the pool has landed. With no .catch() a failed GET /personas left the
+  // slider pinned at initialState's placeholder 100 AND made every move
+  // of it throw inside the change handler -- so the control looked frozen
+  // with nothing on screen to say why. The usual cause is mundane (the
+  // backend isn't running yet, or the dev server's proxy target is down),
+  // which is exactly the case that deserves a readable message.
   useEffect(() => {
-    getPoolSize().then((poolSize) => {
-      dispatch({ type: 'SET_POOL_SIZE', poolSize })
-      const n = Math.min(DEFAULT_PERSONA_COUNT, poolSize)
-      dispatch({ type: 'SET_PERSONA_COUNT', n, personas: previewPersonas(n) })
-    })
-    getExamples().then(setExamples)
+    getPoolSize()
+      .then((poolSize) => {
+        dispatch({ type: 'SET_POOL_SIZE', poolSize })
+        const n = Math.min(DEFAULT_PERSONA_COUNT, poolSize)
+        dispatch({ type: 'SET_PERSONA_COUNT', n, personas: previewPersonas(n) })
+      })
+      .catch((e) => {
+        dispatch({
+          type: 'ERROR',
+          message: `Could not load the persona pool (${e.message}). Is the backend running on port 8000?`,
+        })
+      })
+    getExamples()
+      .then(setExamples)
+      .catch(() => setExamples([]))
   }, [])
 
   const isRunning = selectIsRunning(state)
@@ -158,8 +175,20 @@ export default function App() {
 
   function handlePersonaCountChange(n) {
     if (isRunning || countLocked) return
+    // previewPersonas throws until the pool has loaded, and an exception
+    // here used to kill the whole change -- the slider would refuse to
+    // move at all, with no clue that the real problem was a failed
+    // GET /personas. The mount effect reports that failure now; this is
+    // the matching guard so the control fails quietly rather than
+    // throwing on every drag.
+    let personas
+    try {
+      personas = previewPersonas(n)
+    } catch {
+      return
+    }
     runHandleRef.current?.cancel()
-    dispatch({ type: 'SET_PERSONA_COUNT', n, personas: previewPersonas(n) })
+    dispatch({ type: 'SET_PERSONA_COUNT', n, personas })
     setPinnedPersonaId(null)
     setActiveFilters([])
     setViewMode('A')
