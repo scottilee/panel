@@ -5,15 +5,14 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Section 3's HTTP API table has no /api prefix (POST /run, not
-    // POST /api/run) -- api/main.py's routes match that exactly, so the
-    // dev proxy has to target those literal paths rather than a generic
-    // /api namespace that nothing on the backend actually answers to. In
-    // production both are served from the same uvicorn origin, so the
-    // frontend's fetch calls use these same unprefixed paths directly.
+    // The API has no /api prefix, so the dev proxy lists its routes
+    // literally ('/run' also covers /run/{id}/stream and /run/{id}/cancel).
+    // In production uvicorn serves the UI and the API from one origin, so
+    // these same unprefixed paths work directly and no CORS is needed.
     proxy: {
       '/run': 'http://localhost:8000',
       '/compare': 'http://localhost:8000',
+      '/check': 'http://localhost:8000',
       '/personas': 'http://localhost:8000',
       '/examples': 'http://localhost:8000',
     },

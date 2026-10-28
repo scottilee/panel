@@ -1,15 +1,8 @@
-"""Pydantic models for every data contract in the build spec, section 3.
+"""Pydantic models for every data contract: personas, reactions, the
+synthesis report, runs, compares and HTTP request bodies.
 
-Field names must not change without updating the spec. Deliberate additions
-beyond the spec's literal examples, both by explicit user request
-(2026-10-28), not silent decisions:
-- `Finding.affected_segment_filter` (see note below).
-- `tech_comfort`/`skepticism` widened from the spec's stated 1-5 to 1-100
-  for more variability.
-- Persona gained the Big Five / OCEAN traits (`openness`,
-  `conscientiousness`, `extraversion`, `agreeableness`, `neuroticism`),
-  also 1-100, not in the original section 3 schema at all.
-Everything else here is a direct transcription.
+Field names are shared with the frontend (web/src) and with the JSON
+schemas shown to the models, so renaming one is a contract change.
 """
 
 from __future__ import annotations
@@ -18,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Literal, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 REGIONS = Literal[
     "Northeast US",
@@ -70,8 +64,7 @@ class Persona(BaseModel):
     household: str
     tech_comfort: int = Field(ge=1, le=100)
     skepticism: int = Field(ge=1, le=100)
-    # Big Five / OCEAN, 1-100. Not in the spec's original schema -- added
-    # by explicit request for psychological grounding beyond skepticism.
+    # Big Five / OCEAN, 1-100: psychological grounding beyond skepticism.
     openness: int = Field(ge=1, le=100)
     conscientiousness: int = Field(ge=1, le=100)
     extraversion: int = Field(ge=1, le=100)
@@ -123,15 +116,23 @@ class SegmentClause(BaseModel):
 
 class Finding(BaseModel):
     claim: str
+    # Share of the segment's members (usable reactions only) whose
+    # sentiment was negative. The model proposes it; synthesize.py
+    # recomputes it from the reactions whenever the filter can be
+    # recounted, so the shipped number is counted, not estimated.
     affected_pct: int = Field(ge=0, le=100)
     affected_segment: str
-    # Additive beyond the spec's literal JSON example: a structured,
-    # machine-checkable twin of affected_segment so synthesize.py can
-    # recount affected_pct exactly instead of parsing free text (see
-    # section 5.3's "within 10 points of a recount" check).
+    # Structured twin of affected_segment, so the segment can be recounted
+    # exactly instead of parsed out of prose.
     affected_segment_filter: list[SegmentClause]
     evidence: list[str] = Field(min_length=3, max_length=5)
     severity: Literal["high", "medium", "low"]
+    # Filled in by synthesize.py, never by the model (hidden from the JSON
+    # schema it is shown): how many panel personas match the filter, and
+    # that count as a percentage of the panel. None when the filter cites
+    # values no persona has, so it can't be recounted.
+    segment_size: SkipJsonSchema[int | None] = None
+    segment_pct: SkipJsonSchema[float | None] = None
 
 
 class HighestLeverageEdit(BaseModel):
@@ -157,10 +158,17 @@ class Artifact(BaseModel):
 
 
 class RunStats(BaseModel):
+    # Over usable reactions only (see panel/stats.py).
     mean_sentiment: float = 0.0
     would_act_pct: float = 0.0
+    failed_reactions: int = 0
+    # Completed Token Factory requests per tier, retries included.
     nano_calls: int = 0
+    super_calls: int = 0
+    ultra_calls: int = 0
     nano_ms_total: int = 0
+    # Wall time of the whole synthesis stage: Super digests (large panels
+    # only) plus the Ultra call.
     ultra_ms: int = 0
 
 
@@ -168,12 +176,8 @@ class Run(BaseModel):
     run_id: str
     artifact: Artifact
     persona_set: str
-    # "cancelled" is an addition beyond section 3's five states, needed by
-    # the user-facing cancel button (2026-10-29 request). Flagging rather
-    # than folding it into "error": a deliberate stop is not a failure,
-    # the UI must not show "something went wrong" for it, and reusing
-    # "error" would also mean inventing an error message for a run that
-    # did exactly what it was told.
+    # "cancelled" is distinct from "error": a deliberate stop is not a
+    # failure, and the UI must not show "something went wrong" for it.
     status: Literal[
         "pending", "streaming", "synthesizing", "done", "error", "cancelled"
     ] = "pending"
@@ -203,11 +207,10 @@ class CompareResult(BaseModel):
 class ArtifactCheck(BaseModel):
     """Pre-submission sanity check on what the user pasted.
 
-    Not in the build spec. Added because a panel will dutifully react to
-    anything -- gibberish, a config file, a joke -- and produce a
-    confident, meaningless report, which is worse than refusing. The check
-    only ever *advises*: the user can always run anyway, and a failed
-    check never blocks a run (see panel/classify.py).
+    A panel will dutifully react to anything -- gibberish, a config file,
+    a joke -- and produce a confident, meaningless report. The check only
+    ever advises: the user can always run anyway, and a failed check never
+    blocks a run (see panel/classify.py).
     """
 
     kind: str = Field(max_length=60)
@@ -215,19 +218,26 @@ class ArtifactCheck(BaseModel):
     reason: str = Field(max_length=240)
 
 
-# --- HTTP request bodies (section 3's API table) ---------------------------
+# --- HTTP request bodies ----------------------------------------------------
+
+# Bounds on an artifact's text, shared by POST /run, POST /check and the
+# URL-fetch path.
+MIN_ARTIFACT_CHARS = 50
+MAX_ARTIFACT_CHARS = 20_000
 
 
 class RunRequest(BaseModel):
-    text: str | None = Field(default=None, min_length=50, max_length=20000)
+    text: str | None = Field(
+        default=None, min_length=MIN_ARTIFACT_CHARS, max_length=MAX_ARTIFACT_CHARS
+    )
     url: str | None = None
     label: str | None = None
     persona_count: int | None = Field(default=None, ge=10)
 
     @model_validator(mode="after")
     def _text_xor_url(self) -> "RunRequest":
-        if not self.text and not self.url:
-            raise ValueError("either text or url is required")
+        if bool(self.text) == bool(self.url):
+            raise ValueError("send exactly one of text or url")
         return self
 
     @field_validator("text")
@@ -242,9 +252,9 @@ class CompareRequest(BaseModel):
 
 
 class CheckRequest(BaseModel):
-    # Same bounds as RunRequest.text, so anything the run endpoint would
-    # accept can be checked first and nothing else wastes a model call.
-    text: str = Field(min_length=50, max_length=20000)
+    # Same bounds as RunRequest.text, so anything /run would accept can be
+    # checked first and nothing else wastes a model call.
+    text: str = Field(min_length=MIN_ARTIFACT_CHARS, max_length=MAX_ARTIFACT_CHARS)
 
     @field_validator("text")
     @classmethod

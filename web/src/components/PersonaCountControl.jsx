@@ -1,12 +1,8 @@
-// N slider -- step 2 ("Who reads it") of the setup card, section 6.10.
-// The count is shown as an editable number inline in the step header
-// (matching the mockup's big bold readout) rather than a separate number
-// spinner below the slider, so the precise-entry feature the original
-// control had isn't lost, just relocated -- flagged as a judgment call.
+// N slider -- step 2 ("Who reads it") of the setup card. The count is also
+// an editable number inline in the step header, for precise entry.
 
-// Empirically calibrated from section 5.2's hour-one measurement target
-// (100 reactions under ~40s at the measured MAX_CONCURRENCY) -- a
-// throughput constant, not a per-call serial latency.
+// Throughput, not per-call latency: measured at 100 reactions in ~35-40s
+// at MAX_CONCURRENCY=50.
 const SECONDS_PER_PERSONA_ESTIMATE = 0.4
 
 function snapToStep(n, step, min, max) {

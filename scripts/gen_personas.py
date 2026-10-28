@@ -1,7 +1,7 @@
 """CLI: python scripts/gen_personas.py --n 100 [--append]
 
-Generates data/personas.json via Super, stratified per section 4.1, then
-runs the anti-sycophancy check from section 4.2's note against the 3
+Generates data/personas.json via Super, stratified by region, age band
+and income band, then runs the anti-sycophancy check against the 3
 example artifacts via Nano.
 
 This is the only thing that writes data/personas.json, and it is never
@@ -51,8 +51,7 @@ EXAMPLE_FILES = ["pricing_v1.txt", "ad_v1.txt", "policy_v1.txt"]
 REACTION_CONCURRENCY = 20
 
 MEAN_SENTIMENT_BOUNDS = (-0.8, 0.8)
-# Section 4.2's note states this as "at least 25 of 100". Held as a
-# percentage so it means the same thing when C2 runs against a sample of
+# "At least 25 of 100 say they wouldn't act", held as a percentage so it means the same thing when C2 runs against a sample of
 # a 1000-persona pool rather than the whole of a 100-persona one.
 MIN_WOULD_ACT_FALSE_PCT = 25
 # C2 costs len(personas) x 3 Nano calls. At n=1000 that's 3000 calls for
@@ -266,11 +265,8 @@ C2_RUN_ID = "c2-check"
 
 
 async def react_all(personas: list[Persona], artifact_text: str) -> dict[str, Reaction]:
-    """Uses panel.react.react_one rather than a local copy. This script
-    used to carry its own duplicate of it, which drifted: the real one
-    gained a broadened except (so a dropped socket costs one reaction
-    instead of the whole batch) and this one didn't.
-    """
+    """Uses panel.react.react_one, so the check measures exactly the
+    reaction call the app makes."""
     sem = asyncio.Semaphore(REACTION_CONCURRENCY)
     reactions = await asyncio.gather(
         *(react_one(p, artifact_text, C2_RUN_ID, sem) for p in personas)
@@ -359,10 +355,7 @@ async def run_anti_sycophancy_check(
 
         for pid in most_agreeable_ids:
             old = by_id[pid]
-            # 1-100 scale. This used to read `5 if old.skepticism <= 2
-            # else 4`, left over from the spec's 1-5 scale -- on 1-100 it
-            # *lowered* skepticism to 4/100, the exact opposite of the
-            # intent. A real bump (+25, floor 75) instead.
+            # A real bump on the 1-100 scale: +25, floor 75.
             new_level = min(100, max(old.skepticism + 25, 75))
             updated = await make_more_skeptical(old, new_level)
             updated = updated.model_copy(update={"id": pid})

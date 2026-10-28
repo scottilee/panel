@@ -1,10 +1,9 @@
-// Tile grid, memoized Tile, section 6.2. filteredIds (section 6.5) dims
-// tiles outside the active segment; onBackgroundClick (section 6.3) fires
-// when the click didn't land on a tile (Tile.jsx stops propagation on its
-// own click, so this only sees clicks on the grid's own background).
-// highlightedIds (section 6.6) rings tiles while hovering a finding's
-// evidence avatars -- distinct from filter dimming, both can apply at once.
-// deltaByPersonaId (section 6.7), when present, switches every tile to
+// Tile grid of memoized Tiles. filteredIds dims tiles outside the active
+// segment; onBackgroundClick fires when the click didn't land on a tile
+// (Tile.jsx stops propagation on its own click, so this only sees clicks
+// on the grid's own background). highlightedIds rings tiles while hovering
+// a finding's evidence avatars -- distinct from filter dimming, both can
+// apply at once. deltaByPersonaId, when present, switches every tile to
 // delta coloring and staggers each one's color transition by 20ms *
 // array index so it reads as a wave.
 

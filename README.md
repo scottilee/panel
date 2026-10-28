@@ -75,6 +75,31 @@ costs well under a dollar.
   app would have been real out-of-pocket cost for an app that mostly sits
   idle between judging sessions. Inference is 100% Nebius either way.
 
+### Where Token Factory accelerated our workflow
+
+- **Three tiers, one API, so tiering is a one-line decision.** Nano, Super
+  and Ultra sit behind the same OpenAI-compatible endpoint with the same
+  `json_schema` response format, so every call in the codebase goes through
+  one function (`panel/tf_client.py`'s `chat_json`). Moving the condensing
+  job between tiers — which we did twice, on measurement — meant changing
+  one constant (`MODEL_DIGEST`), not an integration.
+- **Fan-out without a queue.** 50 concurrent Nano calls ran with zero
+  429s at every level we tested, so 100 personas read the copy in 35
+  seconds from a plain `asyncio` semaphore. No job queue, no worker pool.
+- **Structured output on every tier.** All three models return
+  schema-conforming JSON directly, which is what lets Python, not the
+  model, do every count in the report.
+- **The persona pool was built on the same API.** Super generated and
+  repaired all 1,000 personas offline (`scripts/gen_personas.py`), and the
+  anti-sycophancy gate runs the real Nano reaction call against them.
+- **Cheap enough to measure properly.** Every architectural decision in
+  [what we learned](#what-we-learned-building-this) came from repeated
+  paired trials against the live models (`scripts/probe_nemotron.py`).
+  At these prices, ten trials per configuration is affordable, and it
+  reversed two of our conclusions.
+- **Visible per run.** After every run the UI shows how many Nano, Super
+  and Ultra calls it actually made, retries included.
+
 ---
 
 ## Setup
@@ -114,10 +139,25 @@ nothing and makes no model calls.
 
 A note on the deployed configuration: Cloud Run serves the app to
 `allUsers`, because judges need a link rather than credentials, and every
-run spends real credits. `MAX_PERSONA_COUNT`, `MAX_CONCURRENT_RUNS` and
-`RATE_LIMIT_RUNS` (see `.env.example` and `infra/variables.tf`) bound what
-one caller can spend; the defaults are generous for a person and useless
-for a script. They are unset by default locally.
+run spends real credits. So:
+
+- `MAX_PERSONA_COUNT`, `MAX_CONCURRENT_RUNS` and per-client rate limits on
+  every endpoint that calls a model (`RATE_LIMIT_RUNS`,
+  `RATE_LIMIT_CHECKS`, `RATE_LIMIT_COMPARES`) bound what one caller can
+  spend — generous for a person, useless for a script. Clients are keyed by
+  the address Cloud Run appends to `X-Forwarded-For`
+  (`TRUSTED_PROXY_HOPS=1`), never by a client-supplied one.
+- A compare result is computed once per pair of runs and reused.
+- Run ids are 128-bit random tokens, since an id is the only key to a run's
+  pasted text.
+- No CORS: the app serves its own frontend, so other sites can't drive it
+  from their visitors' browsers.
+- URL input is fetched with SSRF checks on every redirect hop, and pasted
+  text is framed to every model as material to react to, never
+  instructions to follow.
+
+See `.env.example` and `infra/variables.tf`; locally the limits default
+to permissive values.
 
 ---
 
@@ -222,8 +262,11 @@ decisions are reproducible with `python scripts/probe_nemotron.py`.
   across the three, and a retry with the exact discrepancy spelled
   out produced identical wrong numbers. So Ultra proposes *which* segment
   matters as a structured filter, and Python computes the percentage from
-  the actual reactions. Every number in the findings panel is counted, not
-  estimated.
+  the actual reactions: how many people match the filter, and what share of
+  them reacted negatively. Every number in the findings panel is counted,
+  not estimated. (Counting the right thing took a second pass: our first
+  recount measured the segment's share of the *panel*, a true number
+  answering a different question than the sentence printed above it.)
 - **…and asking anyway isn't merely unreliable, it's destructive.** We
   learned the same lesson a second time writing the shard digests, and it
   took two tries to stop asking. v1 wanted a theme, the persona IDs
@@ -238,16 +281,16 @@ decisions are reproducible with `python scripts/probe_nemotron.py`.
   no quantity at all. Every number in the report comes from recounting
   Ultra's segment filter against the real personas — which is where this
   project's numbers came from in the first place.
-- **The obvious tier for a job isn't always the right one.** "Condense a
-  batch of reactions" reads like mid-tier work, so Super got it. Raced
-  head-to-head against Nano on the same real 50-reaction shard: Nano
-  finished in 83s with 10 themes and the 5 required quotes; Super took 157s,
-  returned 13 themes and **zero** quotes, and on live runs exhausted the
-  whole truncation ladder (12k → 24k → 48k) on some shards. We moved the job
-  to Nano. Super keeps the work it's genuinely needed for — writing the
-  persona pool offline, where quality compounds into every run that follows.
-  Ten minutes of measurement overturned an architecture we'd have otherwise
-  presented as a design principle.
+- **Benchmark at the configuration you ship.** "Condense a batch of
+  reactions" reads like mid-tier work, so Super got it. Raced head-to-head
+  against Nano on one real 50-reaction shard, Nano finished in 83s with 10
+  themes and the 5 required quotes; Super took 157s, returned 13 themes and
+  **zero** quotes, and on live runs exhausted the whole truncation ladder on
+  some shards. We moved the job to Nano. Then the batch size dropped to 10
+  for unrelated reasons, and a paired 10-trial comparison at *that* size
+  reversed the result: Super 10/10 at 38s median with richer themes, Nano
+  9/10 at 54s. The single trial had measured a batch-size problem and
+  blamed the model. The job went back to Super, and that is what ships.
 - **A graceful degradation path is worth building before you need it.**
   That failed shard didn't fail the run — `_digest_shard` returns `None`,
   the label tells Ultra it's seeing 100 of 200 reactions, and the report
@@ -280,7 +323,7 @@ decisions are reproducible with `python scripts/probe_nemotron.py`.
   the UI by locking the control once a compare starts.
 - **The Tavily URL-extraction path is unverified.** We had no key; the
   `requests` + `readability-lxml` fallback is what's tested.
-- **A 1,000-person run takes about six minutes**, because throughput is
+- **A 1,000-person run takes about eight minutes**, because throughput is
   concurrency-bound (50 concurrent Nano calls) and the panel size is the
   numerator. The default stays at 100 for that reason; the slider goes to
   1,000 when the question is worth the wait.

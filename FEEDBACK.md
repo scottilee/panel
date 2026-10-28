@@ -74,7 +74,7 @@ and three times we were badly wrong, in both directions:
 | --- | --- | --- | --- |
 | Nano reaction (6 short fields) | 400 | **3,000** | ~100% truncation at 400; observed peak usage 2,092 |
 | Super persona batch (10 personas) | 8,000 | **16,000** | ~4.5k content + ~3.4k reasoning sat right on the line |
-| Nano batch digest | 24,000 | **8,000**, after fixing the batch size | At 10 items a batch, 8,000 succeeds 10/10; at 50 it fails 10/10 at any budget — see §5 |
+| Batch digest (measured on Nano; ships on Super) | 24,000 | **8,000**, after fixing the batch size | At 10 items a batch, 8,000 succeeds 10/10 on both tiers (Super used 4.3-5.7k); at 50 Nano fails 10/10 at any budget — see §5 |
 
 The second row is the expensive one. At 8,000 the call *usually* worked,
 so the only symptom was speed: every call that crossed the line truncated,

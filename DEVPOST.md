@@ -16,8 +16,8 @@ Find out who you're losing, and why — before you ship.
 
 ## Elevator pitch (short description)
 
-Paste a landing page, ad, or pricing page. A thousand distinct synthetic
-people read it and react the way they actually would in the first twenty
+Paste a landing page, ad, or pricing page. A hundred distinct synthetic
+people — up to a thousand if you want — read it and react the way they actually would in the first twenty
 seconds — bored, confused, suspicious, indifferent. Then one much larger
 model reads every reaction and tells you the three things costing you
 customers, which segment each one affects, and one specific edit to try.
@@ -33,10 +33,12 @@ notice. Pick how many people should read it, from 10 to 1,000. Hit run.
 
 What happens next is the part worth watching: a grid of tiles fills in
 live, one per person, each turning a colour as that persona's reaction
-lands. Inside a minute you have a verdict:
+lands. At the default 100 people, you have a verdict in about a minute:
 
-- **A headline finding** with a real number attached: "30% of lower-income,
-  high-skepticism readers reject this on price with no proof of savings."
+- **A headline finding** with a counted number attached, e.g. "30% of
+  lower-income, high-skepticism readers react negatively, mostly on price
+  with no proof of savings." Each finding also shows how many people that
+  segment is and what share of the panel it makes up.
 - **Three findings ranked by severity**, each naming the affected segment
   and citing the specific people whose objections support it. Click a
   segment and the grid filters to exactly those readers.
@@ -45,7 +47,7 @@ lands. Inside a minute you have a verdict:
 - **Who you're winning and who you're losing**, in a sentence each.
 
 Then the part that makes it a tool rather than a demo: **Apply and
-compare**. One click rewrites that phrase, reruns the *same* thousand
+compare**. One click rewrites that phrase, reruns the *same*
 people against the edited copy, and shows you who changed their mind and
 who didn't — per person, as a delta. Not a prediction. A rerun.
 
@@ -90,8 +92,8 @@ as the contract between them, Docker, and Terraform onto Google Cloud Run.
 
 **1. Every number is counted in Python, never by a model.** Ultra proposes
 *which* segment a finding affects as a machine-checkable filter
-(`{field, op, value}` clauses); Python recounts the percentage against the
-real population. We did this because Ultra's own percentage claims were
+(`{field, op, value}` clauses); Python counts how many personas match it
+and what share of them actually reacted negatively. We did this because Ultra's own percentage claims were
 off by 12-70 points, and retrying with the discrepancy spelled out
 produced identical wrong numbers. Every figure on screen is a count.
 
@@ -147,9 +149,10 @@ the evidence; Python does the arithmetic.
 
 ## Accomplishments we're proud of
 
-- **A thousand people in about eight minutes for well under a dollar**, and
-  100 people in 35 seconds. Measured, not projected: zero rate-limit errors
-  at 50 concurrent calls, at every level we tested.
+- **100 people in 35 seconds, measured**, with zero rate-limit errors at 50
+  concurrent calls at every level we tested — and a thousand in roughly
+  eight minutes for well under a dollar (extrapolated from the measured
+  N=200 run).
 - **A 5.5× speedup on the condensing stage** (721s → 130s at N=200), all of
   it from measurement that contradicted our instincts.
 - **1,000 personas with zero duplicate names**, exact demographic

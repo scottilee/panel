@@ -63,7 +63,7 @@ async def test_stamps_run_id_and_latency(monkeypatch, personas):
 async def test_one_failing_persona_does_not_stall_the_run(monkeypatch, personas):
     """A persona whose call fails after retries still yields a Reaction
     (sentiment 0, raw_error set) so the grid fills and the run completes
-    -- section 5.2."""
+    -- one bad call never stalls the run."""
     calls = {"n": 0}
 
     async def fake(**kwargs):

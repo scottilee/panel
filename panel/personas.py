@@ -61,7 +61,7 @@ def sample(n: int, seed: int, personas: list[Persona] | None = None) -> list[Per
     the same order, since random.Random(seed).sample is deterministic
     given a fixed input sequence (the JSON's on-disk order never changes
     once committed). Compare mode's apples-to-apples guarantee depends on
-    this (section 3).
+    this.
     """
     pool = personas if personas is not None else load_personas()
     if n > len(pool):
@@ -88,7 +88,7 @@ def sample_stable(n: int, personas: list[Persona] | None = None) -> list[Persona
 
 def build_slots(total: int = 100, offset: int = 0) -> list[dict]:
     """total (region, age_band, income_band) target slots for generation,
-    per section 4.1's stratification grid. Assigned by independent
+    on a stratified grid. Assigned by independent
     modular cycles so region/age_band/income_band coverage is exact and
     deterministic regardless of model behavior — the model only invents
     the human details (name, occupation, voice, ...) within each slot.
@@ -161,7 +161,7 @@ async def generate_batch(
     calls and still wouldn't converge in the 5 passes it allows.
     """
     if len(slots) != 10:
-        raise ValueError("section 4.1 calls for exactly 10 personas per Super call")
+        raise ValueError("persona generation works in batches of exactly 10")
 
     result = await chat_json(
         model=MODEL_SUPER,
@@ -201,9 +201,8 @@ async def generate_batch(
 
 # --- Duplicate-fixing and anti-sycophancy regeneration ----------------------
 #
-# Both are implementation details for scripts/gen_personas.py's C1/C2 checks,
-# not among section 4's four canonical prompts, so they're small local
-# templates here rather than additions to prompts.py.
+# Implementation details of scripts/gen_personas.py's C1/C2 checks, so
+# they're small local templates here rather than additions to prompts.py.
 
 
 class _NewName(BaseModel):
@@ -216,8 +215,8 @@ async def rename_one(
     """A new full name for a persona whose name collides with another's,
     with every other field untouched.
 
-    Repairing a name collision by regenerating the whole persona (what
-    this used to do) is both wasteful and destructive: data/cached holds
+    Regenerating the whole persona instead would be wasteful and
+    destructive: data/cached holds
     replayable example runs keyed by persona_id, so swapping the person
     behind an id leaves a cached reaction attributed to someone whose
     traits no longer explain it. A name is the only thing actually wrong,
@@ -302,9 +301,7 @@ class _VoicePeeves(BaseModel):
 async def make_more_skeptical(persona: Persona, new_skepticism: int) -> Persona:
     """Raises skepticism and rewrites voice + pet_peeves to actually match
     it, rather than just flipping the number — a forced-up skepticism with
-    an unchanged trusting voice would be internally inconsistent (section
-    4.2's anti-sycophancy note only mandates the number; the voice/peeves
-    rewrite is this stage's call to keep the persona coherent).
+    an unchanged trusting voice would be internally inconsistent.
     """
     system = (
         "You rewrite one aspect of an existing consumer persona to match a "

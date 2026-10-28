@@ -5,8 +5,7 @@
 //
 // 1. Mock mode has no backend to ask, so POST /check isn't available --
 //    and mock mode is precisely where someone pokes at the app without
-//    spending credits. Pasting obvious nonsense there used to run a full
-//    panel with no warning at all.
+//    spending credits, so obvious nonsense still needs a warning there.
 // 2. Even in real mode, the blatant cases don't need a model call. This
 //    runs in microseconds and catches character soup; the model handles
 //    everything subtler.

@@ -9,6 +9,7 @@ import PersonaCard from './components/PersonaCard.jsx'
 import PersonaCountControl from './components/PersonaCountControl.jsx'
 import StatsStrip from './components/StatsStrip.jsx'
 import Verdict from './components/Verdict.jsx'
+import { applyEdit } from './edit.js'
 import {
   STATUS,
   initialState,
@@ -32,21 +33,7 @@ const TICK_INTERVAL_MS = 250
 // reach for Run.
 const CHECK_DEBOUNCE_MS = 1200
 
-// Applies highest_leverage_edit to the artifact text for mock-mode's
-// Apply-and-compare flow. The real equivalent (panel/synthesize.py's
-// apply_edit) also tolerates whitespace-flexible matches; mock data
-// guarantees an exact substring match by construction, so a plain
-// replace is enough here -- the fallback just warns instead of silently
-// comparing against unedited text.
-function applyEdit(artifactText, currentText, proposedText) {
-  if (artifactText.includes(currentText)) {
-    return artifactText.replace(currentText, proposedText)
-  }
-  console.warn('Findings: current_text not found verbatim in artifact; comparing against unedited text')
-  return artifactText
-}
-
-// New per the redesign: "As they answered" / "Grouped by reaction" sorts
+// "As they answered" / "Grouped by reaction" sorts
 // the grid's tile positions by (would_act desc, sentiment desc). Purely a
 // display-order concern -- reactions stay keyed by persona_id, so sorting
 // this array never touches compare mode's apples-to-apples guarantee.
@@ -71,13 +58,9 @@ export default function App() {
   const [examples, setExamples] = useState([])
 
   // The pool fetch is load-bearing for the whole setup card: poolSize is
-  // the N slider's maximum, and previewPersonas() throws outright until
-  // the pool has landed. With no .catch() a failed GET /personas left the
-  // slider pinned at initialState's placeholder 100 AND made every move
-  // of it throw inside the change handler -- so the control looked frozen
-  // with nothing on screen to say why. The usual cause is mundane (the
-  // backend isn't running yet, or the dev server's proxy target is down),
-  // which is exactly the case that deserves a readable message.
+  // the N slider's maximum, and previewPersonas() throws until the pool
+  // has landed. A failure has to say so on screen, or the slider just
+  // looks frozen.
   useEffect(() => {
     getPoolSize()
       .then((poolSize) => {
@@ -86,9 +69,10 @@ export default function App() {
         dispatch({ type: 'SET_PERSONA_COUNT', n, personas: previewPersonas(n) })
       })
       .catch((e) => {
+        const devHint = import.meta.env.DEV ? ` (${e.message}; is the backend running on port 8000?)` : ''
         dispatch({
           type: 'ERROR',
-          message: `Could not load the persona pool (${e.message}). Is the backend running on port 8000?`,
+          message: `Could not load the persona pool. Please refresh in a moment.${devHint}`,
         })
       })
     getExamples()
@@ -100,9 +84,9 @@ export default function App() {
   const compareIsRunning = selectCompareIsRunning(state)
   const countLocked = selectCountLocked(state)
 
-  // Elapsed-seconds ticker, section 6.4 ("elapsed stops" on done) -- one
-  // ticker drives both run A's and compare's elapsed time (state.js's TICK
-  // updates whichever has a startedAt).
+  // Elapsed-seconds ticker; stops on done. One ticker drives both run A's
+  // and compare's elapsed time (state.js's TICK updates whichever has a
+  // startedAt).
   useEffect(() => {
     if (!isRunning && !compareIsRunning) return
     const id = setInterval(() => dispatch({ type: 'TICK' }), TICK_INTERVAL_MS)
@@ -122,10 +106,12 @@ export default function App() {
   const [activeFilters, setActiveFilters] = useState([])
   // Pre-submission check: the advisory verdict for the current text, and
   // the "are you sure" prompt it can raise. Advisory only -- see
-  // panel/classify.py. `confirmCheck` holding a verdict means the user has
-  // been asked and hasn't answered yet.
-  const [textCheck, setTextCheck] = useState(null)
-  const [confirmCheck, setConfirmCheck] = useState(null)
+  // panel/classify.py. Both are stored with the text they were computed
+  // for and ignored once the text changes, so editing clears them without
+  // a reset effect.
+  const [textCheckEntry, setTextCheckEntry] = useState(null)
+  const [confirmCheckEntry, setConfirmCheckEntry] = useState(null)
+  const [applyError, setApplyError] = useState(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [highlightedIds, setHighlightedIds] = useState(null)
   const [viewMode, setViewMode] = useState('A')
@@ -143,8 +129,7 @@ export default function App() {
     )
   }, [])
   const handleClearFilters = useCallback(() => setActiveFilters([]), [])
-  // Age/income are range-style filters (section 6.5, changed 2026-10-29):
-  // at most one entry per group, present only when narrowed from the full
+  // Age/income are range-style filters: at most one entry per group, present only when narrowed from the full
   // default range -- `isDefault` removes the entry entirely rather than
   // storing a range that covers everyone, keeping anyFilter/matchTxt
   // correct without special-casing "range at full extent" everywhere else.
@@ -154,7 +139,7 @@ export default function App() {
       return isDefault ? withoutGroup : [...withoutGroup, { group, ...range }]
     })
   }, [])
-  // Section 6.6: a finding's segment chip applies that filter outright
+  // A finding's segment chip applies that filter outright
   // (replaces activeFilters) rather than toggling/merging -- it's "show
   // me this segment", not "add one more condition to what I already had".
   const handleSegmentClick = useCallback((clauses) => {
@@ -169,14 +154,14 @@ export default function App() {
   // per keystroke, and api.js caches by exact text so this and the Run
   // click share one request.
   const checkableText = state.inputMode === 'text' ? state.artifactText.trim() : ''
+  const textCheck = textCheckEntry?.text === checkableText ? textCheckEntry.verdict : null
+  const confirmCheck = confirmCheckEntry?.text === checkableText ? confirmCheckEntry.verdict : null
   useEffect(() => {
-    setTextCheck(null)
-    setConfirmCheck(null)
     if (checkableText.length < MIN_TEXT_LENGTH || checkableText.length > MAX_TEXT_LENGTH) return
     let cancelled = false
     const id = setTimeout(() => {
       checkArtifact(checkableText).then((verdict) => {
-        if (!cancelled) setTextCheck(verdict)
+        if (!cancelled) setTextCheckEntry({ text: checkableText, verdict })
       })
     }, CHECK_DEBOUNCE_MS)
     return () => {
@@ -215,12 +200,8 @@ export default function App() {
 
   function handlePersonaCountChange(n) {
     if (isRunning || countLocked) return
-    // previewPersonas throws until the pool has loaded, and an exception
-    // here used to kill the whole change -- the slider would refuse to
-    // move at all, with no clue that the real problem was a failed
-    // GET /personas. The mount effect reports that failure now; this is
-    // the matching guard so the control fails quietly rather than
-    // throwing on every drag.
+    // previewPersonas throws until the pool has loaded. The mount effect
+    // reports that failure; this guard keeps every drag from throwing.
     let personas
     try {
       personas = previewPersonas(n)
@@ -237,18 +218,17 @@ export default function App() {
 
   function handleSelectExample(example) {
     if (isRunning) return
-    // One action, not two: SET_ARTIFACT_TEXT now clears a borrowed label,
-    // so dispatching them separately would set the name and immediately
+    // One action, not two: SET_ARTIFACT_TEXT clears a borrowed label, so
+    // dispatching them separately would set the name and immediately
     // throw it away.
     dispatch({ type: 'SELECT_EXAMPLE', text: example.text, label: example.label })
   }
 
-  // Section 6.8: "if a live run emits error within 10 seconds of
-  // starting, the frontend silently re-requests the same example with
-  // ?cached=true... never show a raw error to a judge; show 'Retrying...'
-  // then the cached result." allowRetry is false on the retry's own
-  // handler so a failing cached replay (e.g. no cache file for this
-  // example) surfaces as a real error instead of looping.
+  // Demo fallback: if a live run of one of the examples errors within 10
+  // seconds, quietly re-request it with ?cached=true and show
+  // "Retrying..." instead of the raw error. allowRetry is false on the
+  // retry's own handler so a failing cached replay (e.g. no cache file for
+  // this panel size) surfaces as a real error instead of looping.
   function makeRunEventHandler({ startedAt, allowRetry }) {
     return (event) => {
       switch (event.type) {
@@ -284,7 +264,7 @@ export default function App() {
           const withinRetryWindow = Date.now() - startedAt < 10_000
           const matchedExample = examples.find((ex) => ex.text === state.artifactText)
           if (allowRetry && withinRetryWindow && matchedExample) {
-            runRealOrCachedExample(matchedExample)
+            runCachedExample(matchedExample)
           } else {
             dispatch({ type: 'SET_RETRYING', retrying: false })
             dispatch({ type: 'ERROR', message: event.data?.message ?? 'unknown error' })
@@ -297,18 +277,17 @@ export default function App() {
     }
   }
 
-  // cached: true replays section 5.8's known-good cached result instead
-  // of a real run -- used both for the 6.8 auto-retry above and (if ever
-  // wired to a UI control) a direct "run cached" path.
-  function runRealOrCachedExample(example, cached = true) {
-    dispatch({ type: 'SET_RETRYING', retrying: cached })
+  // Replays the server's known-good cached result for an example instead
+  // of a real run (the auto-retry above).
+  function runCachedExample(example) {
+    dispatch({ type: 'SET_RETRYING', retrying: true })
     runHandleRef.current?.cancel()
     const startedAt = Date.now()
     runHandleRef.current = startRun({
       text: example.text,
       label: example.label,
       personaCount: state.personaCount,
-      cached,
+      cached: true,
       onEvent: makeRunEventHandler({ startedAt, allowRetry: false }),
     })
   }
@@ -321,13 +300,13 @@ export default function App() {
   // The check can only ever ask; it never refuses.
   async function handleRun() {
     if (state.inputMode === 'text' && !confirmCheck) {
-      const verdict = textCheck ?? (await checkArtifact(state.artifactText.trim()))
+      const verdict = textCheck ?? (await checkArtifact(checkableText))
       if (verdict && verdict.is_reviewable === false) {
-        setConfirmCheck(verdict)
+        setConfirmCheckEntry({ text: checkableText, verdict })
         return
       }
     }
-    setConfirmCheck(null)
+    setConfirmCheckEntry(null)
     startRunNow()
   }
 
@@ -345,14 +324,12 @@ export default function App() {
     compareRunHandleRef.current?.cancel()
     setViewMode('A')
     setSortedByReaction(false)
+    setApplyError(null)
     dispatch({ type: 'RUN_START' })
     const startedAt = Date.now()
     runHandleRef.current = startRun({
-      // In URL mode the server fetches and extracts the text itself
-      // (POST /run accepts text XOR url). This used to send
-      // state.artifactText unconditionally, which in URL mode is empty --
-      // so every URL-mode run was a 422 and the whole Text/URL toggle was
-      // dead in real mode.
+      // In URL mode the server fetches and extracts the text itself, and
+      // POST /run accepts exactly one of text or url.
       text: state.inputMode === 'url' ? undefined : state.artifactText,
       url: state.inputMode === 'url' ? state.artifactUrl.trim() : undefined,
       label: state.label,
@@ -361,14 +338,24 @@ export default function App() {
     })
   }
 
-  // Section 6.6: writes proposed_text over current_text into the second
-  // textarea and triggers compare immediately -- both runs of a compare
-  // use the same N (section 6.10), so this reuses state.personaCount/
-  // state.personas as-is rather than resampling.
+  // Writes proposed_text over current_text into the second textarea and
+  // starts the compare immediately. Both runs of a compare use the same
+  // N, so this reuses state.personaCount/state.personas as-is rather than
+  // resampling. If the phrase can't be found the compare doesn't start:
+  // rerunning the unedited copy would report ~0 flips as if the edit had
+  // failed.
   function handleApplyAndCompare() {
     if (!state.synthesis) return
     const edit = state.synthesis.highest_leverage_edit
     const editedText = applyEdit(state.artifactText, edit.current_text, edit.proposed_text)
+    if (editedText === null) {
+      setApplyError(
+        "Couldn't find the phrase this edit replaces in your copy, so there is nothing to compare. " +
+          'Make the change by hand and run again.',
+      )
+      return
+    }
+    setApplyError(null)
     dispatch({ type: 'COMPARE_SET_TEXT', text: editedText })
     runCompare(editedText)
   }
@@ -376,13 +363,9 @@ export default function App() {
   function runCompare(text) {
     compareRunHandleRef.current?.cancel()
     dispatch({ type: 'COMPARE_RUN_START' })
-    // Bug fixed 2026-10-29: without previousReactionsById, mock Run B used
-    // to generate reactions purely from the persona list (same as Run A),
-    // so Run A/Run B/Delta were always identical -- toggling the view
-    // visibly did nothing. previousReactionsById makes mock Run B a
-    // deliberate, deterministic edit of Run A's real reactions instead.
-    // Ignored entirely by the real client (section 6.9's getCompareResult
-    // docstring) -- it computes a genuine delta from genuine model calls.
+    // previousReactionsById makes mock Run B a deterministic edit of Run
+    // A's reactions, so the Run A/Run B/Delta views actually differ. The
+    // real client ignores it -- it reruns the panel on the edited text.
     const reactionsAById = state.reactionsById
     const personas = state.personas
     const runIdA = state.runId
@@ -410,10 +393,15 @@ export default function App() {
             break
           case 'done':
             dispatch({ type: 'COMPARE_DONE', stats: event.data.stats })
-            getCompareResult({ personas, reactionsAById, runA: runIdA, runB: runIdB }).then((result) => {
-              dispatch({ type: 'COMPARE_RESULT', result })
-              setViewMode('delta')
-            })
+            getCompareResult({ personas, reactionsAById, runA: runIdA, runB: runIdB })
+              .then((result) => {
+                dispatch({ type: 'COMPARE_RESULT', result })
+                setViewMode('delta')
+              })
+              .catch((e) => dispatch({ type: 'COMPARE_ERROR', message: e.message }))
+            break
+          case 'cancelled':
+            dispatch({ type: 'COMPARE_ERROR', message: 'The compare run was cancelled.' })
             break
           case 'error':
             dispatch({ type: 'COMPARE_ERROR', message: event.data?.message ?? 'unknown error' })
@@ -426,12 +414,13 @@ export default function App() {
   }
 
   // Which reaction set currently drives the grid/stats, per the compare
-  // view toggle (section 6.7) -- switching views never re-fetches, it
-  // just changes which already-in-memory data is being looked at.
+  // view toggle -- switching views never re-fetches, it just changes which
+  // already-in-memory data is being looked at.
   const gridReactionsById = viewMode === 'A' ? state.reactionsById : state.compare.reactionsById
   const liveStats = viewMode === 'A' ? selectLiveStats(state, filteredIds) : selectCompareLiveStats(state)
   const elapsedSeconds = viewMode === 'A' ? selectElapsedSeconds(state) : selectCompareElapsedSeconds(state)
   const statsStripStatus = viewMode === 'A' ? state.status : state.compare.status
+  const runStats = viewMode === 'A' ? state.stats : state.compare.stats
 
   const displayPersonas = useMemo(
     () => (sortedByReaction ? sortByReaction(state.personas, gridReactionsById) : state.personas),
@@ -505,12 +494,9 @@ export default function App() {
                 Cancel run
               </button>
             )}
-            {/* The only place any of this surfaces. state.error,
-                state.retrying and the cancelled status were all tracked by
-                the reducer and rendered nowhere -- section 6.8's "never
-                show a raw error to a judge" had been implemented as never
-                showing an error at all, so a failed run silently stopped
-                with the grid half-full and no explanation. */}
+            {/* The one place run errors, retries and cancellation
+                surface. A failed run must say so rather than stopping
+                silently with the grid half-full. */}
             {state.retrying && (
               <p className="run-note run-note-busy">Retrying with a cached example...</p>
             )}
@@ -536,7 +522,7 @@ export default function App() {
                     type="button"
                     className="check-confirm-go"
                     onClick={() => {
-                      setConfirmCheck(null)
+                      setConfirmCheckEntry(null)
                       startRunNow()
                     }}
                   >
@@ -545,7 +531,7 @@ export default function App() {
                   <button
                     type="button"
                     className="check-confirm-cancel"
-                    onClick={() => setConfirmCheck(null)}
+                    onClick={() => setConfirmCheckEntry(null)}
                   >
                     Let me edit it
                   </button>
@@ -615,9 +601,10 @@ export default function App() {
           synthesis={state.synthesis}
           runLabel={state.label || 'Untitled run'}
           wouldActPct={liveStats.wouldActPct}
-          total={liveStats.done}
+          total={liveStats.usable}
           onApplyAndCompare={handleApplyAndCompare}
           applyDisabled={state.compare.visible}
+          applyError={applyError ?? state.compare.error}
         />
 
         <section aria-label="Reactions" className="reactions-card">
@@ -650,7 +637,12 @@ export default function App() {
             )}
           </div>
 
-          <StatsStrip liveStats={liveStats} elapsedSeconds={elapsedSeconds} status={statsStripStatus} />
+          <StatsStrip
+            liveStats={liveStats}
+            runStats={runStats}
+            elapsedSeconds={elapsedSeconds}
+            status={statsStripStatus}
+          />
 
           <Grid
             personas={displayPersonas}

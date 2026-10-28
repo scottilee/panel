@@ -68,7 +68,7 @@ async def test_counts_flips_in_both_directions():
 @pytest.mark.asyncio
 async def test_flipped_to_act_is_about_would_act_not_sentiment():
     """A persona whose sentiment improves but who still won't act has NOT
-    flipped -- section 4.4 pins "flipped" to the would_act decision."""
+    flipped -- "flipped" means the would_act decision."""
     a = [make_reaction("p001", sentiment=-2, would_act=False)]
     b = [make_reaction("p001", sentiment=2, would_act=False)]
     result = await delta(make_run("a", a), make_run("b", b))
@@ -96,7 +96,7 @@ async def test_only_personas_present_in_both_runs_are_compared():
 
 @pytest.mark.asyncio
 async def test_rejects_mismatched_persona_sets():
-    """Comparing runs with different N isn't apples-to-apples (section 3)."""
+    """Comparing runs with different N isn't apples-to-apples."""
     a = [make_reaction("p001")]
     b = [make_reaction("p001")]
     with pytest.raises(ValueError, match="persona_set"):
@@ -110,3 +110,12 @@ async def test_result_carries_both_run_ids_and_the_summary():
     result = await delta(make_run("run-a", a), make_run("run-b", b))
     assert (result.run_a, result.run_b) == ("run-a", "run-b")
     assert result.summary == "stubbed summary"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_call_in_one_run_is_not_a_flip():
+    a = make_run("a", [make_reaction("p1").model_copy(update={"raw_error": "boom"}), make_reaction("p2")])
+    b = make_run("b", [make_reaction("p1", sentiment=2, would_act=True), make_reaction("p2")])
+    result = await delta(a, b)
+    assert result.flipped_positive == 0
+    assert [d.persona_id for d in result.deltas] == ["p2"]

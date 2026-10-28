@@ -1,5 +1,5 @@
-"""Pure-function tests for panel/synthesize.py -- segment recounting, the
-evidence/percentage repairs, and edit application. No API calls.
+"""Pure-function tests for panel/synthesize.py -- segment recounting and
+the evidence/percentage repairs. No API calls.
 """
 
 import pytest
@@ -15,11 +15,10 @@ from panel.synthesize import (
     _apply_recounted_pct,
     _invalid_evidence,
     _normalize_evidence,
-    _skepticism_band,
-    _tech_band,
-    apply_edit,
+    _patch_headline,
+    _tri_band,
     build_persona_summary_csv,
-    recount_affected_pct,
+    segment_share_pct,
 )
 
 BASE_PERSONA = dict(
@@ -64,7 +63,7 @@ def pool():
 def test_recount_single_clause(pool):
     clause = [SegmentClause(field="tech_comfort", op="<=", value=33)]
     # tech_comfort 10, 20, 30 -> 3 of 10
-    assert recount_affected_pct(pool, clause) == 30.0
+    assert segment_share_pct(pool, clause) == 30.0
 
 
 def test_recount_ands_multiple_clauses(pool):
@@ -73,31 +72,31 @@ def test_recount_ands_multiple_clauses(pool):
         SegmentClause(field="skepticism", op=">=", value=50),
     ]
     manual = sum(1 for p in pool.values() if p.tech_comfort >= 50 and p.skepticism >= 50)
-    assert recount_affected_pct(pool, clauses) == 100 * manual / len(pool)
+    assert segment_share_pct(pool, clauses) == 100 * manual / len(pool)
 
 
 def test_recount_in_operator(pool):
     clause = [SegmentClause(field="region", op="in", value=["West US", "Midwest US"])]
-    assert recount_affected_pct(pool, clause) == 100.0  # all are West US
+    assert segment_share_pct(pool, clause) == 100.0  # all are West US
 
 
 def test_recount_derived_age_band(pool):
     clause = [SegmentClause(field="age_band", op="==", value="65+")]
     manual = sum(1 for p in pool.values() if p.age >= 65)
-    assert recount_affected_pct(pool, clause) == 100 * manual / len(pool)
+    assert segment_share_pct(pool, clause) == 100 * manual / len(pool)
 
 
 def test_recount_coerces_string_valued_numeric_clause(pool):
     """Ultra has returned {"field": "skepticism", "op": ">=", "value": "60"}
     with the number as a string; the schema's Union allows it, so a raw
     comparison would raise TypeError on str >= int."""
-    as_int = recount_affected_pct(pool, [SegmentClause(field="skepticism", op=">=", value=60)])
-    as_str = recount_affected_pct(pool, [SegmentClause(field="skepticism", op=">=", value="60")])
+    as_int = segment_share_pct(pool, [SegmentClause(field="skepticism", op=">=", value=60)])
+    as_str = segment_share_pct(pool, [SegmentClause(field="skepticism", op=">=", value="60")])
     assert as_int == as_str
 
 
 def test_recount_empty_pool_is_zero():
-    assert recount_affected_pct({}, [SegmentClause(field="tech_comfort", op="<=", value=33)]) == 0.0
+    assert segment_share_pct({}, [SegmentClause(field="tech_comfort", op="<=", value=33)]) == 0.0
 
 
 @pytest.mark.parametrize(
@@ -105,8 +104,7 @@ def test_recount_empty_pool_is_zero():
     [(1, "low"), (33, "low"), (34, "mid"), (66, "mid"), (67, "high"), (100, "high")],
 )
 def test_bands_trisect_the_1_100_scale(value, expected):
-    assert _tech_band(value) == expected
-    assert _skepticism_band(value) == expected
+    assert _tri_band(value) == expected
 
 
 def test_persona_csv_has_header_and_one_row_each(pool):
@@ -114,30 +112,6 @@ def test_persona_csv_has_header_and_one_row_each(pool):
     lines = csv.splitlines()
     assert lines[0] == "id,age,age_band,region,income_band,tech_comfort,skepticism,occupation"
     assert len(lines) == len(pool) + 1
-
-
-# --- apply_edit -------------------------------------------------------
-
-
-def test_apply_edit_exact_match():
-    assert apply_edit("price is $29 today", "$29", "$29/mo") == "price is $29/mo today"
-
-
-def test_apply_edit_tolerates_differing_whitespace():
-    """Ultra's current_text quote sometimes collapses or changes the
-    whitespace when it spans a line break; every word is right."""
-    artifact = "the price\nis  $29 today"
-    out = apply_edit(artifact, "price is $29", "price is $39")
-    assert out is not None
-    assert "$39" in out
-
-
-def test_apply_edit_returns_none_when_text_absent():
-    assert apply_edit("nothing here", "missing phrase", "x") is None
-
-
-def test_apply_edit_replaces_only_first_occurrence():
-    assert apply_edit("$29 and $29", "$29", "FREE") == "FREE and $29"
 
 
 # --- evidence normalization / pct recounting --------------------------
@@ -188,27 +162,68 @@ def test_invalid_evidence_reports_unresolvable_ids(pool):
     assert "p999" in problems[0]
 
 
-def test_apply_recounted_pct_overwrites_claimed_number(pool):
-    # Claimed 90%, but tech_comfort <= 33 is only 3 of 10 personas.
-    out = _apply_recounted_pct(make_synthesis(["p001", "p002", "p003"], affected_pct=90), pool)
-    assert all(f.affected_pct == 30 for f in out.findings)
+def _reactions_for(pool, negative_ids):
+    from panel.schemas import Reaction
+
+    return [
+        Reaction(
+            persona_id=pid,
+            sentiment=-1 if pid in negative_ids else 1,
+            would_act=False,
+            gut_reaction="g",
+            top_confusion="c",
+            top_objection="o",
+            what_would_change_my_mind="w",
+        )
+        for pid in pool
+    ]
+
+
+def test_apply_recounted_pct_reports_share_of_segment_that_is_negative(pool):
+    """tech_comfort <= 33 is p001-p003; two of those three are negative.
+    affected_pct is the share of the SEGMENT that reacted badly, not the
+    segment's share of the panel."""
+    reactions = _reactions_for(pool, {"p001", "p002", "p009"})
+    out = _apply_recounted_pct(make_synthesis(["p001", "p002", "p003"], affected_pct=90), pool, reactions)
+    f = out.findings[0]
+    assert f.affected_pct == 67
+    assert f.segment_size == 3
+    assert f.segment_pct == 30.0
+
+
+def test_apply_recounted_pct_ignores_failed_reactions(pool):
+    from panel.schemas import Reaction
+
+    reactions = _reactions_for(pool, {"p001"})
+    # p002 and p003 failed: placeholder sentiment 0 must not dilute the share.
+    reactions = [
+        r.model_copy(update={"raw_error": "boom"}) if r.persona_id in {"p002", "p003"} else r
+        for r in reactions
+    ]
+    out = _apply_recounted_pct(make_synthesis(["p001", "p002", "p003"]), pool, reactions)
+    assert out.findings[0].affected_pct == 100
+    assert out.findings[0].segment_size == 3
+    assert isinstance(reactions[0], Reaction)
 
 
 def test_apply_recounted_pct_also_fixes_the_headline(pool):
-    """The headline cites the same wrong number, so patching only the
-    finding would leave the page's biggest line contradicting the card
+    """The headline cites the same model-estimated number, so patching only
+    the finding would leave the page's biggest line contradicting the card
     directly under it."""
+    reactions = _reactions_for(pool, {"p001"})
     out = _apply_recounted_pct(
         make_synthesis(["p001", "p002", "p003"], affected_pct=90, headline="90% of people balk"),
         pool,
+        reactions,
     )
-    assert "30%" in out.headline
+    assert "33%" in out.headline
     assert "90%" not in out.headline
 
 
-def test_apply_recounted_pct_leaves_accurate_numbers_alone(pool):
-    out = _apply_recounted_pct(make_synthesis(["p001", "p002", "p003"], affected_pct=30), pool)
-    assert all(f.affected_pct == 30 for f in out.findings)
+def test_patch_headline_leaves_ambiguous_numbers_alone():
+    assert _patch_headline("90% balk and 90% leave", 90, 33) == "90% balk and 90% leave"
+    assert _patch_headline("12.90% balk", 90, 33) == "12.90% balk"
+    assert _patch_headline("90% balk", 90, 33) == "33% balk"
 
 
 # --- Sharded digest stage (the 1000-persona scale-up, 2026-10-28) -----------
@@ -500,8 +515,9 @@ def test_recount_is_skipped_rather_than_zeroing_a_bogus_filter(pool):
             ]
         }
     )
-    out = _apply_recounted_pct(synth, pool)
+    out = _apply_recounted_pct(synth, pool, _reactions_for(pool, set()))
     assert all(f.affected_pct == 40 for f in out.findings)
+    assert all(f.segment_size is None for f in out.findings)
     assert "40%" in out.headline
 
 
@@ -760,3 +776,53 @@ def test_format_digests_caps_themes_per_category():
     digests = [(10, _shard(confusions=[_theme(f"distinct issue {i}", ["p001"])])) for i in range(40)]
     out = _format_digests(digests)
     assert out.count("distinct issue") == MERGED_THEMES_PER_CATEGORY
+
+
+def test_segment_fields_are_hidden_from_the_schema_the_model_sees():
+    """segment_size/segment_pct are counted in Python; showing them to
+    Ultra would invite it to guess them."""
+    from panel.prompts import SYNTHESIS_SCHEMA_JSON
+
+    assert "segment_size" not in SYNTHESIS_SCHEMA_JSON
+    assert "segment_pct" not in SYNTHESIS_SCHEMA_JSON
+
+
+@pytest.mark.asyncio
+async def test_failed_evidence_retry_keeps_the_first_report(monkeypatch, pool):
+    from panel import synthesize as S
+    from panel.tf_client import ChatJsonError
+
+    first = make_synthesis(["p001", "p002", "p999"])
+    calls = []
+
+    async def fake_call(system, user):
+        calls.append(user)
+        if len(calls) == 1:
+            return first
+        raise ChatJsonError("retry blew up", 0)
+
+    monkeypatch.setattr(S, "_synthesis_call", fake_call)
+    out = await S.synthesize("artifact", list(pool.values()), _reactions_for(pool, {"p001"}))
+    assert len(calls) == 2
+    assert out.findings[0].evidence == ["p001", "p002", "p999"]
+
+
+@pytest.mark.asyncio
+async def test_failed_reactions_never_reach_ultra_or_the_stats(monkeypatch, pool):
+    from panel import synthesize as S
+
+    captured = {}
+
+    async def fake_call(system, user):
+        captured["user"] = user
+        return make_synthesis(["p001", "p002", "p003"])
+
+    monkeypatch.setattr(S, "_synthesis_call", fake_call)
+    reactions = _reactions_for(pool, set())  # everyone positive
+    reactions[0] = reactions[0].model_copy(
+        update={"raw_error": "APITimeoutError: secret-internal-detail", "sentiment": 0}
+    )
+    await S.synthesize("artifact", list(pool.values()), reactions)
+    assert "secret-internal-detail" not in captured["user"]
+    assert "raw_error" not in captured["user"]
+    assert "mean sentiment 1.000" in captured["user"]

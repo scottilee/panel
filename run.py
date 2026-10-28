@@ -1,6 +1,7 @@
 """CLI: python run.py --artifact file.txt [--compare file2.txt] [--n 100]
 
-Section 5.2 / acceptance check A1-A2.
+Runs only the Nano fan-out (no synthesis) and prints aggregate sentiment,
+for quick checks against the live API without the web app.
 """
 
 from __future__ import annotations
@@ -14,16 +15,14 @@ from pathlib import Path
 from panel.personas import sample
 from panel.react import fan_out
 from panel.schemas import Reaction
+from panel.stats import mean_sentiment, would_act_pct
 
 
 def summarize(reactions: list[Reaction]) -> dict:
-    n = len(reactions)
-    if not n:
-        return {"n": 0, "mean_sentiment": 0.0, "would_act_pct": 0.0, "errors": 0}
     return {
-        "n": n,
-        "mean_sentiment": sum(r.sentiment for r in reactions) / n,
-        "would_act_pct": 100 * sum(1 for r in reactions if r.would_act) / n,
+        "n": len(reactions),
+        "mean_sentiment": mean_sentiment(reactions),
+        "would_act_pct": would_act_pct(reactions),
         "errors": sum(1 for r in reactions if r.raw_error),
     }
 

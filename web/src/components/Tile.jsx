@@ -1,4 +1,4 @@
-// React.memo'd single tile, keyed by persona_id, section 6.2-6.3.
+// React.memo'd single tile, keyed by persona_id.
 
 import { memo } from 'react'
 
@@ -24,7 +24,7 @@ function Tooltip({ persona, reaction }) {
   )
 }
 
-// deltaKind (section 6.7): 'positive' | 'negative' | 'unchanged' | undefined.
+// deltaKind: 'positive' | 'negative' | 'unchanged' | undefined.
 // When set, it overrides the normal sentiment coloring -- positive/negative
 // become solid green/red (letting .tile's always-on background-color
 // transition animate the change), unchanged keeps its own sentiment color

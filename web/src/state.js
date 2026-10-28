@@ -1,11 +1,11 @@
 // useReducer reducer + selectors (stats, filters, deltas), plus the two
 // enumerated Persona fields the filters depend on the order of.
 //
-// state.personas is the fixed, ordered sample for the current run (section
-// 3: "same count always selects the same personas"). It's kept in sync with
+// state.personas is the fixed, ordered sample for the current run (the
+// same count always selects the same personas). It's kept in sync with
 // personaCount by SET_PERSONA_COUNT itself (via api.js's previewPersonas),
 // not derived at render time, so the grid can re-lay out to a new N before
-// Run is ever clicked (section 6.10).
+// Run is ever clicked.
 
 export const STATUS = {
   IDLE: 'idle',
@@ -14,19 +14,16 @@ export const STATUS = {
   SYNTHESIZING: 'synthesizing',
   DONE: 'done',
   ERROR: 'error',
-  // Frontend-only terminal state for a user-initiated stop. The backend
-  // reports "cancelled" too (an addition to section 3's Run.status,
-  // flagged in schemas.py); keeping it distinct from ERROR is what lets
-  // the UI avoid telling someone a failure happened when they pressed
-  // the stop button themselves.
+  // Terminal state for a user-initiated stop, which the backend reports
+  // as "cancelled" too. Kept distinct from ERROR so the UI never tells
+  // someone a failure happened when they pressed the stop button.
   CANCELLED: 'cancelled',
 }
 
-// Section 6.6/6.7: the second run of a compare. `visible` (the second
-// textarea is open) is the N-lock condition per section 6.10 ("once a
-// compare is in flight") -- deliberately broader than "actively
-// streaming", since the lock should hold for the whole compare lifecycle
-// once it starts, not just while reactions are landing.
+// The second run of a compare. `visible` (the second textarea is open)
+// is the N-lock condition -- deliberately broader than "actively
+// streaming", since the lock holds for the whole compare lifecycle once
+// it starts, not just while reactions are landing.
 const initialCompareState = {
   visible: false,
   text: '',
@@ -75,9 +72,8 @@ export function reducer(state, action) {
       return { ...state, poolSize: action.poolSize }
 
     case 'SET_PERSONA_COUNT':
-      // Changing N clears any prior run state (section 6.10: "clears
-      // compare state and requires a new run") and re-lays out the grid
-      // immediately via the new personas list.
+      // Changing N clears any prior run and compare state and re-lays out
+      // the grid immediately via the new personas list.
       return {
         ...state,
         personaCount: action.n,
@@ -116,9 +112,8 @@ export function reducer(state, action) {
 
     case 'SET_ARTIFACT_TEXT':
       // A borrowed label does not survive an edit to the text it came
-      // with. Previously, picking "Parking policy notice v1" and then
-      // pasting your own copy over it left the run -- and the verdict
-      // header above it -- still labelled as the parking notice.
+      // with, or pasting your own copy over an example would leave the
+      // run labelled as that example.
       return {
         ...state,
         artifactText: action.text,
@@ -148,9 +143,8 @@ export function reducer(state, action) {
         compare: initialCompareState,
       }
 
-    // Section 6.8: "never show a raw error to a judge" -- while retrying
-    // is true, the UI shows "Retrying..." instead of surfacing the error
-    // that triggered it.
+    // While retrying is true, the UI shows "Retrying..." instead of the
+    // error that triggered the cached-example fallback.
     case 'SET_RETRYING':
       return { ...state, retrying: action.retrying }
 
@@ -192,7 +186,7 @@ export function reducer(state, action) {
       }
     }
 
-    // --- Section 6.6/6.7: compare (run B) -------------------------------
+    // --- Compare (run B) ------------------------------------------------
 
     case 'COMPARE_SET_TEXT':
       return { ...state, compare: { ...state.compare, visible: true, text: action.text } }
@@ -246,22 +240,27 @@ export function reducer(state, action) {
 
 // --- Selectors ---------------------------------------------------------
 
-// filteredIds: null means no filter active (everyone counted, same
-// behavior as when no filters existed); a Set restricts both `total` and the
-// reactions averaged in to that segment (section 6.5: "recomputes the
-// stats strip for the segment only").
-// The arithmetic both selectors share. Mirrors panel/api/main.py's
-// _compute_stats -- Run A and Run B had line-for-line copies of this.
+// The arithmetic Run A and Run B share, matching the backend's stats: a
+// reaction whose model call failed (raw_error set) is counted as arrived
+// but left out of the averages, since its sentiment 0 / would_act false
+// are placeholders rather than an answer.
 function statsOver(reactions, total) {
   const done = reactions.length
-  if (done === 0) return { done, total, meanSentiment: 0, wouldActPct: 0 }
+  const usable = reactions.filter((r) => !r.raw_error)
+  const failed = done - usable.length
+  if (usable.length === 0) return { done, total, usable: 0, failed, meanSentiment: 0, wouldActPct: 0 }
   return {
     done,
     total,
-    meanSentiment: reactions.reduce((sum, r) => sum + r.sentiment, 0) / done,
-    wouldActPct: (100 * reactions.filter((r) => r.would_act).length) / done,
+    usable: usable.length,
+    failed,
+    meanSentiment: usable.reduce((sum, r) => sum + r.sentiment, 0) / usable.length,
+    wouldActPct: (100 * usable.filter((r) => r.would_act).length) / usable.length,
   }
 }
+
+// filteredIds: null means no filter active (everyone counted); a Set
+// restricts both `total` and the reactions averaged to that segment.
 
 export function selectLiveStats(state, filteredIds = null) {
   const allReactions = Object.values(state.reactionsById)
@@ -270,12 +269,11 @@ export function selectLiveStats(state, filteredIds = null) {
   return statsOver(reactions, total)
 }
 
-// --- Segment filters, section 6.5 ---------------------------------------
+// --- Segment filters ----------------------------------------------------
 
-// tech_comfort and skepticism are 1-100 (section 3 said 1-5; widened by
-// request on 2026-10-28). Tri-section matches panel/synthesize.py's
-// _tech_band/_skepticism_band exactly -- the spec's literal "low 1-2, mid
-// 3, high 4-5" text is stale, not a second source of truth.
+// tech_comfort and skepticism are 1-100. Tri-sected at the same cutoffs
+// as the backend's segment bands (panel/synthesize.py) so a chip and a
+// finding agree on what "low" means.
 export function scoreBand(value) {
   if (value <= 33) return 'low'
   if (value <= 66) return 'mid'
@@ -299,12 +297,11 @@ export const REGIONS = [
 
 export const INCOME_BANDS = ['<25k', '25-40k', '40-75k', '75-150k', '150k+']
 
-// region/techComfort/skepticism stay chip-style ({group, value}, exact
-// match). ageBand/incomeBand changed to range-style ({group, min, max} /
-// {group, minIndex, maxIndex}) on 2026-10-29 -- age filters on the real
-// persona.age number now, not the derived band; income filters on the
-// band's ordinal position in INCOME_BANDS, since income has no raw
-// number. Each range group has at most one entry in activeFilters (the
+// region/techComfort/skepticism are chip-style ({group, value}, exact
+// match). ageBand/incomeBand are range-style ({group, min, max} /
+// {group, minIndex, maxIndex}): age filters on the real persona.age
+// number, not the derived band; income filters on the band's ordinal
+// position in INCOME_BANDS, since income has no raw number. Each range group has at most one entry in activeFilters (the
 // current slider position), so this still composes correctly with
 // selectFilteredPersonaIds's OR-within-group/AND-across-groups grouping.
 export function personaMatchesFilter(persona, filter) {
@@ -328,9 +325,8 @@ export function personaMatchesFilter(persona, filter) {
 
 // Same-group chips OR together (picking two regions widens the segment to
 // either); different groups AND (picking a region and a tech_comfort band
-// narrows to both) -- the spec's "multiple chips combine with AND" reads
-// most sensibly this way, since AND-ing two values from the same
-// mutually-exclusive field (e.g. two regions) would always be empty.
+// narrows to both). AND-ing two values from the same mutually-exclusive
+// field (e.g. two regions) would always be empty.
 // Returns null when no filters are active, meaning "everyone" -- callers
 // treat that distinctly from an empty-but-filtered Set.
 export function selectFilteredPersonaIds(personas, activeFilters) {
@@ -357,7 +353,7 @@ export function selectIsRunning(state) {
   return state.status === STATUS.PENDING || state.status === STATUS.STREAMING || state.status === STATUS.SYNTHESIZING
 }
 
-// --- Compare (run B), section 6.6/6.7 -----------------------------------
+// --- Compare (run B) ---------------------------------------------------
 
 export function selectCompareLiveStats(state) {
   return statsOver(
@@ -374,24 +370,23 @@ export function selectCompareIsRunning(state) {
   return state.compare.status === STATUS.PENDING || state.compare.status === STATUS.STREAMING
 }
 
-// Section 6.10: "the second textarea inherits and locks the persona-count
-// control once a compare is in flight" -- for the whole lifecycle once it
-// opens, not just while streaming.
+// The persona-count control locks once a compare opens, for its whole
+// lifecycle, so both runs are always the same N.
 export function selectCountLocked(state) {
   return state.compare.visible
 }
 
-// Per-persona delta classification for the grid's delta view (section
-// 6.7). Sourced directly from both runs' live reactions rather than only
-// CompareResult.deltas, since the schema's `flipped_to_act` only encodes
-// the positive direction -- this derives both directions the same way,
-// from the same ground truth.
+// Per-persona delta classification for the grid's delta view. Sourced
+// from both runs' live reactions rather than CompareResult.deltas, whose
+// `flipped_to_act` only encodes the positive direction. A persona whose
+// call failed in either run is left unclassified, matching the backend,
+// which excludes those from the flip counts.
 export function selectDeltaByPersonaId(state) {
   const byId = {}
   for (const persona of state.personas) {
     const a = state.reactionsById[persona.id]
     const b = state.compare.reactionsById[persona.id]
-    if (!a || !b) continue
+    if (!a || !b || a.raw_error || b.raw_error) continue
     if (!a.would_act && b.would_act) byId[persona.id] = 'positive'
     else if (a.would_act && !b.would_act) byId[persona.id] = 'negative'
     else byId[persona.id] = 'unchanged'
@@ -399,8 +394,8 @@ export function selectDeltaByPersonaId(state) {
   return byId
 }
 
-// Section 6.6: clicking a finding's affected_segment chip applies that
-// filter (reusing the same activeFilters shape). affected_segment_filter's
+// Clicking a finding's affected_segment chip applies that filter
+// (reusing the same activeFilters shape). affected_segment_filter's
 // fields don't map 1:1 onto filter chip groups -- age_band has no
 // Persona field (it's derived from age), and the Big Five traits have no
 // chip group at all -- clauses on those are
@@ -428,11 +423,9 @@ const AGE_BAND_RANGES = {
 }
 
 // Chips are positive selections with no negation, so a '!=' clause has to
-// be turned into the complement set before it can be expressed as chips.
-// Until this existed, '!=' fell through to the same handling as '==' and
-// the chip selected *exactly the personas the finding excluded* -- the
-// clause's own inverse. SEGMENT_OPS in panel/schemas.py permits '!=' and
-// nothing in the synthesis prompt discourages it, so this is reachable.
+// be turned into the complement set before it can be expressed as chips;
+// treating it like '==' would select exactly the personas the finding
+// excludes. SEGMENT_OPS in panel/schemas.py permits '!='.
 //
 // Complements are only expressible for the two unordered groups (region,
 // and the tri-sected score bands). The age and income chips are a single
@@ -468,7 +461,7 @@ function incomeRangeForClause(op, value) {
   return { minIndex: Math.min(...idxs), maxIndex: Math.max(...idxs) }
 }
 
-const SCORE_BANDS = ['low', 'mid', 'high']
+export const SCORE_BANDS = ['low', 'mid', 'high']
 
 function scoreBandsForClause(op, value) {
   if (op === '==') return [scoreBand(value)]
@@ -513,9 +506,8 @@ export function segmentFilterToChips(clauses) {
   return chips
 }
 
-// Grid column count and tile size (px) for N tiles. Anchored to the two
-// data points the spec gives (N=100 -> 10 cols / 44px, N=1000 -> 32 cols /
-// 12px) and interpolated on a log scale beyond N=100; below N=100, tiles
+// Grid column count and tile size (px) for N tiles. Anchored at N=100 ->
+// 10 cols / 44px and N=1000 -> 32 cols / 12px and interpolated on a log scale beyond N=100; below N=100, tiles
 // grow toward a comfortable max instead of shrinking further.
 export function gridLayoutFor(n) {
   const cols = Math.max(1, Math.ceil(Math.sqrt(n)))

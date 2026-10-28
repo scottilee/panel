@@ -23,12 +23,12 @@ def _reset_server_state():
     this file counts against the per-client window -- without this, adding
     a seventh POST test would make an unrelated test start getting 429s.
     """
-    from api.main import _RUN_TIMES_BY_IP
+    from api.main import _RATE_WINDOWS
 
-    _RUN_TIMES_BY_IP.clear()
+    _RATE_WINDOWS.clear()
     RUNS.clear()
     yield
-    _RUN_TIMES_BY_IP.clear()
+    _RATE_WINDOWS.clear()
     RUNS.clear()
 
 
@@ -41,8 +41,7 @@ def test_personas_returns_the_whole_pool():
 
 
 def test_personas_are_on_the_1_100_scale():
-    """Section 3 originally said 1-5; widened to 1-100, and the seven
-    numeric traits all have to agree on that."""
+    """All seven numeric traits share the 1-100 scale."""
     body = client.get("/personas").json()
     traits = [
         "tech_comfort",
@@ -331,9 +330,7 @@ def test_cached_replay_reports_zero_cost():
     # would pass for the wrong reason.
     assert sum(r.latency_ms or 0 for r in reactions) > 0
 
-    stats = M._compute_stats(reactions, nano_calls=0, ultra_ms=0).model_copy(
-        update={"nano_ms_total": 0}
-    )
+    stats = M._compute_stats(reactions, {}, nano_ms_total=0, ultra_ms=0)
     assert stats.nano_calls == 0
     assert stats.nano_ms_total == 0
     assert stats.ultra_ms == 0
@@ -418,7 +415,7 @@ def test_check_returns_the_models_verdict_when_it_works(monkeypatch):
     assert verdict.kind == "Python source code"
 
 
-# --- Cancelling a run (2026-10-29) -----------------------------------------
+# --- Cancelling a run --------------------------------------------------------
 #
 # The frontend's cancel used to only close its EventSource, so the server
 # carried on through every remaining Nano call and the synthesis -- at
@@ -494,3 +491,106 @@ def test_a_cancelled_run_is_evictable():
     _evict_old_runs()
     assert len(RUNS) == MAX_RETAINED_RUNS
     RUNS.clear()
+
+
+# --- Spend and privacy controls ----------------------------------------------
+
+
+def test_run_rejects_text_and_url_together():
+    r = client.post("/run", json={"text": LONG_ENOUGH, "url": "https://example.com"})
+    assert r.status_code == 422
+
+
+def test_run_ids_are_unguessable():
+    from api.main import _new_run_id
+
+    ids = {_new_run_id() for _ in range(200)}
+    assert len(ids) == 200
+    assert all(i.startswith("r_") and len(i) >= 20 for i in ids)
+
+
+def test_client_ip_ignores_forwarded_for_by_default(monkeypatch):
+    from api import main as M
+
+    monkeypatch.setattr(M, "TRUSTED_PROXY_HOPS", 0)
+    req = type("R", (), {"headers": {"x-forwarded-for": "6.6.6.6"}, "client": type("C", (), {"host": "10.0.0.1"})()})()
+    assert M._client_ip(req) == "10.0.0.1"
+
+
+def test_client_ip_takes_the_proxy_appended_hop_not_a_spoofed_one(monkeypatch):
+    """Behind Cloud Run every request arrives from Google's front end, so
+    the socket peer would put every visitor in one rate-limit window. The
+    trusted hop is the rightmost entry; anything to its left came from the
+    client and is ignored."""
+    from api import main as M
+
+    monkeypatch.setattr(M, "TRUSTED_PROXY_HOPS", 1)
+    peer = type("C", (), {"host": "169.254.1.1"})()
+    spoofed = type("R", (), {"headers": {"x-forwarded-for": "1.1.1.1, 203.0.113.7"}, "client": peer})()
+    assert M._client_ip(spoofed) == "203.0.113.7"
+    missing = type("R", (), {"headers": {}, "client": peer})()
+    assert M._client_ip(missing) == "169.254.1.1"
+
+
+def test_rejected_persona_count_does_not_use_up_the_allowance():
+    from api.main import RATE_LIMIT_RUNS, _RATE_WINDOWS
+
+    for _ in range(RATE_LIMIT_RUNS + 2):
+        r = client.post("/run", json={"text": LONG_ENOUGH, "persona_count": len(PERSONA_POOL) + 1})
+        assert r.status_code == 400
+    assert not any(_RATE_WINDOWS.values())
+
+
+def test_url_with_too_little_text_is_a_clear_400(monkeypatch):
+    from api import main as M
+
+    monkeypatch.setattr(M, "fetch_url_text", lambda url: "  tiny  ")
+    r = client.post("/run", json={"url": "https://example.com"})
+    assert r.status_code == 400
+    assert "readable text" in r.json()["detail"]
+
+
+def test_compare_is_computed_once_per_pair(monkeypatch):
+    """Each compare is an Ultra call on an unauthenticated endpoint, so a
+    repeated request must reuse the first result rather than pay again."""
+    from api import main as M
+    from panel.schemas import CompareResult
+
+    calls = []
+
+    async def fake_delta(a, b):
+        calls.append((a.run_id, b.run_id))
+        return CompareResult(
+            run_a=a.run_id, run_b=b.run_id, deltas=[], flipped_positive=0,
+            flipped_negative=0, would_act_delta_pct=0.0, summary="s",
+        )
+
+    monkeypatch.setattr(M, "delta", fake_delta)
+    RUNS["ra"] = _finished_ctx("ra")
+    RUNS["rb"] = _finished_ctx("rb")
+    for _ in range(5):
+        r = client.post("/compare", json={"run_a": "ra", "run_b": "rb"})
+        assert r.status_code == 200
+    assert calls == [("ra", "rb")]
+
+
+def test_compare_has_a_rate_limit(monkeypatch):
+    from api import main as M
+
+    monkeypatch.setattr(M, "RATE_LIMIT_COMPARES", 2)
+
+    async def fake_delta(a, b):
+        raise RuntimeError("upstream down")
+
+    monkeypatch.setattr(M, "delta", fake_delta)
+    RUNS["ra"] = _finished_ctx("ra")
+    RUNS["rb"] = _finished_ctx("rb")
+    # A failed compare is retried (not cached), and each retry is charged.
+    nonfatal = TestClient(app, raise_server_exceptions=False)
+    codes = [nonfatal.post("/compare", json={"run_a": "ra", "run_b": "rb"}).status_code for _ in range(3)]
+    assert codes[-1] == 429
+
+
+def test_no_cors_headers_by_default():
+    r = client.get("/examples", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in {k.lower() for k in r.headers}

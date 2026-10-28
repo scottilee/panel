@@ -117,3 +117,16 @@ async def test_backoff_sleeps_between_attempts_not_before_the_first(monkeypatch)
     assert attempts["n"] == 3
     assert slept == T._BACKOFF_SECONDS[:2]
     assert resp.choices[0].finish_reason == "stop"
+
+
+@pytest.mark.asyncio
+async def test_track_calls_counts_every_request_including_retries(budgets):
+    """RunStats reports real request counts, so a truncation retry must be
+    counted as the extra call it is."""
+    budgets('{"x": 1}', finish_reason="stop")
+    counts = T.track_calls()
+    await T.chat_json(model="nano", system="s", user="u", schema=Tiny)
+    assert counts["nano"] == 1
+    budgets("", finish_reason="length")
+    await _expect_truncated()
+    assert counts["m"] == 1 + T.MAX_TRUNCATION_RETRIES

@@ -1,18 +1,21 @@
-// Verdict section (post-run), new per the "4C" mockup: headline, big
-// would-act %, Winning/Losing boxes, dark "try this edit" panel. Sits
-// above the Reactions card; Findings.jsx (the flat claim list) sits below
-// it -- together they replace the single findings-card-grid this synthesis
-// data used to render through.
+// Verdict section (post-run): headline, the not-convinced count,
+// Winning/Losing boxes, and the "try this edit" panel. Sits above the
+// Reactions card; Findings.jsx (the claim list) sits below it.
 
-export default function Verdict({ synthesis, runLabel, wouldActPct, total, onApplyAndCompare, applyDisabled }) {
+export default function Verdict({
+  synthesis,
+  runLabel,
+  wouldActPct,
+  total,
+  onApplyAndCompare,
+  applyDisabled,
+  applyError,
+}) {
   if (!synthesis) return null
   const edit = synthesis.highest_leverage_edit
-  // Count, not percentage: this used to render the percentage against a
-  // hardcoded "of 100", which was only ever right at N=100 -- at N=250 it
-  // claimed "96 of 100" for 240 people, and at N=1000 it understated by
-  // an order of magnitude. `total` is the number of reactions currently
-  // in view (segment filters included), so the two halves of the sentence
-  // always come from the same denominator.
+  // A count, not a percentage. `total` is the number of usable reactions
+  // currently in view (segment filters included), so both halves of
+  // "N of M aren't convinced" come from the same denominator.
   const unconvinced = Math.round((total * (100 - wouldActPct)) / 100)
 
   return (
@@ -73,6 +76,11 @@ export default function Verdict({ synthesis, runLabel, wouldActPct, total, onApp
           Apply and compare
         </button>
       </div>
+      {applyError && (
+        <p className="run-note run-note-error verdict-apply-error" role="alert">
+          {applyError}
+        </p>
+      )}
     </section>
   )
 }

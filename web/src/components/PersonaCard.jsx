@@ -1,5 +1,4 @@
-// Pinned side card: full persona + full reaction, section 6.3. Redesigned
-// per the "4C" mockup's persona-detail panel.
+// Pinned side card: full persona + full reaction.
 
 const MOOD = {
   pos: { label: 'For it', bg: 'var(--sentiment-pos2)', fg: '#ffffff', tint: 'var(--tint-pos)' },

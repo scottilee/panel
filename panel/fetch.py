@@ -1,5 +1,5 @@
 """URL -> text. Tavily Extract when TAVILY_API_KEY is set, else requests +
-readability-lxml. Section 5.6.
+readability-lxml.
 
 This module is reachable from the public, unauthenticated POST /run, and
 what it returns is handed straight back to the caller in the Artifact --
@@ -17,21 +17,23 @@ that needs connection-level pinning, which requests does not expose.
 from __future__ import annotations
 
 import ipaddress
+import json
 import socket
 from urllib.parse import urlparse
 
 import requests
+from lxml import html as lxml_html
 from readability import Document
 
+from panel.schemas import MAX_ARTIFACT_CHARS
 from panel.tf_client import env
 
 TAVILY_API_KEY = env("TAVILY_API_KEY")
-MAX_CHARS = 20_000
+MAX_CHARS = MAX_ARTIFACT_CHARS
 REQUEST_TIMEOUT_S = 15
-# Body cap. resp.text used to materialize the whole response before
-# MAX_CHARS truncated it, so a large URL was read entirely into a 1Gi
-# container to produce 20k characters. 2 MB is far more than any article
-# whose readable text fits in MAX_CHARS.
+# Body cap, enforced while streaming so a huge page is never read whole
+# into memory. 2 MB is far more than any article whose readable text fits
+# in MAX_CHARS.
 MAX_BYTES = 2 * 1024 * 1024
 MAX_REDIRECTS = 3
 
@@ -143,9 +145,7 @@ def _fetch_via_tavily(url: str) -> str:
         stream=True,
     )
     resp.raise_for_status()
-    import json as _json
-
-    data = _json.loads(_read_capped(resp))
+    data = json.loads(_read_capped(resp))
     results = data.get("results") or []
     if not results:
         raise ValueError(f"Tavily returned no content for {url}")
@@ -160,11 +160,7 @@ def _fetch_via_readability(url: str) -> str:
     finally:
         resp.close()
     doc = Document(html)
-    # Document.summary() is HTML; strip tags for plain text the same way
-    # pasted-text artifacts already arrive (section 3's Artifact.text is
-    # always plain text, never HTML).
-    from lxml import html as lxml_html
-
+    # Document.summary() is HTML; artifacts are always plain text.
     tree = lxml_html.fromstring(doc.summary())
     text = tree.text_content()
     return "\n".join(line.strip() for line in text.splitlines() if line.strip())
@@ -172,8 +168,7 @@ def _fetch_via_readability(url: str) -> str:
 
 def fetch_url_text(url: str) -> str:
     """Raises UnsafeURLError / requests.RequestException / ValueError on
-    failure -- the caller (api/main.py) turns that into a user-facing
-    error, same as any other unrecoverable run failure (section 5.4).
+    failure; api/main.py turns that into a user-facing 400.
     """
     text = _fetch_via_tavily(url) if TAVILY_API_KEY else _fetch_via_readability(url)
     return text[:MAX_CHARS]

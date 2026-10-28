@@ -50,9 +50,9 @@ variable "max_concurrency" {
 # --- Spend limits on a public, unauthenticated service --------------------
 #
 # The pool is 1,000 personas and one request can ask for all of them, so a
-# single POST is up to 1,000 Nano calls plus ~10 Super digests plus one
+# single POST is up to 1,000 Nano calls plus ~100 Super digests plus one
 # Ultra call. These three are what stop a loop against the demo URL from
-# draining the hackathon credits over six weeks of unattended judging.
+# draining the hackathon credits before judging ends on Dec 15.
 
 variable "max_persona_count" {
   description = "Largest panel one request may ask for. Also capped by the pool size."

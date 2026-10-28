@@ -1,8 +1,8 @@
-// Real fetch + SSE client. Swapped for mock.js behind ?mock=1. Section 6.9.
+// Real fetch + SSE client. Swapped for mock.js behind ?mock=1.
 //
-// Both branches emit the same event shapes (section 3's SSE event list:
-// reaction, progress, synthesizing, synthesis, done, error) so the rest of
-// the app never has to know which one it's talking to. The real branch is
+// Both branches emit the same event shapes (reaction, progress,
+// synthesizing, synthesis, done, cancelled, error) so the rest of the app
+// never has to know which one it's talking to. The real branch is
 // POST /run plus an EventSource on /run/{id}/stream; the mock branch
 // synthesizes the same sequence on timers, with no network and no credits
 // spent.
@@ -13,15 +13,14 @@ import {
   buildMockPersonas,
   buildMockReactions,
   buildMockReactionsB,
+  buildMockStats,
   buildMockSynthesis,
   EXAMPLES,
 } from './mock.js'
 
 // Mock mode's pool is synthesized on demand (buildMockPersonas takes any
-// n). This matched the real pool when it was 100 and still does now that
-// it's 1,000 -- which is the point: mock mode has to exercise the same
-// grid layout, filter and tile-size behaviour at the same N as a real run,
-// with no API calls and no credits spent (section 6.2's N=1000 case).
+// n), sized to match the real 1,000-persona pool so mock mode exercises
+// the same grid layout, filters and tile sizes at every N.
 export const MOCK_POOL_SIZE = 1000
 
 const REACTION_INTERVAL_MS = 80
@@ -33,9 +32,9 @@ export function isMockMode() {
 }
 
 // The real pool, fetched once and cached -- previewPersonas needs it
-// synchronously (section 6.10: the grid re-lays out instantly as the
-// slider moves, before Run is ever clicked), and a fresh fetch per call
-// would both be slow and risk a different array each time.
+// synchronously (the grid re-lays out instantly as the slider moves,
+// before Run is ever clicked), and a fresh fetch per call would both be
+// slow and risk a different array each time.
 let realPoolCache = null
 
 async function loadRealPool() {
@@ -97,12 +96,10 @@ export async function getPoolSize() {
 }
 
 // Synchronous: lets the grid re-lay out to a new N the instant the slider
-// moves, before Run is ever clicked (section 6.10). Real mode: the first
-// N of the cached pool, in the exact on-disk order panel.personas.
-// sample_stable uses server-side for the actual run -- same rule on both
-// sides, so the preview always shows the identities a real run will
-// actually use (see sample_stable's docstring for why this isn't the
-// same `sample()` random.Random(seed).sample the CLI/stage-6 path uses).
+// moves, before Run is ever clicked. Real mode: the first N of the cached
+// pool, in on-disk order -- the same rule panel.personas.sample_stable
+// uses server-side, so the preview always shows the identities a real run
+// will actually use.
 export function previewPersonas(n) {
   if (isMockMode()) return buildMockPersonas(n)
   if (!realPoolCache) {
@@ -112,27 +109,20 @@ export function previewPersonas(n) {
 }
 
 // previousReactionsById: only passed for a compare's second run (Run B),
-// and only meaningful in mock mode -- it's what makes mock Run B a
-// deliberate, deterministic edit of Run A's actual data (see mock.js's
-// buildMockReactionsB); without it, Run B used to be generated the exact
-// same way as Run A (buildMockReactions depends only on the persona list,
-// never on the artifact text), so toggling Run A/Run B/Delta showed no
-// visible change at all. The real backend ignores it entirely -- it
-// computes genuinely different reactions from genuinely different model
-// calls on the edited text, no hint needed.
+// and only used in mock mode, where Run B is a deterministic edit of Run
+// A's reactions (mock.js's buildMockReactionsB). The real backend reruns
+// the panel on the edited text instead.
 //
-// text/label: only used by the real client (POST /run's body). Mock mode
-// ignores them -- its reactions are a pure function of the persona list.
+// text: the POST /run body in real mode; in mock mode it picks the
+// per-example calibration and wording. label: real mode only.
 //
-// Returns a handle synchronously ({cancel()}), even though starting a
-// real run needs an async POST before the run_id (and therefore the
-// EventSource) can even exist -- `cancelled` covers the gap so a cancel
-// called before the POST resolves still takes effect.
-// cached: section 6.8's demo fallback -- real mode only. Appends
-// ?cached=true, which the backend only honors if `text` matches one of
-// the real example files byte-for-byte (api/main.py's
-// _find_cached_example); mock mode ignores it, since it has no such
-// concept.
+// cached: real mode only. Appends ?cached=true, which the backend honors
+// only when `text` matches one of the example files exactly.
+//
+// Returns a handle synchronously ({cancel()}), even though a real run
+// needs an async POST before its run_id exists -- `cancelled` covers the
+// gap, so a cancel issued before the POST resolves still reaches the
+// server once the id is known.
 export function startRun({ text, url, label, personaCount, onEvent, previousReactionsById, cached }) {
   if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById, text })
   return startRealRun({ text, url, label, personaCount, onEvent, cached })
@@ -141,9 +131,16 @@ export function startRun({ text, url, label, personaCount, onEvent, previousReac
 function startRealRun({ text, url, label, personaCount, onEvent, cached = false }) {
   let cancelled = false
   let es = null
+  let runId = null
+
+  // Closing the EventSource only stops us listening; the server keeps
+  // spending on every remaining call until it is told to stop.
+  // Fire-and-forget: a failed cancel must not throw into the caller.
+  function cancelOnServer() {
+    fetch(`/run/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {})
+  }
 
   ;(async () => {
-    let runId
     try {
       const res = await fetch(`/run${cached ? '?cached=true' : ''}`, {
         method: 'POST',
@@ -167,18 +164,19 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false 
       onEvent({ type: 'error', data: { message: String(e) } })
       return
     }
-    if (cancelled) return
+    if (cancelled) {
+      cancelOnServer()
+      return
+    }
 
     // In URL mode the artifact's text only exists server-side (the
-    // backend fetched and extracted it), but the UI needs it locally:
-    // "Apply and compare" rewrites one phrase of the artifact text and
-    // reruns, which with an empty local copy would silently no-op. One
-    // extra GET of the run record is cheaper than widening POST /run's
-    // response shape (a section 3 contract).
+    // backend fetched and extracted it), but "Apply and compare" needs a
+    // local copy to edit. One extra GET of the run record is cheaper than
+    // widening POST /run's response.
     let fetchedText
     if (url) {
       try {
-        const record = await fetch(`/run/${runId}`).then((r) => (r.ok ? r.json() : null))
+        const record = await fetch(`/run/${encodeURIComponent(runId)}`).then((r) => (r.ok ? r.json() : null))
         fetchedText = record?.artifact?.text
       } catch {
         // Non-fatal: the run itself is already underway. Apply-and-compare
@@ -186,12 +184,13 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false 
       }
     }
 
-    // Not one of section 3's SSE events -- a local-only signal so the
-    // caller (App.jsx) can stash the run_id for POST /compare later.
-    // Mock mode never emits this; real callers must handle it.
+    // Not a server event -- a local-only signal so the caller (App.jsx)
+    // can stash the run_id for POST /compare later. Mock mode never emits
+    // this; real callers must handle it.
+    if (cancelled) return
     onEvent({ type: 'run_started', data: { run_id: runId, artifact_text: fetchedText } })
 
-    es = new EventSource(`/run/${runId}/stream`)
+    es = new EventSource(`/run/${encodeURIComponent(runId)}/stream`)
     // 'cancelled' is terminal like 'done' -- a deliberate stop, which the
     // server reports distinctly from an error so the UI never says
     // "something went wrong" about something the user asked for.
@@ -202,7 +201,7 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false 
       })
     }
     es.addEventListener('error', (e) => {
-      // Both the server's named "error" SSE event (section 3) and the
+      // Both the server's named "error" SSE event and the
       // browser's own native connection-failure event arrive through this
       // same listener. A real server-sent event is a MessageEvent and
       // always has .data (even if empty); the browser's native failure
@@ -222,23 +221,18 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false 
 
   return {
     cancel() {
+      if (cancelled) return
       cancelled = true
       es?.close()
-      // Tell the server too, which this used to skip. Closing the
-      // EventSource only stopped us *listening*: the run carried on
-      // through every remaining Nano call and the synthesis, so an
-      // abandoned 1,000-persona run still spent most of its cost on a
-      // result nobody would ever see. Fire-and-forget -- the caller has
-      // already moved on, and a failed cancel must not throw into it.
-      if (runId) {
-        fetch(`/run/${runId}/cancel`, { method: 'POST' }).catch(() => {})
-      }
+      // Before the POST resolves there is no id yet; the IIFE above sends
+      // the cancel as soon as it learns one.
+      if (runId) cancelOnServer()
     },
   }
 }
 
-// Section 6.8: three example buttons, loaded from GET /examples in the
-// real client. Mock mode sources the same shape from mock.js.
+// The example buttons, loaded from GET /examples in the real client.
+// Mock mode sources the same shape from mock.js.
 export async function getExamples() {
   if (isMockMode()) return EXAMPLES
   const res = await fetch('/examples')
@@ -246,18 +240,11 @@ export async function getExamples() {
   return res.json()
 }
 
-// Section 6.6's "Apply this edit and compare": mock mode computes the
-// result from the two reaction sets the run actually produced (so it's
-// correct at any N, and actually reflects a real Run A vs Run B
-// difference) rather than a fixed, disconnected canned object. Still
-// fast and synchronous -- no network, no delay -- matching section 6.9's
-// "no real computation cost" intent, just not "hardcoded regardless of
-// input". The real branch below POSTs /compare instead.
-// personas/reactionsAById: mock mode only (it recomputes Run B locally,
-// never calling a server). runA/runB: real mode only (the two run_ids
-// POST /compare needs; the backend already has both runs' real reactions
-// in memory, no need to send them). Each branch ignores the args it
-// doesn't need rather than the caller having to know which to supply.
+// "Apply and compare" result. Mock mode computes it from the two reaction
+// sets the run actually produced, so it is correct at any N; the real
+// branch POSTs /compare. personas/reactionsAById are mock-only (Run B is
+// recomputed locally); runA/runB are real-only (the backend already holds
+// both runs). Each branch ignores the args it doesn't need.
 export async function getCompareResult({ personas, reactionsAById, runA, runB }) {
   if (isMockMode()) {
     // buildMockReactionsB is deterministic (same personas + reactionsA
@@ -281,9 +268,9 @@ export async function getCompareResult({ personas, reactionsAById, runA, runB })
 }
 
 // Deterministic Fisher-Yates permutation (no Math.random) so reactions
-// arrive out of persona order on every run, the same way the real
-// asyncio.as_completed fan-out does (section 5.2) -- this is what exercises
-// "tiles are placed by persona_id, not arrival order."
+// arrive out of persona order, the same way the real fan-out's
+// asyncio.as_completed does -- this is what exercises "tiles are placed by
+// persona_id, not arrival order."
 function completionOrder(n) {
   const order = Array.from({ length: n }, (_, i) => i)
   for (let i = n - 1; i > 0; i--) {
@@ -291,14 +278,6 @@ function completionOrder(n) {
     ;[order[i], order[j]] = [order[j], order[i]]
   }
   return order
-}
-
-function average(nums) {
-  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0
-}
-
-function percent(items, pred) {
-  return items.length ? (100 * items.filter(pred).length) / items.length : 0
 }
 
 function startMockRun({ personaCount, onEvent, previousReactionsById, text }) {
@@ -320,22 +299,11 @@ function startMockRun({ personaCount, onEvent, previousReactionsById, text }) {
       onEvent({ type: 'synthesizing' })
       timeoutId = setTimeout(() => {
         if (cancelled) return
-        // Built from this run's personas, not the module-level N=100
-        // MOCK_SYNTHESIS, so the evidence ids it cites actually have
-        // tiles in the grid at whatever N the slider is on.
-        onEvent({ type: 'synthesis', data: buildMockSynthesis(personas, text) })
-        onEvent({
-          type: 'done',
-          data: {
-            stats: {
-              mean_sentiment: average(reactions.map((r) => r.sentiment)),
-              would_act_pct: percent(reactions, (r) => r.would_act),
-              nano_calls: total,
-              nano_ms_total: reactions.reduce((sum, r) => sum + r.latency_ms, 0),
-              ultra_ms: 900,
-            },
-          },
-        })
+        // Built from this run's personas and reactions, so the evidence ids
+        // have tiles in the grid and the percentages are real counts at
+        // whatever N the slider is on.
+        onEvent({ type: 'synthesis', data: buildMockSynthesis(personas, text, reactions) })
+        onEvent({ type: 'done', data: { stats: buildMockStats(reactions) } })
       }, SYNTHESIS_DELAY_MS)
       return
     }
@@ -351,7 +319,6 @@ function startMockRun({ personaCount, onEvent, previousReactionsById, text }) {
   timeoutId = setTimeout(() => emitNext(0), REACTION_INTERVAL_MS)
 
   return {
-    personas,
     cancel() {
       cancelled = true
       if (timeoutId) clearTimeout(timeoutId)

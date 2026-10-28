@@ -1,14 +1,8 @@
-// Synthetic data shaped exactly like panel/schemas.py (build spec section 3),
-// so the UI can be built and reviewed end to end before any backend exists
-// (section 6.9). The timed SSE-shaped event emission on top of this data is
-// api.js's startMockRun; this file only produces valid shapes.
+// Synthetic data shaped exactly like panel/schemas.py, so the UI can be
+// built and reviewed end to end with no backend and no credits spent. The
+// timed SSE-shaped event emission on top of this data is api.js's
+// startMockRun; this file only produces valid shapes.
 
-// REGIONS/INCOME_BANDS are real domain constants mirroring
-// panel/schemas.py, not mock data -- they live in state.js (which owns the
-// filter logic that reads them) and are re-exported here only because this
-// module and Filters.jsx both already imported them from this path.
-// INCOME_BANDS was previously declared in both files.
-export { REGIONS, INCOME_BANDS } from './state.js'
 import { REGIONS, INCOME_BANDS } from './state.js'
 
 const FIRST_NAMES = [
@@ -116,10 +110,8 @@ function seededShuffle(array, seed) {
 }
 
 // All FIRST_NAMES x LAST_NAMES pairs (400), shuffled once so personas 0..99
-// each get a distinct, non-block-clustered full name instead of the first
-// 20 cycling in lockstep with the last 20 (which produced e.g. "Dolores
-// Park" five times over -- every Nth name repeating in lockstep -- before
-// this fix).
+// each get a distinct, non-block-clustered full name instead of first and
+// last names cycling in lockstep.
 const NAME_PAIRS = seededShuffle(
   FIRST_NAMES.flatMap((first) => LAST_NAMES.map((last) => [first, last])),
   1337,
@@ -148,13 +140,11 @@ export function buildMockPersonas(n = 100) {
       income_band: pick(INCOME_BANDS, i + 1),
       occupation: pick(OCCUPATIONS, i),
       household: i % 3 === 0 ? 'lives alone' : 'lives with spouse, kids nearby',
-      // 1-100, not 1-5 (section 3 said 1-5; widened by request on 2026-10-28
-      // for more variability). Different multipliers per trait so they're
-      // not all just the same i value in disguise.
+      // All traits 1-100. Different multipliers per trait so they're not
+      // all just the same i value in disguise.
       tech_comfort: ((i * 7) % 100) + 1,
       skepticism: ((i * 13 + 5) % 100) + 1,
-      // Big Five / OCEAN, 1-100 -- not in the original section 3 schema,
-      // added by request alongside the skepticism/tech_comfort rescale.
+      // Big Five / OCEAN.
       openness: ((i * 17 + 11) % 100) + 1,
       conscientiousness: ((i * 23 + 3) % 100) + 1,
       extraversion: ((i * 29 + 7) % 100) + 1,
@@ -181,11 +171,10 @@ const GUT_REACTIONS = [
 // recognized example.
 //
 // The specific set quotes the pricing example's actual content ("$29",
-// "the free trial"). That reads well when the pricing example is what
-// was submitted -- and is a fabrication about anything else. Reported
-// 2026-10-29: mock mode returned findings about "$29" for text with no
-// price in it at all. Mock data is synthetic by definition, but it must
-// not assert things about the user's copy that are false.
+// "the free trial"). That reads well when the pricing example is what was
+// submitted -- and is a fabrication about anything else. Mock data is
+// synthetic by definition, but it must not assert things about the user's
+// copy that are false (scripts/check_mock.mjs pins this).
 const SPECIFIC_CONFUSIONS = [
   'Whether the $29 is monthly or one-time',
   'What happens after the free trial',
@@ -259,36 +248,21 @@ function contentFor(artifactText) {
       }
 }
 
-// Bug found 2026-10-28: sentiment used to be `(i % 5) - 2`, a 5-cycle
-// that divides the grid's 10 columns, so every column rendered as one
-// solid sentiment colour -- repeating vertical stripes instead of a
-// mixed crowd. Hash the index to break that alignment, and skew by
-// skepticism so the segment filters surface a believable pattern too
-// (filtering to high-skepticism should actually look more negative, the
-// way it does with real model output).
 // Per-example calibration, taken from the real anti-sycophancy
 // measurements on the shipped 1,000-persona pool (README's table) and
-// from the first full N=1000 run of the policy notice.
-//
-// Mock reactions used to be a pure function of the persona list, which
-// meant all three examples produced the SAME distribution -- and a
-// flattering one. Reality differs sharply per artifact: the parking
-// notice has no action to take, so a real run returns 0.0% would-act,
-// while mock mode cheerfully showed people in favour of it. Anyone
-// demoing in mock mode saw a materially rosier picture than the product
-// actually gives, which is the one kind of inaccuracy this project
-// cannot afford.
+// from the first full N=1000 run of the policy notice. Reality differs
+// sharply per artifact -- the parking notice offers no action to take, so
+// a real run returns 0.0% would-act -- and mock mode must not paint a
+// rosier picture than the product gives.
 //
 // `shift` biases the score (negative = harsher); `actRate` is the share
-// of positive-sentiment personas who also flip would_act.
+// of positive-sentiment personas who also flip would_act. Shifts were
+// solved numerically against the real means; scripts/check_mock.mjs
+// verifies both at N=1000.
 //
-// Matched on distinctive phrases, not single words: a bare 'Parking' would
-// have claimed anyone's own copy that happened to mention parking. Each
-// phrase is verified to appear in its example by scripts/check_mock.mjs,
-// which caught 'Nimbus Finance' (a phrase the ad never actually uses)
-// silently dropping ad_v1 to the default calibration.
-// Shifts solved numerically against the real means rather than guessed;
-// actRate set from the real would-act share. Verified at N=1000 below.
+// Matched on distinctive phrases, not single words, so a user's own copy
+// that happens to mention parking isn't mistaken for the example. Each
+// phrase is checked to appear in its example by scripts/check_mock.mjs.
 const ARTIFACT_CALIBRATION = [
   // real: mean -0.28, 2.7% would act -> mock: -0.29, 2.6%
   { match: 'PlateUp', shift: -6, actRate: 0.1 },
@@ -311,6 +285,9 @@ export function calibrationFor(artifactText) {
   )
 }
 
+// Sentiment hashes the index (a plain `i % 5` cycle would line up with the
+// grid's columns as stripes) and skews by skepticism, so filtering to
+// high-skepticism looks more negative, the way real model output does.
 export function buildMockReaction(persona, i, calibration = DEFAULT_CALIBRATION, content = null) {
   const c = content ?? contentFor(null)
   const noise = hash32(i * 7 + 13) % 100
@@ -338,13 +315,8 @@ export function buildMockReactions(personas, artifactText) {
 }
 
 // Longest sentence in the artifact, used as the edit's current_text for
-// unrecognized input.
-//
-// It has to be a real substring or Apply-and-compare silently does
-// nothing: applyEdit looks for current_text verbatim and falls back to
-// comparing against unedited text. The canned '$29' meant mock
-// Apply-and-compare was inert for every artifact except the pricing
-// example.
+// unrecognized input. It has to be a real substring, or Apply and compare
+// has nothing to replace.
 function longestSentence(artifactText) {
   const sentences = (artifactText ?? '')
     .split(/(?<=[.!?])\s+|\n+/)
@@ -354,25 +326,68 @@ function longestSentence(artifactText) {
   return sentences.reduce((a, b) => (b.length > a.length ? b : a))
 }
 
-export function buildMockSynthesis(personas, artifactText) {
+// The same AND-ed clause semantics as panel/synthesize.py, over the
+// handful of fields the mock findings use.
+function matchesClauses(persona, clauses) {
+  return clauses.every(({ field, op, value }) => {
+    const v = persona[field]
+    if (op === '<=') return v <= value
+    if (op === '>=') return v >= value
+    if (op === 'in') return value.includes(v)
+    return v === value
+  })
+}
+
+// affected_pct = share of the segment's members (with a usable reaction)
+// who reacted negatively; segment_size/segment_pct = how big the segment
+// is. Computed the way the backend recounts real findings, so mock mode
+// shows numbers that mean what the UI says they mean.
+function recount(personas, reactionsById, clauses) {
+  const members = personas.filter((p) => matchesClauses(p, clauses))
+  const answered = members.map((p) => reactionsById[p.id]).filter((r) => r && !r.raw_error)
+  const negative = answered.filter((r) => r.sentiment < 0).length
+  return {
+    affected_pct: answered.length ? Math.round((100 * negative) / answered.length) : 0,
+    segment_size: members.length,
+    segment_pct: personas.length ? (100 * members.length) / personas.length : 0,
+  }
+}
+
+export function buildMockSynthesis(personas, artifactText, reactions = []) {
   // Evidence ids are drawn from the personas this run actually has, and
-  // the offsets wrap. Fixed slices at 0-3/10-13/20-23 meant that at N=10
-  // or N=20 two of the three findings cited ids with no tile in the grid,
-  // and the Findings panel highlights evidence by exact persona_id.
+  // the offsets wrap, so every cited id has a tile in the grid at any N.
   // Finding.evidence requires 3 to 5 entries, so this needs >= 3 personas
   // -- the N slider's floor is 10.
   const evidenceFrom = (start) =>
     Array.from({ length: Math.min(4, personas.length) }, (_, i) => personas[(start + i) % personas.length].id)
+  const reactionsById = Object.fromEntries(reactions.map((r) => [r.persona_id, r]))
 
-  // The segments and percentages below are real either way: they are
-  // computed over the mock personas, and clicking a segment chip filters
-  // the grid to exactly the people it names. What has to change with the
-  // artifact is the prose, which otherwise claims things about copy that
-  // may not contain them.
+  // The segments and percentages are real either way: they are computed
+  // over the mock personas and reactions, and clicking a segment chip
+  // filters the grid to exactly the people it names. What changes with
+  // the artifact is the prose, which otherwise claims things about copy
+  // that may not contain them.
   const specific = !!calibrationFor(artifactText).match
-  const findings = specific
+  const segments = [
+    {
+      affected_segment: 'low tech comfort (33 or below)',
+      affected_segment_filter: [{ field: 'tech_comfort', op: '<=', value: 33 }],
+      severity: 'high',
+    },
+    {
+      affected_segment: 'high skepticism (70 or above)',
+      affected_segment_filter: [{ field: 'skepticism', op: '>=', value: 70 }],
+      severity: 'medium',
+    },
+    {
+      affected_segment: 'Southwest and Southeast US',
+      affected_segment_filter: [{ field: 'region', op: 'in', value: ['Southwest US', 'Southeast US'] }],
+      severity: 'low',
+    },
+  ]
+  const claims = specific
     ? [
-        'The $29 figure is read as monthly by most low-tech-comfort personas',
+        'The $29 figure is read as monthly by low-tech-comfort personas',
         'High-skepticism personas object to the missing cancellation policy',
         'Southwest and Southeast US personas are the most price-anchored',
       ]
@@ -381,11 +396,18 @@ export function buildMockSynthesis(personas, artifactText) {
         'High-skepticism personas wanted something checkable before acting',
         'Southwest and Southeast US personas were the least moved',
       ]
+  const findings = segments.map((seg, i) => ({
+    claim: claims[i],
+    ...recount(personas, reactionsById, seg.affected_segment_filter),
+    ...seg,
+    evidence: evidenceFrom(i * 10),
+  }))
+
   const edit = specific
     ? {
         current_text: '$29',
         proposed_text: '$29 one-time. No subscription.',
-        rationale: 'Resolves the top confusion for a third of personas without changing price.',
+        rationale: 'Resolves the top confusion for low-tech-comfort readers without changing the price.',
       }
     : (() => {
         const target = longestSentence(artifactText)
@@ -402,39 +424,13 @@ export function buildMockSynthesis(personas, artifactText) {
             }
       })()
 
+  const lead = findings[0].affected_pct
   return {
     headline: specific
-      ? 'Pricing reads as a subscription to 41% of personas over 55'
-      : '41% of low-tech-comfort personas could not tell what this asks of them',
-    findings: [
-      {
-        claim: findings[0],
-        affected_pct: 41,
-        affected_segment: 'tech_comfort <= 33',
-        affected_segment_filter: [{ field: 'tech_comfort', op: '<=', value: 33 }],
-        evidence: evidenceFrom(0),
-        severity: 'high',
-      },
-      {
-        claim: findings[1],
-        affected_pct: 33,
-        affected_segment: 'skepticism >= 70',
-        affected_segment_filter: [{ field: 'skepticism', op: '>=', value: 70 }],
-        evidence: evidenceFrom(10),
-        severity: 'medium',
-      },
-      {
-        claim: findings[2],
-        affected_pct: 22,
-        affected_segment: 'region in [Southwest US, Southeast US]',
-        affected_segment_filter: [
-          { field: 'region', op: 'in', value: ['Southwest US', 'Southeast US'] },
-        ],
-        evidence: evidenceFrom(20),
-        severity: 'low',
-      },
-    ],
-    highest_leverage_edit: { ...edit, predicted_flips: 22 },
+      ? `The $29 reads as a subscription: ${lead}% of low-tech-comfort readers reacted negatively`
+      : `${lead}% of low-tech-comfort readers reacted negatively and could not tell what this asks of them`,
+    findings,
+    highest_leverage_edit: { ...edit, predicted_flips: Math.max(1, Math.round(personas.length * 0.05)) },
     who_you_are_losing: specific
       ? 'Older, price-sensitive, low-trust readers who leave before the second paragraph.'
       : 'Older, low-trust readers who leave before the second paragraph.',
@@ -444,26 +440,39 @@ export function buildMockSynthesis(personas, artifactText) {
   }
 }
 
-// flipped_to_act (and flipped_positive/negative below) are about the
-// would_act decision, not sentiment sign -- section 4.4's prompt wording
-// ("N personas moved to would_act... N moved away") is the one place the
-// spec pins this unambiguously. sentiment_before/after still move too, so
-// the grid's color wave has something to animate, but they're not what
-// "flipped" means here.
-// Bug found 2026-10-29: Run A and a mock "Run B" (apply-and-compare) used
-// to call buildMockReactions(personas) identically -- that function is a
-// pure function of the persona list only, never of the artifact text, so
-// toggling Run A / Run B / Delta showed literally identical data (every
-// tile "unchanged", identical stats) no matter what was actually "run".
-// Fixing it means Run B has to be a deliberate, deterministic edit of
-// Run A's actual reactions, and the compare result has to be computed
-// from that same edit rather than invented independently of it.
-// Sized to the real measured effect, not to look impressive. Across six
+// RunStats for a mock run, with the backend's rules: failed reactions are
+// left out of the averages, and the call counts follow the real pipeline
+// (one Nano call per persona, one Super condensing call per 10 reactions
+// above 150 personas, one Ultra synthesis).
+const MOCK_SHARD_THRESHOLD = 150
+const MOCK_SHARD_SIZE = 10
+
+export function buildMockStats(reactions) {
+  const usable = reactions.filter((r) => !r.raw_error)
+  const n = usable.length
+  return {
+    mean_sentiment: n ? usable.reduce((sum, r) => sum + r.sentiment, 0) / n : 0,
+    would_act_pct: n ? (100 * usable.filter((r) => r.would_act).length) / n : 0,
+    failed_reactions: reactions.length - n,
+    nano_calls: reactions.length,
+    super_calls: reactions.length > MOCK_SHARD_THRESHOLD ? Math.ceil(reactions.length / MOCK_SHARD_SIZE) : 0,
+    ultra_calls: 1,
+    nano_ms_total: reactions.reduce((sum, r) => sum + (r.latency_ms ?? 0), 0),
+    ultra_ms: 900,
+  }
+}
+
+// Mock Run B is a deliberate, deterministic edit of Run A's actual
+// reactions, and the compare result is computed from that same edit, so
+// the Run A / Run B / Delta views genuinely differ.
+//
+// "Flipped" means the would_act decision changed, not sentiment sign, the
+// same definition panel/compare.py uses. sentiment_before/after move too,
+// so the grid's colour wave has something to animate.
+//
+// Sized to the real measured effect, not to look impressive: across six
 // edit variants against real runs, one good edit flipped 0-7 people in
-// 100 -- which the README and the UI both say out loud, because it is the
-// honest result and the diagnosis is the product. The group used to be a
-// flat 19 in 100, so mock mode contradicted our own headline number by
-// roughly 3x. Scaled by panel size so the rate holds at any N.
+// 100. Scaled by panel size so the rate holds at any N.
 const MOCK_FLIP_RATE = 0.05
 const MOCK_BACKFIRE_RATE = 0.01
 
@@ -481,10 +490,8 @@ function flipGroupsFor(personas) {
 // it wasn't about).
 export function buildMockReactionsB(personas, reactionsAById) {
   const { positiveIds, negativeIds } = flipGroupsFor(personas)
-  // A persona with no Run A reaction is skipped, not mapped to undefined:
-  // this used to `return before` (i.e. undefined) inside a .map, and the
-  // callers in api.js read `.persona_id` off every element, so a partial
-  // reactionsAById produced a TypeError rather than a shorter list.
+  // A persona with no Run A reaction is skipped rather than mapped to
+  // undefined; callers read `.persona_id` off every element.
   return personas.flatMap((p) => {
     const before = reactionsAById[p.id]
     if (!before) return []
@@ -504,13 +511,9 @@ export function buildMockReactionsB(personas, reactionsAById) {
 export function buildMockCompareResult(personas, reactionsAById, reactionsBById) {
   const { positiveIds, negativeIds } = flipGroupsFor(personas)
   const targeted = personas.filter((p) => positiveIds.has(p.id) || negativeIds.has(p.id))
-  // A targeted persona whose would_act was already at its target value
-  // (e.g. a "flip to true" persona who happened to already be true in
-  // Run A) is a non-event, not a flip in either direction -- counting it
-  // as "flipped_negative" just because it isn't "flipped_positive" (the
-  // first version of this fix did exactly that) inflates the negative
-  // count with people who didn't actually change. Check both directions
-  // explicitly instead of inferring one from "not the other".
+  // A targeted persona whose would_act was already at its target value is
+  // a non-event, not a flip in either direction, so both directions are
+  // checked explicitly rather than one inferred from "not the other".
   let flippedPositive = 0
   let flippedNegative = 0
   const deltas = targeted.map((p) => {
@@ -527,11 +530,8 @@ export function buildMockCompareResult(personas, reactionsAById, reactionsBById)
       flipped_to_act: toAct,
     }
   })
-  // Percentage POINTS of the whole panel, matching panel/compare.py's
-  // `would_act_pct_b - would_act_pct_a`. This was the raw flip count,
-  // which only coincided with the percentage at N=100 -- at N=300 it
-  // reported 15 where the real delta was 5.0, in a field CompareBar
-  // renders with a '%' next to it.
+  // Percentage points of the whole panel, matching panel/compare.py's
+  // `would_act_pct_b - would_act_pct_a`.
   const n = personas.length || 1
   const deltaPct = (100 * (flippedPositive - flippedNegative)) / n
   return {
@@ -541,24 +541,20 @@ export function buildMockCompareResult(personas, reactionsAById, reactionsBById)
     flipped_positive: flippedPositive,
     flipped_negative: flippedNegative,
     would_act_delta_pct: deltaPct,
-    // Built from the numbers just computed rather than hardcoded. The old
-    // string claimed 19 flips while flipped_positive computed to 15 (four
-    // of the 19 targeted personas already had would_act: true in Run A),
-    // and CompareBar shows the sentence and the counters side by side.
+    // Built from the numbers just computed, since CompareBar shows the
+    // sentence and the counters side by side. Generic wording: this
+    // function doesn't know which artifact was edited.
     summary:
-      `Naming the price as one-time flips ${flippedPositive} skeptical, ` +
-      `low-tech-comfort readers toward acting` +
+      `The edit moves ${flippedPositive} ${flippedPositive === 1 ? 'reader' : 'readers'} toward acting` +
       (flippedNegative ? ` and pushes ${flippedNegative} away` : '') +
       `.`,
   }
 }
 
-// Section 6.8 example buttons, mock-mode source. Real text from
-// data/examples/*.txt, embedded here (this is browser code, it can't read
-// the filesystem) so the three buttons load real-looking content without
-// any backend. MOCK_SYNTHESIS.highest_leverage_edit.current_text ('$29')
-// is guaranteed to appear verbatim in the pricing example below -- that's
-// the example the "Apply this edit and compare" flow is built against.
+// Example buttons, mock-mode source. Real text from data/examples/*.txt,
+// embedded here (this is browser code, it can't read the filesystem). The
+// pricing example's tailored edit ('$29') appears verbatim in its text, so
+// Apply and compare has something to replace.
 export const EXAMPLES = [
   {
     id: 'pricing_v1',
@@ -688,11 +684,3 @@ Transportation, Parking Services Division, at the number listed on the
 City's official website.`,
   },
 ]
-
-// No module-level MOCK_PERSONAS / MOCK_REACTIONS / MOCK_SYNTHESIS /
-// MOCK_COMPARE_RESULT. Everything here is built from the personas a given
-// run actually selected (see api.js's startMockRun and getCompareResult),
-// because a constant fixed at N=100 silently mismatches every other N --
-// MOCK_SYNTHESIS used to cite evidence ids that had no tile in the grid
-// below N=24, and the three N=100 constants were being constructed on
-// every page load whether mock mode was on or not.

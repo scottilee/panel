@@ -1,12 +1,11 @@
 // Mock mode must never assert something about the user's copy that the
-// copy does not contain. Three separate reports came from it doing so.
+// copy does not contain, and its numbers must mean what the UI says.
 //   node scripts/check_mock.mjs
 //
-// Mock mode is synthetic by definition, but three separate bug reports
-// came from it asserting things about the user's own copy that were
-// false: identical reaction distributions for all three examples, a
-// flat 19-in-100 flip rate against a measured 0-7, and findings about
-// "$29" for text with no price in it. This pins all of that.
+// Pins: no invented specifics (e.g. "$29") for arbitrary text, an edit
+// that targets a real phrase, per-example distributions that track the
+// real measurements, findings recounted the way the backend does it, and
+// stats that leave failed reactions out.
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -22,11 +21,13 @@ const SPECIFICS = ['$29', 'free trial', 'cancellation policy', 'subscription', '
 
 let bad = 0
 const ps = M.buildMockPersonas(30)
+const byId = (rs) => Object.fromEntries(rs.map((r) => [r.persona_id, r]))
 
 for (const text of OWN) {
   const rs = M.buildMockReactions(ps, text)
   const syn = M.buildMockSynthesis(ps, text)
-  const blob = JSON.stringify(rs) + JSON.stringify(syn)
+  const cmp = M.buildMockCompareResult(ps, byId(rs), byId(M.buildMockReactionsB(ps, byId(rs))))
+  const blob = JSON.stringify(rs) + JSON.stringify(syn) + cmp.summary
   const leaked = SPECIFICS.filter((t) => blob.includes(t) && !text.includes(t))
   if (leaked.length) {
     bad++
@@ -69,6 +70,42 @@ for (const ex of M.EXAMPLES) {
     (ok ? 'OK   ' : 'WRONG') + ' ' + ex.id.padEnd(12),
     `act ${act.toFixed(1)}% (real ${want.act}%)`.padEnd(24),
     `mean ${mean.toFixed(2)} (real ${want.mean})`)
+}
+
+// Findings carry the backend's recount semantics: affected_pct is the
+// negative share *within* the segment, segment_size is the segment's head
+// count, and the headline quotes the lead finding's real number.
+{
+  const people = M.buildMockPersonas(200)
+  const rs = M.buildMockReactions(people, pricing)
+  const syn = M.buildMockSynthesis(people, pricing, rs)
+  const reactions = byId(rs)
+  let ok = true
+  for (const f of syn.findings) {
+    const [c] = f.affected_segment_filter
+    const members = people.filter((p) =>
+      c.op === '<=' ? p[c.field] <= c.value : c.op === '>=' ? p[c.field] >= c.value : c.value.includes(p[c.field]),
+    )
+    const neg = members.filter((p) => reactions[p.id].sentiment < 0).length
+    const want = Math.round((100 * neg) / members.length)
+    if (f.segment_size !== members.length || f.affected_pct !== want) ok = false
+    if (Math.abs(f.segment_pct - (100 * members.length) / people.length) > 1e-9) ok = false
+  }
+  if (!syn.headline.includes(`${syn.findings[0].affected_pct}%`)) ok = false
+  if (!ok) bad++
+  console.log((ok ? 'OK   ' : 'WRONG') + ' findings are recounted from the mock reactions')
+}
+
+// Stats leave failed reactions out of the averages, like the backend.
+{
+  const rs = [
+    { persona_id: 'p001', sentiment: 2, would_act: true, latency_ms: 1, raw_error: null },
+    { persona_id: 'p002', sentiment: 0, would_act: false, latency_ms: 1, raw_error: 'boom' },
+  ]
+  const st = M.buildMockStats(rs)
+  const ok = st.mean_sentiment === 2 && st.would_act_pct === 100 && st.failed_reactions === 1
+  if (!ok) bad++
+  console.log((ok ? 'OK   ' : 'WRONG') + ' stats exclude failed reactions')
 }
 
 console.log(bad ? `\n${bad} PROBLEM(S)` : '\nmock mode asserts nothing it cannot support')

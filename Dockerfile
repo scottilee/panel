@@ -40,4 +40,7 @@ ENV PORT=8080
 # serve requests that know nothing about a run started on the first --
 # SSE reconnects would silently fail. Scale is capped at the Cloud Run
 # service too (max_instance_count = 1); both limits are load-bearing.
-CMD ["sh", "-c", "exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1"]
+#
+# --no-proxy-headers: client addresses are resolved in one place,
+# api/main.py's _client_ip (TRUSTED_PROXY_HOPS), not also by uvicorn.
+CMD ["sh", "-c", "exec uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 1 --no-proxy-headers"]

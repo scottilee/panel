@@ -41,9 +41,8 @@ resource "google_artifact_registry_repository" "panel" {
 # readable by anyone with Cloud Run viewer access and visible in the
 # console's revision details.
 #
-# It DOES land in Terraform state, and an earlier version of this comment
-# wrongly claimed otherwise. Terraform records every attribute of every
-# resource it manages, and `sensitive = true` only suppresses CLI output
+# It DOES land in Terraform state: Terraform records every attribute of
+# every resource it manages, and `sensitive = true` only suppresses CLI output
 # -- so secret_data below is stored verbatim in infra/terraform.tfstate.
 # That file is gitignored, but it is a plaintext secret on disk and should
 # be treated as one (back it up like a key, not like config).
@@ -180,6 +179,17 @@ resource "google_cloud_run_v2_service" "panel" {
         value = tostring(var.rate_limit_runs)
       }
 
+      # Rate limits are keyed per client. Every request reaches the
+      # container from Google's front end, so the socket peer is the same
+      # for everyone; Cloud Run appends the real client address as the
+      # last X-Forwarded-For entry, which is the one hop to trust. Check
+      # the "client=" field of the "run ... started" log line after a
+      # deploy: it should show visitors' public IPs, not one 169.254.x.x.
+      env {
+        name  = "TRUSTED_PROXY_HOPS"
+        value = "1"
+      }
+
       ports {
         container_port = 8080
       }
@@ -187,10 +197,10 @@ resource "google_cloud_run_v2_service" "panel" {
 
     # One long-lived SSE connection per run, held open for the whole run:
     # ~40-90s at the default 100 personas (100 Nano calls, then one Ultra
-    # call), and ~10 minutes at the 1,000-persona maximum (1,000 Nano
-    # calls, then 20 Nano condensing calls in two waves, then Ultra). The
-    # default 5-minute request timeout would cut the large end off
-    # mid-stream.
+    # call), and roughly 8 minutes at the 1,000-persona maximum (1,000 Nano
+    # calls, then 100 Super condensing calls in two waves of 50, then
+    # Ultra). The default 5-minute request timeout would cut the large
+    # end off mid-stream.
     #
     # 1800s rather than 900s: 900 left only ~4 minutes of headroom over a
     # full-size run, and the digest stage's per-call latency is the part

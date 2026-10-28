@@ -1,5 +1,5 @@
 // Textarea / URL toggle, label field, example buttons -- step 1 ("What they
-// read") of the setup card, section 6.1/6.8. The Run button (step 3) lives
+// read") of the setup card. The Run button (step 3) lives
 // in App.jsx, not here, since step 2 (persona count) has to render between
 // them -- MIN/MAX_TEXT_LENGTH are exported so App.jsx can compute the same
 // canRun check for that button without duplicating the literal numbers.

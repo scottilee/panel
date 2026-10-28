@@ -1,5 +1,5 @@
 // Compare view toggle (Run A / Run B / Delta) + before/after stats + the
-// one-sentence Ultra summary, section 6.7.
+// one-sentence Ultra summary.
 
 const VIEWS = [
   { id: 'A', label: 'Run A' },

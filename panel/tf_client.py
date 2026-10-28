@@ -1,26 +1,18 @@
-"""AsyncOpenAI wrapper around Token Factory. One function, chat_json, is the
-only thing in the codebase that is allowed to call the SDK directly
-(section 5.1).
+"""AsyncOpenAI wrapper around Token Factory. chat_json is the only function
+in the codebase that calls the SDK directly.
 
-Verified empirically against the live Token Factory catalog on 2026-10-27:
-- Nano, Super, and Ultra all accept response_format as a json_schema and
-  return clean JSON directly in message.content — no code-fence stripping
-  needed on the happy path. _strip_code_fences below is a defensive
-  fallback for whatever doesn't follow that, not the primary path.
-- Not just Ultra — Super and Nano are reasoning models too. All three can
-  spend completion tokens on hidden chain-of-thought before content.
-  Reasoning-token usage is stochastic, not a fixed overhead: the identical
-  persona-batch prompt at max_tokens=8000 finished cleanly with
-  reasoning_tokens=3350 on one call and truncated with zero content on an
-  immediate retry of the same request. So finish_reason == "length" is
-  reported distinctly from "content didn't validate" (ChatJsonTruncatedError
-  vs ValidationError) and chat_json retries it a couple of times at a
-  doubled budget rather than failing immediately — a validation-repair
-  retry would just waste a call on this failure mode.
-- Nano specifically: confirmed under load (2026-10-27, panel/react.py's
-  REACTION_MAX_TOKENS) that section 5.2's stated max_tokens=400 for
-  reaction calls is wrong — it truncated ~every call. 3000 is the
-  measured-safe budget (observed usage topped out at 2092).
+Behaviour of the Nemotron models this is built around (measured against
+the live Token Factory catalog, 2026-10-27/28):
+- Nano, Super and Ultra all accept response_format as a json_schema and
+  return clean JSON in message.content. _strip_code_fences is a defensive
+  fallback, not the primary path.
+- All three are reasoning models: they spend a stochastic share of the
+  completion budget on hidden reasoning before emitting any content. The
+  identical prompt at the same max_tokens can finish cleanly on one call
+  and truncate with zero content on the next. So finish_reason == "length"
+  is reported separately from "content didn't validate"
+  (ChatJsonTruncatedError vs ValidationError) and is retried at a doubled
+  budget; a validation-repair retry would just waste a call on it.
 """
 
 from __future__ import annotations
@@ -29,6 +21,8 @@ import asyncio
 import json
 import os
 import time
+from collections import Counter
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TypeVar
 
@@ -43,39 +37,38 @@ from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
 
-# Sleeps taken *between* attempts, so the first attempt is immediate and
-# there are len(_BACKOFF_SECONDS) + 1 attempts in total. Previously this
-# list was enumerated with the first element skipped, which made the 0.5
-# dead and the attempt count an undocumented side effect of the length.
+# Sleeps taken between attempts: the first attempt is immediate, so there
+# are len(_BACKOFF_SECONDS) + 1 attempts in total.
 _BACKOFF_SECONDS = [0.5, 1.0, 2.0, 4.0]
 
-# Retried by _call_with_backoff. Connection and timeout errors belong here
-# for the same reason 429s and 5xx do: at 50 concurrent calls against a
-# hosted API they are routine and transient, and the alternative is losing
-# a persona's reaction (or, before react.py's broad except, the whole run)
-# to a dropped socket.
+# Transient at 50 concurrent calls against a hosted API; retrying beats
+# losing a persona's reaction to a dropped socket.
 _RETRYABLE = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
 
-# Truncation retries, each at double the previous budget -- so the total
-# spend of a fully failed call is ~2^(n+1) times the starting budget.
-# 2 keeps that bounded at 7x while still reaching 4x the initial ceiling,
-# which the measurements in chat_json show is where the success rate
-# actually improves.
+# Truncation retries, each at double the previous budget, so a fully
+# failed call spends ~7x its starting budget while reaching 4x the initial
+# ceiling -- where the measured success rate actually improves.
 MAX_TRUNCATION_RETRIES = 2
+
+# Per-run tally of completed requests by model. A run sets a fresh Counter
+# with track_calls() at the start of its task; asyncio copies the context
+# into every task created underneath, so the fan-out, digest and synthesis
+# calls all land in the same Counter.
+_call_counts: ContextVar[Counter | None] = ContextVar("tf_call_counts", default=None)
+
+
+def track_calls() -> Counter:
+    counts: Counter = Counter()
+    _call_counts.set(counts)
+    return counts
 
 
 def _load_dotenv_fallback() -> dict[str, str]:
-    """Reads repo-root .env for any var not already in os.environ.
-
-    This is the codebase's only .env reader. panel/config.py was meant to
-    take the job over in stage 7 and instead ended up importing `env` from
-    here, so the two docstrings spent a while describing each other as
-    unwritten. The dependency has to run this way round: tf_client is the
-    bottom of the import graph (config imports it, not the reverse).
-    """
-    env: dict[str, str] = {}
-    root = os.path.join(os.path.dirname(__file__), "..")
-    path = os.path.join(root, ".env")
+    """Reads repo-root .env for any var not already in os.environ. The
+    codebase's only .env reader; config.py imports env() from here because
+    tf_client is the bottom of the import graph."""
+    values: dict[str, str] = {}
+    path = os.path.join(os.path.dirname(__file__), "..", ".env")
     if os.path.exists(path):
         with open(path) as f:
             for line in f:
@@ -83,18 +76,15 @@ def _load_dotenv_fallback() -> dict[str, str]:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 k, v = line.split("=", 1)
-                env[k.strip()] = v.strip().strip('"').strip("'")
-    return env
+                values[k.strip()] = v.strip().strip('"').strip("'")
+    return values
 
 
 _DOTENV = _load_dotenv_fallback()
 
 
 def env(key: str, default: str | None = None) -> str | None:
-    """Reads an env var, falling back to the repo-root .env. Public
-    because it's the single env entry point -- panel/config.py and the
-    per-module MODEL_* lookups all come through here.
-    """
+    """Reads an env var, falling back to the repo-root .env."""
     return os.environ.get(key) or _DOTENV.get(key) or default
 
 
@@ -115,8 +105,7 @@ def _strip_code_fences(text: str) -> str:
     text = text.strip()
     if not text.startswith("```"):
         return text
-    lines = text.split("\n")
-    lines = lines[1:]
+    lines = text.split("\n")[1:]
     if lines and lines[-1].strip() == "```":
         lines = lines[:-1]
     elif lines and lines[-1].strip().endswith("```"):
@@ -125,12 +114,9 @@ def _strip_code_fences(text: str) -> str:
 
 
 def _json_schema_for(schema: type[BaseModel]) -> dict:
-    # strict=False: pydantic's optional-field representation (anyOf with
-    # null) doesn't satisfy OpenAI-style strict-mode constraints
-    # (additionalProperties: false + every property required). We get the
-    # schema shape from the model name and validate the result with
-    # pydantic afterward anyway, so provider-side strict enforcement adds
-    # nothing but rejected requests.
+    # strict=False: pydantic's optional fields (anyOf with null) don't
+    # satisfy OpenAI-style strict mode, and the result is validated with
+    # pydantic afterwards anyway.
     return {
         "name": schema.__name__,
         "schema": schema.model_json_schema(),
@@ -175,17 +161,16 @@ async def chat_json(
     schema: type[T],
     temperature: float = 0.7,
     seed: int | None = None,
-    # 3000, not the 400 section 5.2 states. Every call site passes an
-    # explicit budget, so this default is only a trap for the next one --
-    # and 400 is the exact value measured to truncate essentially every
-    # Nano call (see this module's docstring). 3000 is the measured-safe
-    # floor for the smallest schema in the codebase.
+    # The measured-safe floor for the smallest schema in the codebase; 400
+    # truncates essentially every Nano call. Every call site passes an
+    # explicit budget anyway.
     max_tokens: int = 3000,
 ) -> ChatJsonResult:
     """Calls model, enforces schema, retries once on validation failure
-    (with the error appended to the prompt), retries on 429/5xx with
-    exponential backoff. Raises ChatJsonError (or ChatJsonTruncatedError)
-    if it never gets a valid result.
+    (with the error appended to the prompt), retries 429/5xx/connection
+    errors with backoff, and retries truncation at a doubled budget.
+    Raises ChatJsonError (or ChatJsonTruncatedError) if it never gets a
+    valid result.
     """
     client = get_client()
     response_format = {"type": "json_schema", "json_schema": _json_schema_for(schema)}
@@ -209,39 +194,26 @@ async def chat_json(
             max_tokens=current_max_tokens,
             response_format=response_format,
         )
+        counts = _call_counts.get()
+        if counts is not None:
+            counts[model] += 1
 
         choice = resp.choices[0]
         content = choice.message.content or ""
         latency_ms = int((time.monotonic() - start) * 1000)
 
         if choice.finish_reason == "length":
-            # All three models spend a *stochastic* share of the budget on
-            # hidden reasoning before emitting any content, so the same
-            # prompt at the same max_tokens succeeds on one call and
-            # truncates with nothing on the next.
-            #
-            # Measured (2026-10-28, Nano, one fixed prompt, 10 trials per
-            # budget -- scripts/probe_nemotron.py):
+            # A bigger ceiling genuinely helps (Nano, one fixed prompt, 10
+            # trials per budget, scripts/probe_nemotron.py):
             #
             #    8000  3/10 ok, successes used 3.3-6.8k
             #   16000  3/10 ok, successes used 6.0-11.5k
             #   24000  5/10 ok, successes used 6.3-16.2k
             #   48000  7/10 ok, successes used 4.1-8.9k
             #
-            # So a bigger ceiling does genuinely help, and doubling on
-            # truncation is the right response. Note the successes at the
-            # top of that range: a call needing 16k emits *nothing at all*
-            # at 8k, because content only starts after reasoning finishes.
-            #
-            # An earlier version of this branch split on whether the
-            # truncated response had partial content, retrying "empty"
-            # cases at the same budget on the theory that they were
-            # runaways a bigger budget could not rescue. That came from a
-            # 3-trial sample which happened to show 0/3 at 24000; at 10
-            # trials the same budget is the second *best*. Empty content
-            # cannot distinguish "ran away" from "needed slightly more",
-            # so the distinction was deleted rather than kept on a
-            # premise that did not survive measurement.
+            # Empty content can't distinguish "ran away" from "needed a bit
+            # more", because content only starts after reasoning finishes,
+            # so every truncation is retried the same way.
             if truncation_retries >= MAX_TRUNCATION_RETRIES:
                 raise ChatJsonTruncatedError(
                     f"truncated at max_tokens={current_max_tokens} "
@@ -250,12 +222,8 @@ async def chat_json(
                     latency_ms,
                 )
             truncation_retries += 1
-            # Logged, not silent. Each retry costs a full extra call at a
-            # doubled budget, and this used to leave no trace at all -- a
-            # stage running at 2-3x its expected cost looked simply
-            # "slow", which is exactly how persona generation came to pace
-            # at 110 minutes instead of 25 with nothing in the output to
-            # say why.
+            # Logged because each retry is a full extra call at double the
+            # budget; silently, a stage running at 2-3x cost just looks slow.
             print(
                 f"tf_client: {model} truncated at max_tokens={current_max_tokens} "
                 f"({len(content)} chars of content); retrying at "

@@ -1,9 +1,7 @@
-// Findings (post-run flat list), section 6.6, restyled per the "4C"
-// mockup: a flat list of claim rows (severity badge, claim + segment chip
-// + evidence avatars, big percentage + progress bar) below the Reactions
-// card. The headline, highest-leverage edit, and losing/winning lines now
-// live in Verdict.jsx, above the Reactions card -- this component only
-// renders the three finding rows.
+// Findings (post-run): one row per claim -- severity badge, claim,
+// segment chip, evidence avatars, and the share of that segment who
+// reacted negatively. The headline, edit and winning/losing lines live in
+// Verdict.jsx.
 
 const SEVERITY_LABEL = { high: 'High', medium: 'Medium', low: 'Low' }
 
@@ -23,6 +21,16 @@ function EvidenceAvatars({ evidence, onHoverStart, onHoverEnd }) {
       ))}
     </div>
   )
+}
+
+// affected_pct is the share of the segment's members who reacted
+// negatively, recounted from the real reactions. segment_size/segment_pct
+// are null when the filter couldn't be recounted, in which case the
+// percentage is the model's own estimate and is labelled as one.
+function segmentCaption(finding) {
+  if (finding.segment_size == null) return 'estimated, not recounted'
+  const people = `${finding.segment_size} ${finding.segment_size === 1 ? 'person' : 'people'}`
+  return finding.segment_pct == null ? people : `${people} · ${Math.round(finding.segment_pct)}% of panel`
 }
 
 function FindingRow({ finding, onSegmentClick, onEvidenceHoverStart, onEvidenceHoverEnd }) {
@@ -51,9 +59,11 @@ function FindingRow({ finding, onSegmentClick, onEvidenceHoverStart, onEvidenceH
       </div>
       <div className="finding-row-pct-wrap">
         <span className="finding-row-pct">{finding.affected_pct}%</span>
+        <span className="finding-row-pct-label">of this segment reacted negatively</span>
         <div className="finding-row-bar">
           <div className="finding-row-bar-fill" style={{ width: `${finding.affected_pct}%` }} />
         </div>
+        <span className="finding-row-pct-label">{segmentCaption(finding)}</span>
       </div>
     </article>
   )

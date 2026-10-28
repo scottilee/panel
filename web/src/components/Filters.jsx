@@ -1,17 +1,14 @@
-// Segment filter chips, section 6.5. "Clear all" and the match-count line
-// are new (the mockup shows both prominently) -- cheap additions wired to
-// data App.jsx already has (activeFilters, filteredIds, personas.length),
-// not a new feature, just exposing what already exists.
+// Segment filters, plus "Clear all" and a match-count line wired to data
+// App.jsx already has (activeFilters, filteredIds, personas.length).
 //
 // Region is a multi-select dropdown, age and income are dual-handle range
-// sliders (DualRangeSlider.jsx) -- changed by request on 2026-10-29. Tech
-// comfort and skepticism stay chips; they weren't part of that request.
+// sliders (DualRangeSlider.jsx), and tech comfort and skepticism are
+// chips.
 
 import { useEffect, useRef, useState } from 'react'
-import { REGIONS, INCOME_BANDS } from '../mock.js'
+import { INCOME_BANDS, REGIONS, SCORE_BANDS } from '../state.js'
 import DualRangeSlider from './DualRangeSlider.jsx'
 
-const SCORE_BANDS = ['low', 'mid', 'high']
 const SCORE_GROUPS = [
   { group: 'techComfort', label: 'TECH COMFORT', values: SCORE_BANDS },
   { group: 'skepticism', label: 'SKEPTICISM', values: SCORE_BANDS },
