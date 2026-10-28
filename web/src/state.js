@@ -24,6 +24,7 @@ const initialCompareState = {
   visible: false,
   text: '',
   status: STATUS.IDLE,
+  runId: null,
   reactionsById: {},
   progress: { done: 0, total: 0 },
   stats: null,
@@ -41,6 +42,7 @@ export const initialState = {
   artifactUrl: '',
   label: '',
   status: STATUS.IDLE,
+  runId: null,
   personas: [],
   reactionsById: {},
   progress: { done: 0, total: 0 },
@@ -49,6 +51,7 @@ export const initialState = {
   startedAt: null,
   elapsedMs: 0,
   error: null,
+  retrying: false,
   compare: initialCompareState,
 }
 
@@ -76,6 +79,14 @@ export function reducer(state, action) {
         compare: initialCompareState,
       }
 
+    // Stage 7: the real client learns the run_id only once POST /run
+    // resolves (mock mode never dispatches this -- there's no real id to
+    // know, and nothing downstream needs one in mock mode).
+    case 'SET_RUN_ID':
+      return { ...state, runId: action.runId }
+    case 'COMPARE_SET_RUN_ID':
+      return { ...state, compare: { ...state.compare, runId: action.runId } }
+
     case 'SET_INPUT_MODE':
       return { ...state, inputMode: action.mode }
     case 'SET_ARTIFACT_TEXT':
@@ -94,10 +105,17 @@ export function reducer(state, action) {
         synthesis: null,
         stats: null,
         error: null,
+        retrying: false,
         startedAt: Date.now(),
         elapsedMs: 0,
         compare: initialCompareState,
       }
+
+    // Section 6.8: "never show a raw error to a judge" -- while retrying
+    // is true, the UI shows "Retrying..." instead of surfacing the error
+    // that triggered it.
+    case 'SET_RETRYING':
+      return { ...state, retrying: action.retrying }
 
     case 'REACTION':
       return {

@@ -172,38 +172,79 @@ export default function App() {
     dispatch({ type: 'SET_LABEL', label: example.label })
   }
 
+  // Section 6.8: "if a live run emits error within 10 seconds of
+  // starting, the frontend silently re-requests the same example with
+  // ?cached=true... never show a raw error to a judge; show 'Retrying...'
+  // then the cached result." allowRetry is false on the retry's own
+  // handler so a failing cached replay (e.g. no cache file for this
+  // example) surfaces as a real error instead of looping.
+  function makeRunEventHandler({ startedAt, allowRetry }) {
+    return (event) => {
+      switch (event.type) {
+        case 'run_started':
+          dispatch({ type: 'SET_RUN_ID', runId: event.data.run_id })
+          break
+        case 'reaction':
+          dispatch({ type: 'SET_RETRYING', retrying: false })
+          dispatch({ type: 'REACTION', reaction: event.data })
+          break
+        case 'progress':
+          dispatch({ type: 'PROGRESS', progress: event.data })
+          break
+        case 'synthesizing':
+          dispatch({ type: 'SYNTHESIZING' })
+          break
+        case 'synthesis':
+          dispatch({ type: 'SYNTHESIS', synthesis: event.data })
+          break
+        case 'done':
+          dispatch({ type: 'DONE', stats: event.data.stats })
+          break
+        case 'error': {
+          const withinRetryWindow = Date.now() - startedAt < 10_000
+          const matchedExample = examples.find((ex) => ex.text === state.artifactText)
+          if (allowRetry && withinRetryWindow && matchedExample) {
+            runRealOrCachedExample(matchedExample)
+          } else {
+            dispatch({ type: 'SET_RETRYING', retrying: false })
+            dispatch({ type: 'ERROR', message: event.data?.message ?? 'unknown error' })
+          }
+          break
+        }
+        default:
+          break
+      }
+    }
+  }
+
+  // cached: true replays section 5.8's known-good cached result instead
+  // of a real run -- used both for the 6.8 auto-retry above and (if ever
+  // wired to a UI control) a direct "run cached" path.
+  function runRealOrCachedExample(example, cached = true) {
+    dispatch({ type: 'SET_RETRYING', retrying: cached })
+    runHandleRef.current?.cancel()
+    const startedAt = Date.now()
+    runHandleRef.current = startRun({
+      text: example.text,
+      label: example.label,
+      personaCount: state.personaCount,
+      cached,
+      onEvent: makeRunEventHandler({ startedAt, allowRetry: false }),
+    })
+  }
+
   function handleRun() {
     runHandleRef.current?.cancel()
     compareRunHandleRef.current?.cancel()
     setViewMode('A')
     setSortedByReaction(false)
     dispatch({ type: 'RUN_START' })
+    const startedAt = Date.now()
     runHandleRef.current = startRun({
+      text: state.artifactText,
+      label: state.label,
       personaCount: state.personaCount,
-      onEvent: (event) => {
-        switch (event.type) {
-          case 'reaction':
-            dispatch({ type: 'REACTION', reaction: event.data })
-            break
-          case 'progress':
-            dispatch({ type: 'PROGRESS', progress: event.data })
-            break
-          case 'synthesizing':
-            dispatch({ type: 'SYNTHESIZING' })
-            break
-          case 'synthesis':
-            dispatch({ type: 'SYNTHESIS', synthesis: event.data })
-            break
-          case 'done':
-            dispatch({ type: 'DONE', stats: event.data.stats })
-            break
-          case 'error':
-            dispatch({ type: 'ERROR', message: event.data?.message ?? 'unknown error' })
-            break
-          default:
-            break
-        }
-      },
+      onEvent: makeRunEventHandler({ startedAt, allowRetry: true }),
     })
   }
 
@@ -219,9 +260,7 @@ export default function App() {
     runCompare(editedText)
   }
 
-  // _text: unused in mock mode (startRun's mock branch generates synthetic
-  // reactions regardless of content); stage 7's real client will need it.
-  function runCompare(_text) {
+  function runCompare(text) {
     compareRunHandleRef.current?.cancel()
     dispatch({ type: 'COMPARE_RUN_START' })
     // Bug fixed 2026-10-29: without previousReactionsById, mock Run B used
@@ -229,13 +268,27 @@ export default function App() {
     // so Run A/Run B/Delta were always identical -- toggling the view
     // visibly did nothing. previousReactionsById makes mock Run B a
     // deliberate, deterministic edit of Run A's real reactions instead.
+    // Ignored entirely by the real client (section 6.9's getCompareResult
+    // docstring) -- it computes a genuine delta from genuine model calls.
     const reactionsAById = state.reactionsById
     const personas = state.personas
+    const runIdA = state.runId
+    // Captured locally rather than read back from state.compare.runId in
+    // the 'done' handler below: that avoids depending on this closure's
+    // dispatches having already been applied to the next render's state
+    // by the time 'done' fires, which isn't guaranteed.
+    let runIdB = null
     compareRunHandleRef.current = startRun({
+      text,
+      label: state.label,
       personaCount: state.personaCount,
       previousReactionsById: reactionsAById,
       onEvent: (event) => {
         switch (event.type) {
+          case 'run_started':
+            runIdB = event.data.run_id
+            dispatch({ type: 'COMPARE_SET_RUN_ID', runId: runIdB })
+            break
           case 'reaction':
             dispatch({ type: 'COMPARE_REACTION', reaction: event.data })
             break
@@ -244,7 +297,7 @@ export default function App() {
             break
           case 'done':
             dispatch({ type: 'COMPARE_DONE', stats: event.data.stats })
-            getCompareResult({ personas, reactionsAById }).then((result) => {
+            getCompareResult({ personas, reactionsAById, runA: runIdA, runB: runIdB }).then((result) => {
               dispatch({ type: 'COMPARE_RESULT', result })
               setViewMode('delta')
             })

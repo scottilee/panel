@@ -172,6 +172,39 @@ def build_persona_summary_csv(personas: list[Persona]) -> str:
     return "\n".join([header, *rows])
 
 
+_EVIDENCE_ID_RE = re.compile(r"\bp\d{3,}\b")
+
+
+def _normalize_evidence(synthesis: Synthesis, personas_by_id: dict[str, Persona]) -> Synthesis:
+    """Measured (2026-10-28, ad_v1): Ultra sometimes decorates evidence
+    entries with the supporting quote instead of returning a bare ID --
+    e.g. 'p004: "I don\\'t get how the FDIC pass-through works"' -- and a
+    retry asking for bare IDs produced the same thing again. Those
+    decorated strings match no persona, which silently breaks the
+    Findings panel's evidence avatars (they highlight tiles by exact
+    persona_id). Pull the first real ID out of each entry rather than
+    discarding otherwise-correct evidence over formatting; entries with
+    no recoverable ID are dropped, and _invalid_evidence still reports
+    anything left unresolvable.
+    """
+    new_findings = []
+    for finding in synthesis.findings:
+        fixed: list[str] = []
+        for entry in finding.evidence:
+            if entry in personas_by_id:
+                fixed.append(entry)
+                continue
+            match = _EVIDENCE_ID_RE.search(entry)
+            if match and match.group(0) in personas_by_id:
+                print(f"synthesize: normalized evidence entry {entry[:60]!r} -> {match.group(0)}")
+                fixed.append(match.group(0))
+        # Finding.evidence requires 3-5 entries; if normalization leaves
+        # too few, keep the originals so _invalid_evidence can report it
+        # rather than raising a validation error on the model_copy here.
+        new_findings.append(finding.model_copy(update={"evidence": fixed}) if 3 <= len(fixed) <= 5 else finding)
+    return synthesis.model_copy(update={"findings": new_findings})
+
+
 def _invalid_evidence(synthesis: Synthesis, personas_by_id: dict[str, Persona]) -> list[str]:
     problems: list[str] = []
     for i, finding in enumerate(synthesis.findings):
@@ -238,10 +271,13 @@ async def synthesize(artifact_text: str, personas: list[Persona], reactions: lis
     )
 
     synthesis = await _synthesis_call(SYNTHESIS_SYSTEM, user)
+    synthesis = _normalize_evidence(synthesis, personas_by_id)
 
     # Evidence IDs require judgment (which reactions actually support the
-    # claim) so a retry is the right tool there. affected_pct does not --
-    # see _apply_recounted_pct.
+    # claim) so a retry is the right tool there -- but only for evidence
+    # that's genuinely wrong, not merely badly formatted, which
+    # _normalize_evidence has already repaired above. affected_pct needs
+    # neither: see _apply_recounted_pct.
     problems = _invalid_evidence(synthesis, personas_by_id)
     if problems:
         retry_user = (
@@ -249,7 +285,9 @@ async def synthesize(artifact_text: str, personas: list[Persona], reactions: lis
             + "\n\nYour previous answer had discrepancies, fix them exactly:\n"
             + "\n".join(problems)
         )
-        synthesis = await _synthesis_call(SYNTHESIS_SYSTEM, retry_user)
+        synthesis = _normalize_evidence(
+            await _synthesis_call(SYNTHESIS_SYSTEM, retry_user), personas_by_id
+        )
         remaining = _invalid_evidence(synthesis, personas_by_id)
         if remaining:
             print(f"WARNING: invalid evidence IDs remain after retry: {remaining}")

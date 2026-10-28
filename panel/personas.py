@@ -68,6 +68,23 @@ def sample(n: int, seed: int, personas: list[Persona] | None = None) -> list[Per
     return random.Random(seed).sample(pool, n)
 
 
+def sample_stable(n: int, personas: list[Persona] | None = None) -> list[Persona]:
+    """The first n personas in on-disk order. Used by the real HTTP API
+    (api/main.py) instead of sample(): the frontend needs to know, without
+    a network round trip, exactly which personas a given N will use (so
+    the pre-run grid preview shows the same identities incoming reactions
+    will actually arrive for) -- that's trivial to replicate in JS as
+    `pool.slice(0, n)` once it has the pool from GET /personas, whereas
+    replicating Python's random.Random(seed).sample bit-for-bit in JS is
+    a real porting job for no real benefit here (CLI/offline uses of
+    sample() that don't have this constraint keep using the real one).
+    """
+    pool = personas if personas is not None else load_personas()
+    if n > len(pool):
+        raise ValueError(f"requested {n} personas but pool only has {len(pool)}")
+    return pool[:n]
+
+
 def build_slots(total: int = 100) -> list[dict]:
     """total (region, age_band, income_band) target slots for generation,
     per section 4.1's stratification grid. Assigned by independent

@@ -29,36 +29,137 @@ export function isMockMode() {
   return new URLSearchParams(window.location.search).has('mock')
 }
 
+// The real pool, fetched once and cached -- previewPersonas needs it
+// synchronously (section 6.10: the grid re-lays out instantly as the
+// slider moves, before Run is ever clicked), and a fresh fetch per call
+// would both be slow and risk a different array each time.
+let realPoolCache = null
+
+async function loadRealPool() {
+  if (realPoolCache) return realPoolCache
+  const res = await fetch('/personas')
+  if (!res.ok) throw new Error(`GET /personas failed: HTTP ${res.status}`)
+  realPoolCache = await res.json()
+  return realPoolCache
+}
+
 export async function getPoolSize() {
   if (isMockMode()) return MOCK_POOL_SIZE
-  throw new Error('real /personas client not implemented yet (stage 7)')
+  const pool = await loadRealPool()
+  return pool.length
 }
 
 // Synchronous: lets the grid re-lay out to a new N the instant the slider
-// moves, before Run is ever clicked (section 6.10).
+// moves, before Run is ever clicked (section 6.10). Real mode: the first
+// N of the cached pool, in the exact on-disk order panel.personas.
+// sample_stable uses server-side for the actual run -- same rule on both
+// sides, so the preview always shows the identities a real run will
+// actually use (see sample_stable's docstring for why this isn't the
+// same `sample()` random.Random(seed).sample the CLI/stage-6 path uses).
 export function previewPersonas(n) {
   if (isMockMode()) return buildMockPersonas(n)
-  throw new Error('real persona sampling not implemented yet (stage 7)')
+  if (!realPoolCache) {
+    throw new Error('persona pool not loaded yet -- call getPoolSize() first')
+  }
+  return realPoolCache.slice(0, n)
 }
 
-// previousReactionsById: only passed for a compare's second run (Run B).
-// Mock mode uses it to make Run B's reactions a deliberate, deterministic
-// edit of Run A's actual data (see mock.js's buildMockReactionsB) --
-// without it, Run B used to be generated the exact same way as Run A
-// (buildMockReactions depends only on the persona list, never on the
-// artifact text), so toggling Run A/Run B/Delta showed no visible change
-// at all. Stage 7's real client passes a run_a id instead; the backend
-// computes the real delta from genuinely different model output.
-export function startRun({ personaCount, onEvent, previousReactionsById }) {
+// previousReactionsById: only passed for a compare's second run (Run B),
+// and only meaningful in mock mode -- it's what makes mock Run B a
+// deliberate, deterministic edit of Run A's actual data (see mock.js's
+// buildMockReactionsB); without it, Run B used to be generated the exact
+// same way as Run A (buildMockReactions depends only on the persona list,
+// never on the artifact text), so toggling Run A/Run B/Delta showed no
+// visible change at all. The real backend ignores it entirely -- it
+// computes genuinely different reactions from genuinely different model
+// calls on the edited text, no hint needed.
+//
+// text/label: only used by the real client (POST /run's body). Mock mode
+// ignores them -- its reactions are a pure function of the persona list.
+//
+// Returns a handle synchronously ({cancel()}), even though starting a
+// real run needs an async POST before the run_id (and therefore the
+// EventSource) can even exist -- `cancelled` covers the gap so a cancel
+// called before the POST resolves still takes effect.
+// cached: section 6.8's demo fallback -- real mode only. Appends
+// ?cached=true, which the backend only honors if `text` matches one of
+// the real example files byte-for-byte (panel/fetch.py's _find_cached_
+// example); mock mode ignores it, since it has no such concept.
+export function startRun({ text, label, personaCount, onEvent, previousReactionsById, cached }) {
   if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById })
-  throw new Error('real backend client not implemented yet (stage 7)')
+  return startRealRun({ text, label, personaCount, onEvent, cached })
+}
+
+function startRealRun({ text, label, personaCount, onEvent, cached = false }) {
+  let cancelled = false
+  let es = null
+
+  ;(async () => {
+    let runId
+    try {
+      const res = await fetch(`/run${cached ? '?cached=true' : ''}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, label: label || undefined, persona_count: personaCount }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        onEvent({ type: 'error', data: { message: body.detail || `POST /run failed: HTTP ${res.status}` } })
+        return
+      }
+      ;({ run_id: runId } = await res.json())
+    } catch (e) {
+      onEvent({ type: 'error', data: { message: String(e) } })
+      return
+    }
+    if (cancelled) return
+
+    // Not one of section 3's SSE events -- a local-only signal so the
+    // caller (App.jsx) can stash the run_id for POST /compare later.
+    // Mock mode never emits this; real callers must handle it.
+    onEvent({ type: 'run_started', data: { run_id: runId } })
+
+    es = new EventSource(`/run/${runId}/stream`)
+    for (const type of ['reaction', 'progress', 'synthesizing', 'synthesis', 'done']) {
+      es.addEventListener(type, (e) => {
+        onEvent({ type, data: e.data ? JSON.parse(e.data) : undefined })
+        if (type === 'done') es.close()
+      })
+    }
+    es.addEventListener('error', (e) => {
+      // Both the server's named "error" SSE event (section 3) and the
+      // browser's own native connection-failure event arrive through this
+      // same listener. A real server-sent event is a MessageEvent and
+      // always has .data (even if empty); the browser's native failure
+      // event is a plain Event and never has a .data property at all --
+      // check that first, not readyState, which can still read OPEN for
+      // a brief moment right as the server closes the stream.
+      if (e.data !== undefined) {
+        onEvent({ type: 'error', data: JSON.parse(e.data) })
+        es.close()
+      } else if (es.readyState === EventSource.CLOSED) {
+        // Native failure, and the browser has given up retrying (as
+        // opposed to a transient hiccup it's silently reconnecting from).
+        onEvent({ type: 'error', data: { message: 'connection lost' } })
+      }
+    })
+  })()
+
+  return {
+    cancel() {
+      cancelled = true
+      es?.close()
+    },
+  }
 }
 
 // Section 6.8: three example buttons, loaded from GET /examples in the
-// real client (stage 8). Mock mode sources the same shape from mock.js.
+// real client. Mock mode sources the same shape from mock.js.
 export async function getExamples() {
   if (isMockMode()) return EXAMPLES
-  throw new Error('real /examples client not implemented yet (stage 8)')
+  const res = await fetch('/examples')
+  if (!res.ok) throw new Error(`GET /examples failed: HTTP ${res.status}`)
+  return res.json()
 }
 
 // Section 6.6's "Apply this edit and compare": mock mode computes the
@@ -69,7 +170,12 @@ export async function getExamples() {
 // "no real computation cost" intent, just not "hardcoded regardless of
 // input". The real client (stage 7) will POST /compare and await the
 // response.
-export async function getCompareResult({ personas, reactionsAById }) {
+// personas/reactionsAById: mock mode only (it recomputes Run B locally,
+// never calling a server). runA/runB: real mode only (the two run_ids
+// POST /compare needs; the backend already has both runs' real reactions
+// in memory, no need to send them). Each branch ignores the args it
+// doesn't need rather than the caller having to know which to supply.
+export async function getCompareResult({ personas, reactionsAById, runA, runB }) {
   if (isMockMode()) {
     // buildMockReactionsB is deterministic (same personas + reactionsA
     // always produce the same Run B), so recomputing it here gives the
@@ -79,7 +185,16 @@ export async function getCompareResult({ personas, reactionsAById }) {
     for (const r of buildMockReactionsB(personas, reactionsAById)) reactionsBById[r.persona_id] = r
     return buildMockCompareResult(personas, reactionsAById, reactionsBById)
   }
-  throw new Error('real /compare client not implemented yet (stage 7)')
+  const res = await fetch('/compare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ run_a: runA, run_b: runB }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `POST /compare failed: HTTP ${res.status}`)
+  }
+  return res.json()
 }
 
 // Deterministic Fisher-Yates permutation (no Math.random) so reactions
