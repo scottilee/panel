@@ -74,10 +74,12 @@ export default function MarketPanel({
     return (
       <section aria-label="Market comparison" className="market-card market-card-idle">
         <div className="market-pitch">
-          <span className="market-eyebrow">THE MARKET</span>
+          <span className="market-eyebrow">
+            THE MARKET <span className="market-source">· searched with Tavily</span>
+          </span>
           <h2 className="market-idle-title">Compare against the market</h2>
           <p className="market-note">
-            Find two or three competitor pages for the same thing and put the
+            Search the web with Tavily for two or three competitor pages for the same thing and put the
             same readers in front of those too. Separates what every page in
             your category gets wrong from what only yours does.
             {isMock && ' In mock mode this is synthetic — nothing is searched or read.'}
@@ -127,6 +129,16 @@ export default function MarketPanel({
       {status === 'error' && (
         <p className="run-note run-note-error" role="alert">
           {error || 'The market comparison failed.'}
+        </p>
+      )}
+
+      {(pages.length > 0 || query) && (
+        <p className="market-source-line">
+          {isMock
+            ? 'Mock mode: nothing was searched. Live, these pages come from a Tavily search.'
+            : query
+              ? `Searched with Tavily for “${query}”. Each page’s text was extracted before the panel read it.`
+              : 'Searched with Tavily.'}
         </p>
       )}
 

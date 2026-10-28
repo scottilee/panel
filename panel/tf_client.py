@@ -165,6 +165,8 @@ async def chat_json(
     # truncates essentially every Nano call. Every call site passes an
     # explicit budget anyway.
     max_tokens: int = 3000,
+    # Provider-specific request fields, e.g. chat_template_kwargs.
+    extra_body: dict | None = None,
 ) -> ChatJsonResult:
     """Calls model, enforces schema, retries once on validation failure
     (with the error appended to the prompt), retries 429/5xx/connection
@@ -193,6 +195,7 @@ async def chat_json(
             seed=seed,
             max_tokens=current_max_tokens,
             response_format=response_format,
+            **({"extra_body": extra_body} if extra_body else {}),
         )
         counts = _call_counts.get()
         if counts is not None:

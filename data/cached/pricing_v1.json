@@ -1275,10 +1275,11 @@
     "highest_leverage_edit": {
       "current_text": "$29",
       "proposed_text": "$29 per week, cancel anytime, first week free \u2014 no credit card required. 30-day money-back guarantee if you don't save at least $30/week on groceries.",
-      "rationale": "Clarifies pricing period, removes auto-renewal fear, adds risk-free trial, and ties guarantee to the $40/week savings claim \u2014 addressing the top three objections across 50+ personas",
+      "rationale": "Clarifies pricing period, removes auto-renewal fear, adds risk-free trial, and ties guarantee to the $40/week savings claim.",
       "predicted_flips": 35
     },
     "who_you_are_losing": "Low-income households (<$25k) who see $29/week as unaffordable and unproven",
-    "who_you_are_winning": "Tech-comfortable professionals (tech_comfort \u226565, income $40k+) who want time savings and will trial with a guarantee"
+    "who_you_are_winning": "Tech-comfortable professionals (tech_comfort \u226565, income $40k+) who want time savings and will trial with a guarantee",
+    "overall_negative_pct": 32
   }
 }

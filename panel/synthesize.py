@@ -290,6 +290,34 @@ def _patch_pct(text: str, old_pct: int, new_pct: int) -> str:
     return re.sub(pattern, f"{new_pct}%", text)
 
 
+# A figure about the panel: a percentage, or a count of people. Prose
+# outside the findings is never recounted, so these can only be Ultra's
+# estimates ("across 42+ personas", "41% of skeptics") shown as if they
+# were measurements. Figures quoted from the artifact ("$40/week") don't
+# match.
+_PANEL_FIGURE = re.compile(
+    r"\d+(?:\.\d+)?\s*%|\b\d+\+?\s*(?:of\s+\d+\s+)?"
+    r"(?:personas?|readers?|people|residents?|users?|respondents?|testers?|households?)\b",
+    re.I,
+)
+# Clause boundaries a sentence can be cut at and still read as one.
+_CLAUSE_SPLIT = re.compile(r"\s+[—–]\s+|;\s+|:\s+")
+
+
+def _drop_uncounted_figures(text: str) -> str:
+    """Removes the clauses of `text` that cite a panel figure, keeping the
+    rest. Returns "" when every clause does; the UI then shows nothing
+    rather than a number nobody counted."""
+    if not _PANEL_FIGURE.search(text):
+        return text
+    kept = [c.strip() for c in _CLAUSE_SPLIT.split(text) if c.strip() and not _PANEL_FIGURE.search(c)]
+    if not kept:
+        return ""
+    out = "; ".join(kept)
+    out = out[0].upper() + out[1:]
+    return out if out.endswith((".", "!", "?")) else out + "."
+
+
 def _apply_recounted_pct(
     synthesis: Synthesis, personas_by_id: dict[str, Persona], reactions: list[Reaction]
 ) -> Synthesis:
@@ -339,7 +367,20 @@ def _apply_recounted_pct(
                 }
             )
         )
-    return synthesis.model_copy(update={"findings": new_findings, "headline": headline})
+    overall = round(negative_share_pct(list(personas_by_id), reactions_by_id))
+    edit = synthesis.highest_leverage_edit
+    return synthesis.model_copy(
+        update={
+            "findings": new_findings,
+            "headline": headline,
+            "overall_negative_pct": overall,
+            "highest_leverage_edit": edit.model_copy(
+                update={"rationale": _drop_uncounted_figures(edit.rationale)}
+            ),
+            "who_you_are_losing": _drop_uncounted_figures(synthesis.who_you_are_losing),
+            "who_you_are_winning": _drop_uncounted_figures(synthesis.who_you_are_winning),
+        }
+    )
 
 
 # --- Sharded digest stage (large panels) ------------------------------------

@@ -309,10 +309,30 @@ export function buildMockReaction(persona, i, calibration = DEFAULT_CALIBRATION,
   }
 }
 
-export function buildMockReactions(personas, artifactText) {
-  const calibration = calibrationFor(artifactText)
+// Fast mode, imitated: measured live, reasoning off left the panel about
+// 0.1 less negative on mean sentiment and up to twice as willing to act
+// (ad_v1: 16 vs 8 in 100). The shift and act rate move the same way.
+const FAST_SHIFT = 4
+const FAST_ACT_RATE_FACTOR = 1.5
+
+export function buildMockReactions(personas, artifactText, { fast = false } = {}) {
+  const base = calibrationFor(artifactText)
+  const calibration = fast
+    ? { ...base, shift: base.shift + FAST_SHIFT, actRate: Math.min(1, base.actRate * FAST_ACT_RATE_FACTOR) }
+    : base
   const content = contentFor(artifactText)
-  return personas.map((p, i) => buildMockReaction(p, i, calibration, content))
+  return personas.map((p, i) => {
+    const r = buildMockReaction(p, i, calibration, content)
+    // No null objections with reasoning off (ReactionAnswer requires
+    // them), and calls about a third as long.
+    if (!fast) return r
+    return {
+      ...r,
+      top_confusion: r.top_confusion ?? pick(content.confusions, hash32(i + 2)),
+      top_objection: r.top_objection ?? pick(content.objections, hash32(i + 3)),
+      latency_ms: Math.round(r.latency_ms / 3),
+    }
+  })
 }
 
 // Longest sentence in the artifact, used as the edit's current_text for
@@ -427,6 +447,8 @@ export function buildMockSynthesis(personas, artifactText, reactions = []) {
     who_you_are_winning: specific
       ? 'Tech-comfortable 25-40 year olds who skim and see a low number.'
       : 'Tech-comfortable 25-40 year olds who skim and give it the benefit of the doubt.',
+    // The whole panel as one segment, as the backend computes it.
+    overall_negative_pct: recount(personas, reactionsById, []).affected_pct,
   }
 }
 

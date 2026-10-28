@@ -99,6 +99,27 @@ class Reaction(BaseModel):
         return self
 
 
+class ReactionAnswer(BaseModel):
+    """The schema Nano answers in fast mode (reasoning off, see
+    panel/react.py), converted to a Reaction afterwards.
+
+    Field order matters here, not just types: with no reasoning pass the
+    model commits to fields in the order it writes them. Verdict-first,
+    12 of 40 personas said they would act on pricing_v1; with the verdict
+    last, after the objections, 3 of 40 (1 of 38 with reasoning on).
+    Confusion and objection are required strings because with reasoning
+    off Nano returned null for one or both on 9-14 of 20 calls.
+    """
+
+    persona_id: str
+    gut_reaction: str = Field(max_length=200)
+    top_confusion: str = Field(max_length=200)
+    top_objection: str = Field(max_length=200)
+    what_would_change_my_mind: str = Field(max_length=200)
+    sentiment: int = Field(ge=-2, le=2)
+    would_act: bool
+
+
 class SegmentClause(BaseModel):
     """One AND-ed predicate in a Finding's affected_segment_filter."""
 
@@ -147,6 +168,11 @@ class Synthesis(BaseModel):
     highest_leverage_edit: HighestLeverageEdit
     who_you_are_losing: str
     who_you_are_winning: str
+    # Filled in by synthesize.py, never by the model: the share of the
+    # whole panel (usable reactions) whose sentiment was negative. Each
+    # finding's affected_pct only means something next to it -- 70% of a
+    # segment is a finding when the panel is at 30%, and noise at 68%.
+    overall_negative_pct: SkipJsonSchema[int | None] = None
 
 
 class Artifact(BaseModel):
@@ -175,6 +201,9 @@ class Run(BaseModel):
     run_id: str
     artifact: Artifact
     persona_set: str
+    # Reasoning off for the reactions (panel/react.py). Never set on a
+    # cached replay, which was recorded with reasoning on.
+    fast: bool = False
     # "cancelled" is distinct from "error": a deliberate stop is not a
     # failure, and the UI must not show "something went wrong" for it.
     status: Literal[
@@ -287,6 +316,8 @@ class RunRequest(BaseModel):
     # never shown, and skipping it saves an Ultra call (plus ~100 Super
     # calls above 150 personas) on every compare.
     skip_synthesis: bool = False
+    # Fast mode: Nano answers without its reasoning pass (panel/react.py).
+    fast: bool = False
     # A run of this page's that the new one supersedes. Cancelled first, so
     # starting over isn't refused by the one-active-run-per-client rule.
     # The run id is the credential, exactly as for POST /run/{id}/cancel.

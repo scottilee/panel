@@ -489,7 +489,7 @@ async def _execute_run(ctx: RunContext, skip_synthesis: bool) -> None:
     run = ctx.run
     calls = track_calls()
     try:
-        async for reaction in fan_out(run.artifact.text, ctx.personas, run.run_id):
+        async for reaction in fan_out(run.artifact.text, ctx.personas, run.run_id, fast=run.fast):
             await _record_reaction(ctx, reaction)
 
         def stats(ultra_ms: int = 0) -> RunStats:
@@ -652,6 +652,7 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
         run_id=run_id,
         artifact=Artifact(source=source, text=text, url=url, label=req.label),
         persona_set=f"v1-{persona_count}",
+        fast=req.fast and cached_data is None,
         status="pending",
     )
     ctx = RunContext(run=run, personas=personas, client_ip=client_ip, spend=spend)
@@ -663,7 +664,7 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
     # be checked against real traffic after a deploy.
     print(
         f"run {run_id} started: n={persona_count} source={source} "
-        f"cached={cached_data is not None} client={client_ip}",
+        f"cached={cached_data is not None} fast={run.fast} client={client_ip}",
         flush=True,
     )
 
@@ -771,12 +772,14 @@ async def _broadcast_benchmark(ctx: BenchmarkContext, event_type: str, data: obj
         await queue.put(event)
 
 
-async def _panel_on_text(text: str, personas: list[Persona], run_id: str) -> list[Reaction]:
+async def _panel_on_text(
+    text: str, personas: list[Persona], run_id: str, fast: bool = False
+) -> list[Reaction]:
     """A panel read with no Run record and no synthesis -- the benchmark
     only needs the reactions, and a competitor's page does not deserve a
     verdict of its own."""
     reactions: list[Reaction] = []
-    async for reaction in fan_out(text, personas, run_id):
+    async for reaction in fan_out(text, personas, run_id, fast=fast):
         reactions.append(reaction)
     return reactions
 
@@ -866,7 +869,11 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
 
         for page, text in fetched:
             ctx.personas_sent += len(personas)
-            reactions = await _panel_on_text(text, personas, f"{ctx.benchmark_id}:{page.label}")
+            # The parent run's mode, so both sides of the comparison are
+            # read the same way.
+            reactions = await _panel_on_text(
+                text, personas, f"{ctx.benchmark_id}:{page.label}", fast=parent.run.fast
+            )
             answered = len(usable(reactions))
             if answered < len(personas) * MIN_USABLE_SHARE:
                 # Same rule as a run's report: themes from a handful of

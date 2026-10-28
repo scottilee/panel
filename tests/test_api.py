@@ -736,7 +736,7 @@ def test_no_report_is_written_when_most_of_the_panel_failed(monkeypatch):
     ctx.personas = PERSONA_POOL[:10]
     ctx.run.reactions = []
 
-    async def fake_fan_out(text, personas, run_id):
+    async def fake_fan_out(text, personas, run_id, **_kwargs):
         for i, p in enumerate(personas):
             r = M.Reaction(
                 persona_id=p.id,
@@ -779,7 +779,7 @@ def test_skip_synthesis_finishes_without_a_report():
     ctx = _finished_ctx("skip", status="pending")
     ctx.personas = PERSONA_POOL[:2]
 
-    async def fake_fan_out(text, personas, run_id):
+    async def fake_fan_out(text, personas, run_id, **_kwargs):
         from panel.schemas import Reaction
 
         for p in personas:
@@ -982,7 +982,7 @@ def test_benchmark_skips_thin_pages_and_pages_most_readers_failed(monkeypatch):
     def fetch(url):
         return "too short" if "thin" in url else "a real competitor page " * 10
 
-    async def panel(text, personas, run_id):
+    async def panel(text, personas, run_id, **_kwargs):
         return [
             M.Reaction(
                 persona_id=p.id, sentiment=0, would_act=False, gut_reaction="-",
@@ -1006,3 +1006,44 @@ def test_benchmark_skips_thin_pages_and_pages_most_readers_failed(monkeypatch):
     assert ctx.status == "no_pages"
     assert ctx.personas_sent == 10
     assert [p.label for p in ctx.pages] == ["Your page"]
+
+
+def test_fast_flag_reaches_the_fan_out_and_the_record():
+    import asyncio
+
+    from api import main as M
+
+    ctx = _finished_ctx("fast", status="pending")
+    ctx.personas = PERSONA_POOL[:10]
+    ctx.run.reactions = []
+    ctx.run.fast = True
+    seen = {}
+
+    async def fake_fan_out(text, personas, run_id, **kwargs):
+        seen.update(kwargs)
+        for p in personas:
+            yield M.Reaction(
+                persona_id=p.id,
+                sentiment=0,
+                would_act=False,
+                gut_reaction="ok",
+                top_confusion="none",
+                top_objection="none",
+                what_would_change_my_mind="none",
+            )
+
+    orig = (M.fan_out, M._persist)
+    M.fan_out, M._persist = fake_fan_out, lambda ctx: None
+    try:
+        asyncio.run(M._execute_run(ctx, skip_synthesis=True))
+    finally:
+        M.fan_out, M._persist = orig
+    assert seen == {"fast": True}
+    assert ctx.run.status == "done"
+
+
+def test_run_request_defaults_to_reasoning_on():
+    from panel.schemas import RunRequest
+
+    assert RunRequest(text=LONG_ENOUGH).fast is False
+    assert RunRequest(text=LONG_ENOUGH, fast=True).fast is True

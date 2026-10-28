@@ -11,8 +11,9 @@ each one affects, and one specific edit to try. Apply the edit and it reruns
 the same people so you can see who changed their mind.
 
 A real 100-person copy test costs thousands of dollars and takes a week.
-This costs about ten cents and takes a minute: 35 seconds for the panel to
-read, the rest for the synthesis.
+This costs about ten cents and takes a couple of minutes: 35 seconds for
+the panel to read at best, one to two minutes when Token Factory is busy,
+then the synthesis.
 
 **More than nine in ten personas say "I wouldn't act on this." That's the point.** The
 panel is deliberately built to be hard to please (see
@@ -197,8 +198,9 @@ a synthetic panel worthless. Three things push against it:
 
 1. **The personas are built skeptical.** Generation requires at least 3 of
    every 10 personas to have skepticism ≥ 70/100 — the shipped pool lands
-   at 386 of 1,000 — and the pool spans the full 1-100 range on seven
-   numeric traits (tech comfort, skepticism, and the Big Five).
+   at 386 of 1,000 — and the pool spans most of the 1-100 scale on all
+   seven numeric traits (tech comfort, skepticism, and the Big Five): tech
+   comfort runs 4-96, skepticism 8-90, and the narrowest, neuroticism, 5-85.
 
    The pool is also exactly stratified and globally unique, which the
    generator checks and fails on: **125 personas per region** across 8
@@ -228,7 +230,8 @@ a synthetic panel worthless. Three things push against it:
 
 ## Performance
 
-Measured against `data/examples/pricing_v1.txt`, 100 real Nano calls per row:
+Measured on 2026-10-27 against `data/examples/pricing_v1.txt`, 100 real Nano
+calls per row:
 
 | Concurrency | Elapsed | p50 latency | p95 latency | 429s |
 | --- | --- | --- | --- | --- |
@@ -237,8 +240,11 @@ Measured against `data/examples/pricing_v1.txt`, 100 real Nano calls per row:
 | 50 | 35.3s | 14.6s | 20.4s | 0 |
 
 Zero 429s at every level tested, so `MAX_CONCURRENCY=50` — **100 reactions in
-35.3 seconds.** A full run including synthesis lands around 40-90s depending
-on how long Ultra reasons.
+35.3 seconds.** That is the best case, not the typical one: per-call latency
+moves with load on the shared endpoint. Re-recording the three examples on
+2026-10-28, median Nano latency was 20-33s per call rather than 14.6s, so the
+panel took roughly 70-140s to read. Ultra then adds its own reasoning time
+on top.
 
 Above N=150 a condensing pass is added. Measured end to end at N=200:
 
@@ -259,7 +265,7 @@ wrong twice is the most instructive thing in the project).
 Extrapolating to a full 1,000-persona panel: ~6 minutes of reading, ~1
 minute of condensing (100 calls in two waves of 50), plus the synthesis —
 roughly 8 minutes, against an 1,800s request timeout. The default stays at
-100 because 35 seconds is a different kind of experience.
+100 because a minute or two is a different kind of experience.
 
 ---
 

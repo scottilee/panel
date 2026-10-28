@@ -25,6 +25,8 @@ import {
 export const MOCK_POOL_SIZE = 1000
 
 const REACTION_INTERVAL_MS = 80
+// Roughly the measured 3-5x speed-up of a real fast-mode run.
+const FAST_REACTION_INTERVAL_MS = 20
 const SYNTHESIS_DELAY_MS = 500
 
 export function isMockMode() {
@@ -128,6 +130,10 @@ export function previewPersonas(n) {
 // run streams its reactions and goes straight to `done`, saving the Ultra
 // call (and, above 150 personas, the Super condensing pass).
 //
+// fast: Nano answers without reasoning first (panel/react.py). Mock mode
+// only imitates it -- quicker ticks and a slightly softer panel, matching
+// the measured direction -- since its reactions are made up either way.
+//
 // Returns a handle synchronously ({cancel()}), even though a real run
 // needs an async POST before its run_id exists -- `cancelled` covers the
 // gap, so a cancel issued before the POST resolves still reaches the
@@ -141,9 +147,10 @@ export function startRun({
   previousReactionsById,
   cached,
   skipSynthesis,
+  fast,
 }) {
-  if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById, text, skipSynthesis })
-  return startRealRun({ text, url, label, personaCount, onEvent, cached, skipSynthesis })
+  if (isMockMode()) return startMockRun({ personaCount, onEvent, previousReactionsById, text, skipSynthesis, fast })
+  return startRealRun({ text, url, label, personaCount, onEvent, cached, skipSynthesis, fast })
 }
 
 // FastAPI's `detail` is a string for errors the app raises (429 limits,
@@ -163,7 +170,7 @@ function errorDetail(body, fallback) {
 // run's fire-and-forget cancel and could be refused with a 429.
 let lastRealRunId = null
 
-function startRealRun({ text, url, label, personaCount, onEvent, cached = false, skipSynthesis = false }) {
+function startRealRun({ text, url, label, personaCount, onEvent, cached = false, skipSynthesis = false, fast = false }) {
   let cancelled = false
   let es = null
   let runId = null
@@ -188,6 +195,7 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false,
           label: label || undefined,
           persona_count: personaCount,
           skip_synthesis: skipSynthesis || undefined,
+          fast: fast || undefined,
           replaces: lastRealRunId || undefined,
         }),
       })
@@ -327,11 +335,12 @@ function completionOrder(n) {
   return order
 }
 
-function startMockRun({ personaCount, onEvent, previousReactionsById, text, skipSynthesis }) {
+function startMockRun({ personaCount, onEvent, previousReactionsById, text, skipSynthesis, fast }) {
   const personas = buildMockPersonas(personaCount)
   const reactions = previousReactionsById
     ? buildMockReactionsB(personas, previousReactionsById)
-    : buildMockReactions(personas, text)
+    : buildMockReactions(personas, text, { fast })
+  const interval = fast ? FAST_REACTION_INTERVAL_MS : REACTION_INTERVAL_MS
   const order = completionOrder(personaCount)
   const total = personas.length
 
@@ -364,10 +373,10 @@ function startMockRun({ personaCount, onEvent, previousReactionsById, text, skip
     if (done % 10 === 0 || done === total) {
       onEvent({ type: 'progress', data: { done, total } })
     }
-    timeoutId = setTimeout(() => emitNext(idx + 1), REACTION_INTERVAL_MS)
+    timeoutId = setTimeout(() => emitNext(idx + 1), interval)
   }
 
-  timeoutId = setTimeout(() => emitNext(0), REACTION_INTERVAL_MS)
+  timeoutId = setTimeout(() => emitNext(0), interval)
 
   return {
     cancel() {

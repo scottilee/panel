@@ -72,6 +72,11 @@ export const initialState = {
   // Set when the live run failed and a recorded run of the same example
   // is being shown instead: { reason } names why, so the page can say so.
   cachedReplay: null,
+  // The fast-mode switch (Nano answers without reasoning first), and the
+  // mode the current run actually used: the switch can move after a run,
+  // and its compare run must be read the same way it was.
+  fastMode: false,
+  runFast: false,
   compare: initialCompareState,
 }
 
@@ -133,6 +138,9 @@ export function reducer(state, action) {
     case 'SET_ARTIFACT_URL':
       return { ...state, artifactUrl: action.url }
 
+    case 'SET_FAST_MODE':
+      return { ...state, fastMode: action.fast }
+
     case 'SET_LABEL':
       // Typed by hand, so it is the user's and nothing clears it.
       return { ...state, label: action.label, labelFromExample: false }
@@ -141,6 +149,7 @@ export function reducer(state, action) {
       return {
         ...state,
         runText: action.text ?? '',
+        runFast: Boolean(action.fast),
         cachedReplay: null,
         status: STATUS.PENDING,
         reactionsById: {},
@@ -163,7 +172,8 @@ export function reducer(state, action) {
       return { ...state, runText: action.text }
 
     case 'CACHED_REPLAY':
-      return { ...state, retrying: true, cachedReplay: { reason: action.reason } }
+      // Recorded with reasoning on, whatever the switch says.
+      return { ...state, retrying: true, runFast: false, cachedReplay: { reason: action.reason } }
 
     case 'REACTION':
       return {

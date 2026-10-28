@@ -1,16 +1,20 @@
 // N slider -- step 2 ("Who reads it") of the setup card. The count is also
 // an editable number inline in the step header, for precise entry.
 
-// Throughput, not per-call latency: measured at 100 reactions in ~35-40s
-// at MAX_CONCURRENCY=50.
-const SECONDS_PER_PERSONA_ESTIMATE = 0.4
+// Throughput, not per-call latency, at MAX_CONCURRENCY=50. 100 reactions
+// once took ~35-40s; measured 2026-10-28 Nano's median call was 13-21s,
+// so a 100-persona read now takes about 70-140s (README, Performance).
+const SECONDS_PER_PERSONA_ESTIMATE = 0.8
+// Fast mode (reasoning off): measured median calls of 3-7s against
+// 13-21s, so a 100-persona read lands under 20 seconds.
+const FAST_SECONDS_PER_PERSONA_ESTIMATE = 0.15
 
 function snapToStep(n, step, min, max) {
   const snapped = Math.round(n / step) * step
   return Math.min(max, Math.max(min, snapped))
 }
 
-export default function PersonaCountControl({ n, poolSize, onChange, disabled = false }) {
+export default function PersonaCountControl({ n, poolSize, onChange, disabled = false, fast = false }) {
   const min = 10
   const step = 10
 
@@ -52,7 +56,7 @@ export default function PersonaCountControl({ n, poolSize, onChange, disabled = 
       />
       <span className="count-caption">
         Balanced across region, age, income and personality. About {n} Nano calls, roughly{' '}
-        {Math.round(n * SECONDS_PER_PERSONA_ESTIMATE)} seconds.
+        {Math.round(n * (fast ? FAST_SECONDS_PER_PERSONA_ESTIMATE : SECONDS_PER_PERSONA_ESTIMATE))} seconds.
       </span>
     </div>
   )

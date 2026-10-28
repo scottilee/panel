@@ -862,3 +862,25 @@ def test_an_unrecountable_filter_keeps_the_estimate_instead_of_failing_the_run(p
     )
     out = _apply_recounted_pct(synth, pool, _reactions_for(pool, set()))
     assert all(f.affected_pct == 40 and f.segment_size is None for f in out.findings)
+
+
+def test_recount_reports_the_whole_panels_negative_share(pool):
+    """A segment's share is only a finding next to the panel-wide figure."""
+    reactions = _reactions_for(pool, {"p001", "p002", "p009"})
+    out = _apply_recounted_pct(make_synthesis(["p001", "p002", "p003"]), pool, reactions)
+    assert out.overall_negative_pct == round(100 * 3 / len(pool))
+
+
+def test_uncounted_panel_figures_are_dropped_from_the_prose():
+    """Only findings are recounted, so a percentage or head count anywhere
+    else is Ultra's estimate dressed as a measurement."""
+    from panel.synthesize import _drop_uncounted_figures
+
+    assert _drop_uncounted_figures(
+        "41% of high-skepticism readers cite hidden fees; publishing a fixed fee removes the barrier."
+    ) == "Publishing a fixed fee removes the barrier."
+    assert _drop_uncounted_figures(
+        "Ties the guarantee to the $40/week claim — addressing objections across 50+ personas"
+    ) == "Ties the guarantee to the $40/week claim."
+    assert _drop_uncounted_figures("Older, low-trust readers.") == "Older, low-trust readers."
+    assert _drop_uncounted_figures("Wins over 12 readers") == ""

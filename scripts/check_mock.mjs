@@ -92,6 +92,8 @@ for (const ex of M.EXAMPLES) {
     if (Math.abs(f.segment_pct - (100 * members.length) / people.length) > 1e-9) ok = false
   }
   if (!syn.headline.includes(`${syn.findings[0].affected_pct}%`)) ok = false
+  const overall = Math.round((100 * rs.filter((r) => r.sentiment < 0).length) / rs.length)
+  if (syn.overall_negative_pct !== overall) ok = false
   if (!ok) bad++
   console.log((ok ? 'OK   ' : 'WRONG') + ' findings are recounted from the mock reactions')
 }
@@ -160,6 +162,23 @@ for (const ex of M.EXAMPLES) {
     r.flipped_positive - r.flipped_negative === actB - actA
   if (!ok) bad++
   console.log((ok ? 'OK   ' : 'WRONG') + ' compare flips and would-act change share one denominator')
+}
+
+// Fast mode imitates the measured direction: never more negative, at
+// least as willing to act, and no null objections (ReactionAnswer).
+{
+  const people = M.buildMockPersonas(200)
+  const text = M.EXAMPLES[1].text
+  const slow = M.buildMockReactions(people, text)
+  const fast = M.buildMockReactions(people, text, { fast: true })
+  const mean = (rs) => rs.reduce((s, r) => s + r.sentiment, 0) / rs.length
+  const acts = (rs) => rs.filter((r) => r.would_act).length
+  const ok =
+    mean(fast) >= mean(slow) &&
+    acts(fast) >= acts(slow) &&
+    fast.every((r) => r.top_confusion !== null && r.top_objection !== null)
+  if (!ok) bad++
+  console.log((ok ? 'OK   ' : 'WRONG') + ' fast mode is a little softer and never leaves objections empty')
 }
 
 console.log(bad ? `\n${bad} PROBLEM(S)` : '\nmock mode asserts nothing it cannot support')

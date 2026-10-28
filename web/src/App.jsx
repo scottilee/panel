@@ -17,6 +17,7 @@ import Findings from './components/Findings.jsx'
 import MarketPanel from './components/MarketPanel.jsx'
 import Grid from './components/Grid.jsx'
 import PersonaCard from './components/PersonaCard.jsx'
+import FastModeToggle from './components/FastModeToggle.jsx'
 import PersonaCountControl from './components/PersonaCountControl.jsx'
 import StatsStrip from './components/StatsStrip.jsx'
 import Verdict from './components/Verdict.jsx'
@@ -405,13 +406,14 @@ export default function App() {
     // POST /run accepts exactly one of text or url; run_started reports
     // the extracted text back as runText.
     const text = state.inputMode === 'url' ? undefined : state.artifactText
-    dispatch({ type: 'RUN_START', text })
+    dispatch({ type: 'RUN_START', text, fast: state.fastMode })
     const startedAt = Date.now()
     runHandleRef.current = startRun({
       text,
       url: state.inputMode === 'url' ? state.artifactUrl.trim() : undefined,
       label: state.label,
       personaCount: state.personaCount,
+      fast: state.fastMode,
       onEvent: makeRunEventHandler({ startedAt, allowRetry: true, text }),
     })
   }
@@ -461,6 +463,8 @@ export default function App() {
       previousReactionsById: reactionsAById,
       // Run B's own report is never shown, only its reactions.
       skipSynthesis: true,
+      // Read the way Run A was, or the mode change would show up as flips.
+      fast: state.runFast,
       onEvent: (event) => {
         switch (event.type) {
           case 'run_started':
@@ -566,12 +570,19 @@ export default function App() {
             poolSize={state.poolSize}
             onChange={handlePersonaCountChange}
             disabled={isRunning || countLocked}
+            fast={state.fastMode}
           />
           <div className="setup-step">
             <div className="step-header">
               <span className="step-num">3</span>
               <span className="step-label">Run it</span>
             </div>
+            <FastModeToggle
+              fast={state.fastMode}
+              onChange={(fast) => dispatch({ type: 'SET_FAST_MODE', fast })}
+              disabled={isRunning}
+              mock={isMockMode()}
+            />
             <button type="button" className="run-button" disabled={!canRun} onClick={handleRun}>
               {isRunning && <span className="run-spinner" aria-hidden="true" />}
               {isRunning ? 'Running' : anyRunStarted ? 'Run again' : 'Run panel'}

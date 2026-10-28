@@ -4,6 +4,9 @@ Paste-ready text for each Devpost field. Numbers here are measured, not
 estimated — see README.md for the tables and FEEDBACK.md for the
 model-behaviour work.
 
+**Track:** Best Apps and Agents (Nebius x NVIDIA Global AI Hackathon), also
+entered for Best Use of Tavily.
+
 ---
 
 ## Project name
@@ -33,7 +36,7 @@ notice. Pick how many people should read it, from 10 to 1,000. Hit run.
 
 What happens next is the part worth watching: a grid of tiles fills in
 live, one per person, each turning a colour as that persona's reaction
-lands. At the default 100 people, you have a verdict in about a minute:
+lands. At the default 100 people, you have a verdict in a couple of minutes:
 
 - **A headline finding** with a counted number attached, e.g. "30% of
   lower-income, high-skepticism readers react negatively, mostly on price
@@ -77,7 +80,7 @@ almost nobody does one — they ship and guess. The people who most need the
 feedback (a solo founder, a small nonprofit, a city writing a parking
 notice) are exactly the people who can't buy it.
 
-Panel costs about ten cents and takes a minute.
+Panel costs about ten cents and takes a couple of minutes.
 
 But the reason to build it on an open model family specifically is sharper
 than cost. The job needs a *hundred to a thousand* cheap opinions and *one*
@@ -107,7 +110,9 @@ and what share of them actually reacted negatively. We did this because Ultra's 
 off by 12-70 points, and retrying with the discrepancy spelled out
 produced identical wrong numbers. Each finding's percentage and segment
 size are counts, and the prompt bars the headline and claims from citing
-any other figure. When a filter can't be recounted (it names a band that
+any other figure. Prose that is never recounted (the edit's rationale, who
+you're winning and losing) has any panel figure cut out in code, so the
+only percentages on screen are ones Python counted. When a filter can't be recounted (it names a band that
 doesn't exist, say), the card is labelled an estimate rather than shown as
 a count.
 
@@ -166,8 +171,9 @@ the evidence; Python does the arithmetic.
 
 ## Accomplishments we're proud of
 
-- **100 people in 35 seconds, measured**, with zero rate-limit errors at 50
-  concurrent calls at every level we tested — and a thousand in roughly
+- **100 people in 35 seconds at best, measured**, with zero rate-limit
+  errors at 50 concurrent calls at every level we tested (one to two
+  minutes when the shared endpoint is busy) — and a thousand in roughly
   eight minutes for well under a dollar (extrapolated from the measured
   N=200 run).
 - **A 5.5× speedup on the condensing stage** (721s → 130s at N=200), all of

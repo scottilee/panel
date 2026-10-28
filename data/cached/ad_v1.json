@@ -1275,10 +1275,11 @@
     "highest_leverage_edit": {
       "current_text": "No teaser rate that drops after 90 days.",
       "proposed_text": "We guarantee a minimum 4.5% APY for the first 12 months, backed by an independent quarterly audit of all partner bank rates.",
-      "rationale": "This single change addresses the #1 demand across 42+ personas: a concrete, audited APY floor for a full year, replacing a vague \"no teaser\" claim with a verifiable guarantee.",
+      "rationale": "A concrete, audited APY floor for a full year, replacing a vague \"no teaser\" claim with a verifiable guarantee.",
       "predicted_flips": 42
     },
     "who_you_are_losing": "High-skepticism, low-tech-comfort, and lower-income savers who control the bulk of emergency-fund balances but won't move money without a guaranteed, audited APY floor.",
-    "who_you_are_winning": "Tech-comfortable, higher-income optimizers (e.g., p068, p081, p083, p023, p008) who already grasp yield arbitrage and will act on a credible rate advantage."
+    "who_you_are_winning": "Tech-comfortable, higher-income optimizers (e.g., p068, p081, p083, p023, p008) who already grasp yield arbitrage and will act on a credible rate advantage.",
+    "overall_negative_pct": 62
   }
 }

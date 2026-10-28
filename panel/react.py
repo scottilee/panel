@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 
 from panel.config import MAX_CONCURRENCY, MODEL_NANO
 from panel.prompts import REACTION_SYSTEM, reaction_user
-from panel.schemas import Persona, Reaction
+from panel.schemas import Persona, Reaction, ReactionAnswer
 from panel.tf_client import chat_json
 
 
@@ -26,6 +26,18 @@ def seed_for(persona_id: str) -> int:
 # topping out at 2092.
 REACTION_MAX_TOKENS = 3000
 
+# Fast mode. Measured 2026-10-28 against Token Factory: of everything
+# tried, only enable_thinking=False changes Nano's behaviour; /no_think,
+# reasoning_effort and the reasoning/thinking budget parameters are all
+# silently ignored, so reasoning is fully on or fully off. Off, at 100
+# personas on each example: median call 3-7s (13-21s on), 100/100 valid
+# first try (92-98 on), mean sentiment ~0.1 less negative, and would_act
+# 3/16/0 vs 4/8/0 on pricing/ad/policy. It needs ReactionAnswer's
+# verdict-last field order to stay that close.
+FAST_EXTRA_BODY = {"chat_template_kwargs": {"enable_thinking": False}}
+# Observed completions run ~150 tokens with no reasoning to pay for.
+REACTION_FAST_MAX_TOKENS = 800
+
 # Lower than the 0.7 used for one-off generation: at 0.7 the identical
 # edited artifact against the identical panel flipped 7 people on one run
 # and 4 on an immediate rerun, noise that swamped the edit's own effect.
@@ -37,7 +49,11 @@ REACTION_FAILED = "the model call failed"
 
 
 async def react_one(
-    persona: Persona, artifact_text: str, run_id: str, sem: asyncio.Semaphore
+    persona: Persona,
+    artifact_text: str,
+    run_id: str,
+    sem: asyncio.Semaphore,
+    fast: bool = False,
 ) -> Reaction:
     """One persona's reaction, never raising (scripts/gen_personas.py's
     anti-sycophancy check reuses it)."""
@@ -47,12 +63,14 @@ async def react_one(
                 model=MODEL_NANO,
                 system=REACTION_SYSTEM,
                 user=reaction_user(persona.model_dump_json(), artifact_text),
-                schema=Reaction,
+                schema=ReactionAnswer if fast else Reaction,
                 temperature=REACTION_TEMPERATURE,
                 seed=seed_for(persona.id),
-                max_tokens=REACTION_MAX_TOKENS,
+                max_tokens=REACTION_FAST_MAX_TOKENS if fast else REACTION_MAX_TOKENS,
+                extra_body=FAST_EXTRA_BODY if fast else None,
             )
-            return result.data.model_copy(
+            reaction = Reaction.model_validate(result.data.model_dump())
+            return reaction.model_copy(
                 update={
                     "persona_id": persona.id,
                     "run_id": run_id,
@@ -90,9 +108,11 @@ async def fan_out(
     personas: list[Persona],
     run_id: str,
     concurrency: int | None = None,
+    fast: bool = False,
 ) -> AsyncIterator[Reaction]:
     """Yields one Reaction per persona as it completes (completion order,
-    not persona order). A persona whose call fails still yields a Reaction
+    not persona order). fast turns Nano's reasoning off (see
+    FAST_EXTRA_BODY). A persona whose call fails still yields a Reaction
     with raw_error set, so one bad call never stalls the run.
 
     Every task is cancelled if the consumer stops early: all N tasks are
@@ -101,7 +121,7 @@ async def fan_out(
     """
     sem = asyncio.Semaphore(concurrency or MAX_CONCURRENCY)
     tasks = [
-        asyncio.create_task(react_one(p, artifact_text, run_id, sem)) for p in personas
+        asyncio.create_task(react_one(p, artifact_text, run_id, sem, fast)) for p in personas
     ]
     try:
         for task in asyncio.as_completed(tasks):

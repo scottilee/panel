@@ -1275,10 +1275,11 @@
     "highest_leverage_edit": {
       "current_text": "fee schedule maintained by the Department of Transportation and published separately on the City's website",
       "proposed_text": "flat fee of $15 per additional permit and $5 per visitor pass, frozen for two years",
-      "rationale": "41% of high-skepticism readers cite hidden fees as top objection; publishing a fixed fee inline removes the trust barrier.",
+      "rationale": "Publishing a fixed fee inline removes the trust barrier.",
       "predicted_flips": 11
     },
     "who_you_are_losing": "Low-tech-comfort, low-income, and high-skepticism residents who cannot navigate hidden fee lookups, opaque block maps, and paperwork hassles.",
-    "who_you_are_winning": "High-tech-comfort residents in Southeast and West US who ignore city notices unless their exact street is named."
+    "who_you_are_winning": "High-tech-comfort residents in Southeast and West US who ignore city notices unless their exact street is named.",
+    "overall_negative_pct": 28
   }
 }

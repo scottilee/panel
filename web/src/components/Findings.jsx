@@ -33,7 +33,17 @@ function segmentCaption(finding) {
   return finding.segment_pct == null ? people : `${people} · ${Math.round(finding.segment_pct)}% of panel`
 }
 
-function FindingRow({ finding, onSegmentClick, onEvidenceHoverStart, onEvidenceHoverEnd }) {
+// The panel-wide figure the segment's share should be read against. Old
+// recordings predate it, so a missing baseline just isn't drawn.
+function baselineCaption(finding, overall) {
+  if (overall == null || finding.segment_size == null) return null
+  const diff = finding.affected_pct - overall
+  const relation = diff === 0 ? 'same as' : `${Math.abs(diff)} points ${diff > 0 ? 'above' : 'below'}`
+  return `${relation} the whole panel (${overall}%)`
+}
+
+function FindingRow({ finding, overall, onSegmentClick, onEvidenceHoverStart, onEvidenceHoverEnd }) {
+  const baseline = baselineCaption(finding, overall)
   return (
     <article className="finding-row">
       <span className={`finding-row-severity finding-row-severity-${finding.severity}`}>
@@ -62,7 +72,15 @@ function FindingRow({ finding, onSegmentClick, onEvidenceHoverStart, onEvidenceH
         <span className="finding-row-pct-label">of this segment reacted negatively</span>
         <div className="finding-row-bar">
           <div className="finding-row-bar-fill" style={{ width: `${finding.affected_pct}%` }} />
+          {baseline && (
+            <div
+              className="finding-row-bar-baseline"
+              style={{ left: `${overall}%` }}
+              title={`Whole panel: ${overall}% reacted negatively`}
+            />
+          )}
         </div>
+        {baseline && <span className="finding-row-pct-label finding-row-baseline">{baseline}</span>}
         <span className="finding-row-pct-label">{segmentCaption(finding)}</span>
       </div>
     </article>
@@ -78,6 +96,7 @@ export default function Findings({ synthesis, onSegmentClick, onEvidenceHoverSta
         <FindingRow
           key={i}
           finding={finding}
+          overall={synthesis.overall_negative_pct}
           onSegmentClick={onSegmentClick}
           onEvidenceHoverStart={onEvidenceHoverStart}
           onEvidenceHoverEnd={onEvidenceHoverEnd}

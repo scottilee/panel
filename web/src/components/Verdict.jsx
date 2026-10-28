@@ -65,7 +65,7 @@ export default function Verdict({
             {'  ->  '}
             <strong className="verdict-edit-after">{edit.proposed_text}</strong>
           </span>
-          <span className="verdict-edit-why">{edit.rationale}</span>
+          {edit.rationale && <span className="verdict-edit-why">{edit.rationale}</span>}
         </div>
         <button
           type="button"

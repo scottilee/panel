@@ -144,3 +144,46 @@ async def test_uses_the_measured_token_budget(monkeypatch, personas):
     await collect("artifact", personas[:1])
     assert seen["max_tokens"] == react_mod.REACTION_MAX_TOKENS
     assert react_mod.REACTION_MAX_TOKENS >= 3000
+
+
+async def test_fast_mode_turns_reasoning_off_with_the_verdict_last_schema(monkeypatch, personas):
+    from panel.schemas import ReactionAnswer
+
+    seen = []
+
+    async def fake(**kwargs):
+        seen.append(kwargs)
+        pid = kwargs["user"].split('"id":"')[1].split('"')[0]
+        result = FakeResult(pid)
+        result.data = ReactionAnswer(**result.data.model_dump(include=set(ReactionAnswer.model_fields)))
+        return result
+
+    monkeypatch.setattr(react_mod, "chat_json", fake)
+    out = await collect("artifact", personas[:2], fast=True)
+    assert all(isinstance(r, Reaction) and r.run_id == "run-x" for r in out)
+    assert all(k["schema"] is ReactionAnswer for k in seen)
+    assert all(k["extra_body"] == react_mod.FAST_EXTRA_BODY for k in seen)
+    assert all(k["max_tokens"] == react_mod.REACTION_FAST_MAX_TOKENS for k in seen)
+
+
+async def test_default_mode_leaves_reasoning_on(monkeypatch, personas):
+    seen = []
+
+    async def fake(**kwargs):
+        seen.append(kwargs)
+        pid = kwargs["user"].split('"id":"')[1].split('"')[0]
+        return FakeResult(pid)
+
+    monkeypatch.setattr(react_mod, "chat_json", fake)
+    await collect("artifact", personas[:2])
+    assert all(k["schema"] is Reaction and k["extra_body"] is None for k in seen)
+
+
+def test_reaction_answer_puts_the_verdict_after_the_objections():
+    """With reasoning off the model commits in field order; verdict-first
+    quadrupled would_act in the probe."""
+    from panel.schemas import ReactionAnswer
+
+    order = list(ReactionAnswer.model_json_schema()["properties"])
+    assert order.index("top_objection") < order.index("sentiment") < order.index("would_act")
+    assert {"top_confusion", "top_objection"} <= set(ReactionAnswer.model_json_schema()["required"])

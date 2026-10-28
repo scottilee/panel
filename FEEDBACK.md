@@ -255,6 +255,10 @@ Credit where it is due, because the above is a list of problems:
 - **Concurrency.** 50 concurrent Nano calls, sustained, **zero 429s** at
   every level we tested (10/25/50). 100 reactions in 35.3 seconds. We
   budgeted a day for rate-limit handling and needed almost none of it.
+  The flip side: latency, not rate limits, is what varies. A day later the
+  same Nano call had a median of 20-33s instead of 14.6s, so the same
+  panel took two to four times as long. A published latency or load
+  indicator per model would let an app tell its users what to expect.
 - **The OpenAI-compatible surface is genuinely drop-in.** `AsyncOpenAI`
   pointed at `api.tokenfactory.nebius.com/v1`, and `response_format` with
   a `json_schema` worked first try on all three models. We wrote a
