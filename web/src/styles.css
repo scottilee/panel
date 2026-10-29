@@ -1486,6 +1486,35 @@ input::placeholder {
   text-align: center;
 }
 
+/* Instant explanation on hover or keyboard focus; a native title waits
+   about a second, long enough that people decide nothing is there. */
+.finding-row-severity {
+  position: relative;
+  cursor: help;
+}
+
+.finding-row-severity:hover::after,
+.finding-row-severity:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 48px));
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+}
+
 .finding-row-severity-high {
   background: var(--sev-high-bg);
   color: var(--sev-high-fg);
@@ -1540,7 +1569,16 @@ input::placeholder {
 
 .finding-evidence {
   display: flex;
+  align-items: center;
   padding-left: 6px;
+}
+
+/* Clears the avatars' -6px overlap so the first one isn't tucked under. */
+.finding-evidence-label {
+  margin-right: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
 }
 
 .finding-evidence-avatar {

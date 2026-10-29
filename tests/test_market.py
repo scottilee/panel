@@ -33,6 +33,8 @@ def c(url, title=""):
         ("https://www.ally.com/bank/online-savings-account", "Online Savings Account"),
         ("https://plantoeat.com", "Meal Planner and Grocery Lists"),
         ("https://www.sfmta.com/permits/residential-parking-permits-rpp", "Residential Permits"),
+        # Locale folders aren't depth (dropped by a live search, 2026-10-29).
+        ("https://www.marcus.com/us/en/savings/high-yield-savings", "High Yield Online Savings Account"),
     ],
 )
 def test_real_product_pages_are_kept(url, title):
@@ -57,6 +59,7 @@ def test_real_product_pages_are_kept(url, title):
         ("https://example.com/p", "Top 10 Savings Accounts", "listicle title"),
         ("https://example.com/x", "Acme vs Beta: Which Is Better?", "comparison title"),
         ("https://example.com/a/b/c/d/e", "Deep", "deep path"),
+        ("https://example.com/en-us/a/b/c/d", "Deep", "deep path under a locale"),
     ],
 )
 def test_editorial_results_are_rejected(url, title, why):

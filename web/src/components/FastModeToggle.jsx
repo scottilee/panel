@@ -1,6 +1,7 @@
 // The fast-mode switch in step 3, with an info button that explains the
 // trade-off in plain words. Numbers are the live measurements behind
-// panel/react.py's FAST_EXTRA_BODY (100 personas, three examples).
+// panel/react.py's FAST_EXTRA_BODY (100 personas, three examples): negative
+// share 35/53/29% -> 13/35/16% on pricing/ad/policy.
 
 import { useEffect, useId, useRef, useState } from 'react'
 
@@ -63,14 +64,18 @@ export default function FastModeToggle({ fast, onChange, disabled = false, mock 
             for 100 people instead of a minute or two. Answers also stopped failing.
           </p>
           <p>
-            <strong>You give up a little skepticism.</strong> The panel came out slightly kinder. On one example twice
-            as many people said they would act (16 in 100 instead of 8).
+            <strong>You give up clear opinions.</strong> Answering on instinct, far more people sit on the fence. On our
+            pricing example the share reacting negatively fell from 35% to 13%, and on the ad twice as many said they
+            would act (16 in 100 instead of 8).
           </p>
-          <p>Good for quick drafts. Leave it off for numbers you plan to quote.</p>
+          <p>
+            So the percentages in a fast run come out lower and can&apos;t be compared with a normal run. Good for quick
+            drafts; leave it off for numbers you plan to quote.
+          </p>
           {mock && (
             <p className="fast-mode-pop-note">
-              Demo mode: these reactions are simulated, so here fast mode only speeds up the playback and softens the
-              panel by about the amount we measured.
+              Demo mode: these reactions are simulated, so here fast mode only speeds up the playback and moves people
+              onto the fence by about the amount we measured.
             </p>
           )}
         </div>

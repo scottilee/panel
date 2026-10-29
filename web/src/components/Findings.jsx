@@ -1,4 +1,4 @@
-// Findings (post-run): one row per claim -- severity badge, claim,
+// Findings (post-run): one row per claim -- counted severity badge, claim,
 // segment chip, evidence avatars, and the share of that segment who
 // reacted negatively. The headline, edit and winning/losing lines live in
 // Verdict.jsx.
@@ -8,13 +8,14 @@ const SEVERITY_LABEL = { high: 'High', medium: 'Medium', low: 'Low' }
 function EvidenceAvatars({ evidence, onHoverStart, onHoverEnd }) {
   return (
     <div className="finding-evidence">
+      <span className="finding-evidence-label">Evidence</span>
       {evidence.map((id) => (
         <span
           key={id}
           className="finding-evidence-avatar"
           onMouseEnter={() => onHoverStart(evidence)}
           onMouseLeave={onHoverEnd}
-          title={id}
+          title={`Persona ${id}: their objection or confusion supports this claim. Hover to find them in the grid.`}
         >
           {id.replace(/^p0*/, '')}
         </span>
@@ -42,11 +43,30 @@ function baselineCaption(finding, overall) {
   return `${relation} the whole panel (${overall}%)`
 }
 
+// Severity is counted (panel/synthesize.py's counted_severity) whenever
+// the segment was recounted; otherwise it is the model's own rating.
+const SEVERITY_RULE = 'High: 20+ points more negative than the whole panel. Medium: 10 to 19. Low: under 10.'
+
+function severityTip(finding, overall) {
+  if (finding.segment_size == null || overall == null) {
+    return "The model's own rating: this segment couldn't be recounted."
+  }
+  const gap = finding.affected_pct - overall
+  const where = gap >= 0 ? `${gap} points more negative than` : `${-gap} points less negative than`
+  return `This group is ${where} the whole panel. ${SEVERITY_RULE}`
+}
+
 function FindingRow({ finding, overall, onSegmentClick, onEvidenceHoverStart, onEvidenceHoverEnd }) {
   const baseline = baselineCaption(finding, overall)
+  const tip = severityTip(finding, overall)
   return (
     <article className="finding-row">
-      <span className={`finding-row-severity finding-row-severity-${finding.severity}`}>
+      <span
+        className={`finding-row-severity finding-row-severity-${finding.severity}`}
+        data-tip={tip}
+        aria-label={`${SEVERITY_LABEL[finding.severity] ?? finding.severity} severity. ${tip}`}
+        tabIndex={0}
+      >
         {(SEVERITY_LABEL[finding.severity] ?? finding.severity).toUpperCase()}
       </span>
       <div className="finding-row-main">

@@ -23,11 +23,21 @@ from panel.personas import AGE_BANDS, age_band_for
 from panel.prompts import SYNTHESIS_SYSTEM, synthesis_user
 from panel.schemas import INCOME_BANDS, Persona, REGIONS, Reaction, SegmentClause, Synthesis
 from panel.stats import mean, mean_sentiment, usable, would_act_pct
-from panel.tf_client import ChatJsonError, ChatJsonTruncatedError, chat_json
+from panel.tf_client import REASONING_OFF, ChatJsonError, ChatJsonTruncatedError, chat_json
 
-# Ultra reasons before emitting content and a Synthesis is far bigger than
-# a Reaction, so it starts with real headroom rather than relying on
-# chat_json's doubling to get there.
+# Ultra runs with its reasoning pass off. On Token Factory its reasoning
+# lands in the content, not a separate field, and most of it was Ultra
+# counting personas by hand -- arithmetic _apply_recounted_pct redoes
+# anyway. With reasoning on, every recording truncated at 6000 and 12000
+# tokens (10-24k characters of that counting) before fitting in 24000,
+# roughly a minute and a half per report. Off, measured 2026-10-29 on the
+# three examples, 3 runs each: 9/9 valid first try, 660-860 completion
+# tokens, 4-5s, with headlines, segments and edits comparable to the
+# reasoning-on recordings.
+SYNTHESIS_EXTRA_BODY = REASONING_OFF
+
+# Several times the ~900 tokens a report takes, so only a genuinely
+# runaway answer reaches chat_json's truncation retries.
 SYNTHESIS_MAX_TOKENS = 6000
 
 # Reasoning spend is stochastic, not just a function of prompt size: the
@@ -48,6 +58,7 @@ async def _synthesis_call(system: str, user: str) -> Synthesis:
                 schema=Synthesis,
                 temperature=0.2,
                 max_tokens=SYNTHESIS_MAX_TOKENS,
+                extra_body=SYNTHESIS_EXTRA_BODY,
             )
             return result.data
         except ChatJsonTruncatedError as e:
@@ -318,10 +329,28 @@ def _drop_uncounted_figures(text: str) -> str:
     return out if out.endswith((".", "!", "?")) else out + "."
 
 
+# Severity from the counts: how much more negative the segment is than
+# the whole panel, in percentage points. Ultra's own high/medium/low had no
+# stated meaning and sat on numbers it had estimated.
+SEVERITY_HIGH_GAP = 20
+SEVERITY_MEDIUM_GAP = 10
+_SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def counted_severity(affected_pct: int, overall_pct: int) -> str:
+    gap = affected_pct - overall_pct
+    if gap >= SEVERITY_HIGH_GAP:
+        return "high"
+    if gap >= SEVERITY_MEDIUM_GAP:
+        return "medium"
+    return "low"
+
+
 def _apply_recounted_pct(
     synthesis: Synthesis, personas_by_id: dict[str, Persona], reactions: list[Reaction]
 ) -> Synthesis:
-    """Replaces each finding's affected_pct with the real count.
+    """Replaces each finding's affected_pct with the real count, and its
+    severity with counted_severity's.
 
     Ultra's percentages were measured off by 12-70 points, and a retry
     with the discrepancy spelled out returned the identical numbers: it
@@ -330,6 +359,7 @@ def _apply_recounted_pct(
     """
     reactions_by_id = {r.persona_id: r for r in usable(reactions)}
     total = len(personas_by_id)
+    overall = round(negative_share_pct(list(personas_by_id), reactions_by_id))
     new_findings = []
     headline = synthesis.headline
     for finding in synthesis.findings:
@@ -361,13 +391,26 @@ def _apply_recounted_pct(
             finding.model_copy(
                 update={
                     "affected_pct": affected,
+                    "severity": counted_severity(affected, overall),
                     "claim": _patch_pct(finding.claim, finding.affected_pct, affected),
                     "segment_size": len(members),
                     "segment_pct": round(100 * len(members) / total, 1) if total else 0.0,
                 }
             )
         )
-    overall = round(negative_share_pct(list(personas_by_id), reactions_by_id))
+    # Re-sorted because recounting can change severity. Stable, so Ultra's
+    # order holds within a level; a finding that couldn't be recounted
+    # keeps Ultra's own rating.
+    new_findings.sort(key=lambda f: _SEVERITY_RANK[f.severity])
+    # The headline leads with the top row. Ultra writes it about its own
+    # first finding, which the counted sort can demote: at N=200 it named a
+    # segment 9 points above the panel over one 23 points above it. When it
+    # doesn't quote the top row's counted number, that row's claim -- already
+    # a headline-shaped sentence with that number -- replaces it.
+    top = new_findings[0] if new_findings else None
+    if top is not None and top.segment_size is not None:
+        if not re.search(rf"(?<![\d.]){top.affected_pct}%", headline):
+            headline = top.claim
     edit = synthesis.highest_leverage_edit
     return synthesis.model_copy(
         update={
@@ -411,7 +454,15 @@ SHARD_THRESHOLD = 150
 # panel run in two waves at 50 concurrent.
 SHARD_SIZE = 10
 SHARD_CONCURRENCY = 50
-# Super at 10 reactions per call measured 10/10 within 4.3-5.7k tokens.
+# Reasoning off, like the report. Measured 2026-10-29, 12 shards of 10
+# (pricing_v1 and ad_v1), same prompts: on, 12/12 valid at a 38s median
+# and ~5,400 completion tokens; off, 12/12 valid at a 6s median and ~530
+# tokens, with as many themes (8.8 vs 8.2 a shard) and quotes. Above 150
+# personas this is the condensing wave, and every market comparison runs
+# it once per page, so it was the slowest step left.
+DIGEST_EXTRA_BODY = REASONING_OFF
+# Super with reasoning on measured 10/10 within 4.3-5.7k tokens at 10
+# reactions a call; off it needs a tenth of that, so this is headroom.
 # chat_json still doubles on the rare truncation, reaching 32000.
 DIGEST_MAX_TOKENS = 8000
 
@@ -504,6 +555,7 @@ async def _digest_shard(
                 schema=_ShardDigest,
                 temperature=0.2,
                 max_tokens=DIGEST_MAX_TOKENS,
+                extra_body=DIGEST_EXTRA_BODY,
             )
             return result.data
         except ChatJsonError as e:

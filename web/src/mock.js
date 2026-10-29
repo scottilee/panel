@@ -347,25 +347,27 @@ export function buildMockReaction(persona, i, calibration = DEFAULT_CALIBRATION,
   }
 }
 
-// Fast mode, imitated: measured live, reasoning off left the panel about
-// 0.1 less negative on mean sentiment and up to twice as willing to act
-// (ad_v1: 16 vs 8 in 100). The shift and act rate move the same way.
-const FAST_SHIFT = 4
+// Fast mode, imitated: measured live, reasoning off moved people onto the
+// fence rather than making them kinder. The negative share fell by about
+// 40-60% (35 -> 13% pricing, 53 -> 35% ad, 29 -> 16% policy), positives
+// fell too, and up to twice as many would act (ad_v1: 16 vs 8 in 100).
+const FAST_TO_FENCE_RATE = 0.5
 const FAST_ACT_RATE_FACTOR = 1.5
 
 export function buildMockReactions(personas, artifactText, { fast = false } = {}) {
   const base = calibrationFor(artifactText)
-  const calibration = fast
-    ? { ...base, shift: base.shift + FAST_SHIFT, actRate: Math.min(1, base.actRate * FAST_ACT_RATE_FACTOR) }
-    : base
+  const calibration = fast ? { ...base, actRate: Math.min(1, base.actRate * FAST_ACT_RATE_FACTOR) } : base
   const content = contentFor(artifactText)
   return personas.map((p, i) => {
     const r = buildMockReaction(p, i, calibration, content)
+    if (!fast) return r
+    // Mild opinions go neutral; a would-act reader keeps theirs.
+    const toFence = Math.abs(r.sentiment) === 1 && !r.would_act && (hash32(i + 5) % 100) / 100 < FAST_TO_FENCE_RATE
     // No null objections with reasoning off (ReactionAnswer requires
     // them), and calls about a third as long.
-    if (!fast) return r
     return {
       ...r,
+      sentiment: toFence ? 0 : r.sentiment,
       top_confusion: r.top_confusion ?? pick(content.confusions, hash32(i + 2)),
       top_objection: r.top_objection ?? pick(content.objections, hash32(i + 3)),
       latency_ms: Math.round(r.latency_ms / 3),
@@ -424,7 +426,11 @@ const PROSE = {
       proposed_text: '$29 one-time. No subscription.',
       rationale: 'Resolves the top confusion for low-tech-comfort readers without changing the price.',
     },
-    headline: (pct) => `The $29 reads as a subscription: ${pct}% of low-tech-comfort readers reacted negatively`,
+    headlines: [
+      (pct) => `The $29 reads as a subscription: ${pct}% of low-tech-comfort readers reacted negatively`,
+      (pct) => `No cancellation policy, no sale: ${pct}% of high-skepticism readers reacted negatively`,
+      (pct) => `The price anchors hardest in the South: ${pct}% of Southwest and Southeast US readers reacted negatively`,
+    ],
     losing: 'Older, price-sensitive, low-trust readers who leave before the second paragraph.',
     winning: 'Tech-comfortable 25-40 year olds who skim and see a low number.',
   },
@@ -440,7 +446,11 @@ const PROSE = {
         'Nimbus is a financial technology company, not a bank. Your cash is held at our partner banks, each FDIC-insured, and you can withdraw it at any time.',
       rationale: 'Answers the question the disclosure raises, in the place readers find it.',
     },
-    headline: (pct) => `"Not a bank" is doing the damage: ${pct}% of low-tech-comfort readers reacted negatively`,
+    headlines: [
+      (pct) => `Readers can't tell if their money is insured: ${pct}% of low-tech-comfort readers reacted negatively`,
+      (pct) => `"Not a bank" is doing the damage: ${pct}% of high-skepticism readers reacted negatively`,
+      (pct) => `The rate is distrusted most in the South: ${pct}% of Southwest and Southeast US readers reacted negatively`,
+    ],
     losing: 'Cautious savers who read the small print before the rate.',
     winning: 'Yield-chasing 25-40 year olds who already use three fintech apps.',
   },
@@ -456,7 +466,11 @@ const PROSE = {
         'The full list of affected streets is on the back of this notice. Streets within the newly designated zones will transition to permit-only',
       rationale: 'The one thing every reader is looking for, before anything else on the page.',
     },
-    headline: (pct) => `Readers cannot tell if this is about them: ${pct}% of low-tech-comfort readers reacted negatively`,
+    headlines: [
+      (pct) => `Readers cannot tell if this is about them: ${pct}% of low-tech-comfort readers reacted negatively`,
+      (pct) => `The notice period reads as a done deal: ${pct}% of high-skepticism readers reacted negatively`,
+      (pct) => `${pct}% of Southwest and Southeast US readers reacted negatively, the fewest of any group named here`,
+    ],
     losing: 'Residents who need to act and cannot work out whether they must.',
     winning: 'Neighbours already fighting commuter parking on their block.',
   },
@@ -467,11 +481,24 @@ const PROSE = {
       'Southwest and Southeast US personas were the least moved',
     ],
     edit: null,
-    headline: (pct) =>
-      `${pct}% of low-tech-comfort readers reacted negatively and could not tell what this asks of them`,
+    headlines: [
+      (pct) => `${pct}% of low-tech-comfort readers reacted negatively and could not tell what this asks of them`,
+      (pct) => `${pct}% of high-skepticism readers reacted negatively and wanted something checkable before acting`,
+      (pct) => `${pct}% of Southwest and Southeast US readers reacted negatively`,
+    ],
     losing: 'Older, low-trust readers who leave before the second paragraph.',
     winning: 'Tech-comfortable 25-40 year olds who skim and give it the benefit of the doubt.',
   },
+}
+
+// panel/synthesize.py's counted_severity: points above the whole panel.
+export const SEVERITY_HIGH_GAP = 20
+export const SEVERITY_MEDIUM_GAP = 10
+const SEVERITY_RANK = { high: 0, medium: 1, low: 2 }
+
+export function countedSeverity(affectedPct, overallPct) {
+  const gap = affectedPct - overallPct
+  return gap >= SEVERITY_HIGH_GAP ? 'high' : gap >= SEVERITY_MEDIUM_GAP ? 'medium' : 'low'
 }
 
 export function buildMockSynthesis(personas, artifactText, reactions = []) {
@@ -493,25 +520,27 @@ export function buildMockSynthesis(personas, artifactText, reactions = []) {
     {
       affected_segment: 'low tech comfort (33 or below)',
       affected_segment_filter: [{ field: 'tech_comfort', op: '<=', value: 33 }],
-      severity: 'high',
     },
     {
       affected_segment: 'high skepticism (70 or above)',
       affected_segment_filter: [{ field: 'skepticism', op: '>=', value: 70 }],
-      severity: 'medium',
     },
     {
       affected_segment: 'Southwest and Southeast US',
       affected_segment_filter: [{ field: 'region', op: 'in', value: ['Southwest US', 'Southeast US'] }],
-      severity: 'low',
     },
   ]
-  const findings = segments.map((seg, i) => ({
-    claim: prose.claims[i],
-    ...recount(personas, reactionsById, seg.affected_segment_filter),
-    ...seg,
-    evidence: evidenceFrom(i * 10),
-  }))
+  const overall = recount(personas, reactionsById, []).affected_pct
+  const findings = segments.map((seg, i) => {
+    const counted = recount(personas, reactionsById, seg.affected_segment_filter)
+    return {
+      claim: prose.claims[i],
+      ...counted,
+      ...seg,
+      severity: countedSeverity(counted.affected_pct, overall),
+      evidence: evidenceFrom(i * 10),
+    }
+  })
 
   const edit = prose.edit
     ? prose.edit
@@ -530,15 +559,19 @@ export function buildMockSynthesis(personas, artifactText, reactions = []) {
             }
       })()
 
-  const lead = findings[0].affected_pct
+  // Sorted by counted severity, and the headline is about whichever
+  // segment comes out on top, as Ultra's is about its lead finding. The
+  // sort is stable, so ties keep the segments' written order.
+  const order = findings.map((_, i) => i).sort((a, b) => SEVERITY_RANK[findings[a].severity] - SEVERITY_RANK[findings[b].severity])
+  const top = order[0]
   return {
-    headline: prose.headline(lead),
-    findings,
+    headline: prose.headlines[top](findings[top].affected_pct),
+    findings: order.map((i) => findings[i]),
     highest_leverage_edit: { ...edit, predicted_flips: Math.max(1, Math.round(personas.length * 0.05)) },
     who_you_are_losing: prose.losing,
     who_you_are_winning: prose.winning,
     // The whole panel as one segment, as the backend computes it.
-    overall_negative_pct: recount(personas, reactionsById, []).affected_pct,
+    overall_negative_pct: overall,
   }
 }
 

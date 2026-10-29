@@ -11,9 +11,9 @@ each one affects, and one specific edit to try. Apply the edit and it reruns
 the same people so you can see who changed their mind.
 
 A real 100-person copy test costs thousands of dollars and takes a week.
-This costs about ten cents and takes a couple of minutes: 35 seconds for
-the panel to read at best, one to two minutes when Token Factory is busy,
-then the synthesis.
+This costs about ten cents and takes a minute or two, depending on load on
+Token Factory, or about 15 seconds with fast mode on (see
+[Performance](#performance)).
 
 **More than nine in ten personas say "I wouldn't act on this." That's the point.** The
 panel is deliberately built to be hard to please (see
@@ -55,9 +55,9 @@ flowchart LR
 
 | Model | Role | Why this size |
 | --- | --- | --- |
-| **Nemotron Nano** (`NVIDIA-Nemotron-3-Nano-30B-A3B`) | One reaction call per persona per run (100–1,000) | The work is "stay in character, react in one sentence, fill six short fields." Cheap and fast matters far more than depth — and it's the call that happens N× per run. |
+| **Nemotron Nano** (`NVIDIA-Nemotron-3-Nano-30B-A3B`) | One reaction call per persona per run (100–1,000) | The work is "stay in character, react in one sentence, fill six short fields." Cheap and fast matters far more than depth — and it's the call that happens N× per run. Fast mode switches its reasoning off ([below](#reasoning-on-or-off)). |
 | **Nemotron Super** (`nemotron-3-super-120b-a12b`) | Writes the 1,000-persona pool, once, offline. Above N=150, condenses the reactions into themes, 10 at a time | Persona quality is a one-time cost every future run inherits, so it's worth a mid-size model. The condensing job we twice assigned wrongly before measuring properly — it left for Nano and came back (see [what we learned](#what-we-learned-building-this)); paired over 10 trials at the shipped batch size, Super wins on reliability, latency and richness alike. |
-| **Nemotron Ultra** (`Nemotron-3-Ultra-550b-a55b`) | 1 synthesis call per run | Reads the reactions (or, at large N, the themes condensed from them) plus a persona table and has to find the non-obvious pattern, name the affected segment, and quote the artifact verbatim. This is the one call where reasoning depth is worth paying for. |
+| **Nemotron Ultra** (`Nemotron-3-Ultra-550b-a55b`) | 1 synthesis call per run | Reads the reactions (or, at large N, the themes condensed from them) plus a persona table and has to find the non-obvious pattern, name the affected segment, and quote the artifact verbatim. This is the one call where model size is worth paying for. Its reasoning pass is off: on Token Factory it arrived inside the answer, and was mostly Ultra counting personas by hand, which Python redoes anyway ([below](#reasoning-on-or-off)). |
 
 At N ≤ 150 Ultra reads the raw reactions directly; above it, Super makes
 one extra pass to condense them first, because 1,000 raw reactions is a
@@ -111,9 +111,11 @@ runtime, twice over (`panel/market.py`):
 
 1. Nano turns your copy into a search, and **Tavily Search** finds
    candidate pages, with review sites and aggregators excluded up front.
-2. Most results are still listicles, so candidates pass a local filter on
-   host, path and title, then one Nano call that picks companies' own
-   product pages and may pick none.
+2. Most results are still listicles (9 of 12 for the meal-planning search
+   on 2026-10-29), so candidates pass a local filter on host, path and
+   title, then one Nano call that picks companies' own product pages and
+   may pick none. That day it found three real product pages for each of
+   the three examples.
 3. **Tavily Extract** pulls each page's text, and the same personas (up to
    50) read each one. Super condenses each page's reactions into themes,
    one Nano call aligns differently worded themes across pages, and Python
@@ -243,8 +245,56 @@ Zero 429s at every level tested, so `MAX_CONCURRENCY=50` — **100 reactions in
 35.3 seconds.** That is the best case, not the typical one: per-call latency
 moves with load on the shared endpoint. Re-recording the three examples on
 2026-10-28, median Nano latency was 20-33s per call rather than 14.6s, so the
-panel took roughly 70-140s to read. Ultra then adds its own reasoning time
-on top.
+panel took roughly 70-140s to read. On 2026-10-29 a full 100-person run,
+reading plus report, took 57s on the pricing example and 80s on the ad.
+
+### Reasoning on or off
+
+All three Nemotron models reason before they answer. Token Factory honours
+exactly one control over that, `chat_template_kwargs: {"enable_thinking":
+false}`; `/no_think`, `reasoning_effort` and every reasoning-budget
+parameter we tried are silently ignored. So reasoning is all or nothing,
+and Panel uses it in two places:
+
+**Ultra's report: always off.** With reasoning on, Ultra's reasoning came
+back inside the answer, and most of it was Ultra counting personas by hand
+(the arithmetic `_apply_recounted_pct` does anyway). Every recording ran
+past 6,000 and then 12,000 tokens before fitting in 24,000, about a minute
+and a half per report. Off, 9 of 9 reports on the three examples were valid
+first try, at 660-860 tokens and 4-5 seconds, with comparable headlines,
+segments and edits. The report step went from about 90s to 3-4s.
+
+**Super's condensing: always off.** Its reasoning stayed hidden, but cost
+the same way: 12 shards of 10 reactions, on versus off, were all valid
+both ways, at a 38s versus 6s median and ~5,400 versus ~530 completion
+tokens, with as many themes and quotes per shard. This step runs above
+150 personas and once per page in every market comparison.
+
+**Ultra's compare summary: left on.** One sentence after Apply and
+compare, already about 2s with reasoning on, and the sentences read the
+same either way.
+
+**Nano's reactions: the user's choice.** A "Fast mode" switch next to the
+Run button turns Nano's reasoning off. Measured on the default 100 people,
+all three examples:
+
+| | Reasoning on (default) | Fast mode |
+| --- | --- | --- |
+| Median reaction call | 13-21s | 3-7s |
+| Full run, reading plus report (pricing / ad) | 57s / 80s | 14s / 14s |
+| Valid on the first try | 92-98 of 100 | 100 of 100 |
+| Reacting negatively (pricing / ad / policy) | 35% / 53% / 29% | 13% / 35% / 16% |
+| Would act (pricing / ad / policy) | 4 / 8 / 0 | 3 / 16 / 0 |
+
+The cost is clear opinions: answering on instinct, far more personas land
+on the fence, so every "N% reacted negatively" comes out lower. It needed
+two changes to get even that close (`ReactionAnswer` in
+`panel/schemas.py`). The objection fields became required strings, because
+with reasoning off Nano left them null on 9-14 calls in 20. And the verdict
+moved to the end of the schema: written first, 12 of 40 personas said they
+would act on the pricing page, against 3 of 40 written last and 1 of 38
+with reasoning on. Fast mode stays off by default, and its info button says
+plainly that a fast run's numbers aren't comparable with a normal one.
 
 Above N=150 a condensing pass is added. Measured end to end at N=200:
 
@@ -255,6 +305,9 @@ Above N=150 a condensing pass is added. Measured end to end at N=200:
 | Nano, 10 per shard | 0 of 20 | 97s | 181s |
 | **Super, 10 per shard** (shipped) | **0 of 20** | **48s** | **130s** |
 
+Switching Super's reasoning off (below) then took condense + synthesis at
+N=200 from 48s to 9.4s on 2026-10-29, with all 20 shards succeeding.
+
 Five and a half times faster than where it started, and only the
 small-batch rows read the whole panel rather than half of it. All of that
 came from the batch size, not the model — note that the same model which
@@ -262,9 +315,10 @@ was worst at 50 per shard is best at 10
 (see [what we learned](#what-we-learned-building-this) — getting this
 wrong twice is the most instructive thing in the project).
 
-Extrapolating to a full 1,000-persona panel: ~6 minutes of reading, ~1
-minute of condensing (100 calls in two waves of 50), plus the synthesis —
-roughly 8 minutes, against an 1,800s request timeout. The default stays at
+Extrapolating to a full 1,000-persona panel: ~6 minutes of reading, well
+under a minute of condensing (100 calls in two waves of 50, about 6s each
+with reasoning off), plus a few seconds of synthesis — roughly 7 minutes,
+against an 1,800s request timeout. The default stays at
 100 because a minute or two is a different kind of experience.
 
 ---
@@ -304,6 +358,12 @@ decisions are reproducible with `python scripts/probe_nemotron.py`.
   estimate. (Counting the right thing took a second pass: our first
   recount measured the segment's share of the *panel*, a true number
   answering a different question than the sentence printed above it.)
+  Severity is counted the same way: a finding is high when its segment is
+  20+ points more negative than the whole panel, medium at 10-19, low
+  below that, and each row shows the whole-panel rate next to its own.
+  The rows sort by it, and the headline is always about the top row: when
+  Ultra's own headline doesn't quote that row's counted number, the row's
+  claim replaces it.
 - **…and asking anyway isn't merely unreliable, it's destructive.** We
   learned the same lesson a second time writing the shard digests, and it
   took two tries to stop asking. v1 wanted a theme, the persona IDs

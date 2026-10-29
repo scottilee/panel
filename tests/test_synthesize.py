@@ -940,3 +940,95 @@ def test_capping_leaves_an_ordinary_theme_untouched():
 
     cleaned = _clean_digest(_digest_with("no proof of the savings claim"), _shard_of("p1"))
     assert cleaned.confusions[0].theme == "no proof of the savings claim"
+
+
+async def test_ultra_synthesis_runs_with_reasoning_off(monkeypatch):
+    """Ultra's reasoning arrives as content on Token Factory and blew the
+    budget on every recording; the report is asked for without it."""
+    from panel import synthesize as S
+    from panel.tf_client import REASONING_OFF
+
+    seen = {}
+
+    class Stop(Exception):
+        pass
+
+    async def fake_chat_json(**kwargs):
+        seen.update(kwargs)
+        raise Stop
+
+    monkeypatch.setattr(S, "chat_json", fake_chat_json)
+    with pytest.raises(Stop):
+        await S._synthesis_call("system", "user")
+    assert seen["model"] == S.MODEL_ULTRA
+    assert seen["extra_body"] == REASONING_OFF
+
+
+@pytest.mark.parametrize(
+    "affected,overall,expected",
+    [(70, 32, "high"), (52, 32, "high"), (51, 32, "medium"), (42, 32, "medium"), (41, 32, "low"), (20, 32, "low")],
+)
+def test_counted_severity_is_points_above_the_whole_panel(affected, overall, expected):
+    from panel.synthesize import counted_severity
+
+    assert counted_severity(affected, overall) == expected
+
+
+def test_recount_replaces_the_models_severity_and_sorts_by_it(pool):
+    from panel.synthesize import counted_severity
+
+    reactions = _reactions_for(pool, {"p001", "p002", "p009"})
+    synth = make_synthesis(["p001", "p002", "p003"])
+    low_first = [f.model_copy(update={"severity": "low"}) for f in synth.findings]
+    # One finding the recount can't check, so it keeps the model's rating.
+    low_first[0] = low_first[0].model_copy(
+        update={"affected_segment_filter": [SegmentClause(field="tech_comfort", op="==", value="low")]}
+    )
+    out = _apply_recounted_pct(synth.model_copy(update={"findings": low_first}), pool, reactions)
+    for f in out.findings:
+        if f.segment_size is None:
+            assert f.severity == "low"
+        else:
+            assert f.severity == counted_severity(f.affected_pct, out.overall_negative_pct)
+    ranks = [{"high": 0, "medium": 1, "low": 2}[f.severity] for f in out.findings]
+    assert ranks == sorted(ranks)
+
+
+async def test_super_digest_runs_with_reasoning_off(monkeypatch):
+    """Same switch as the report: 38s -> 6s a shard, measured."""
+    import asyncio
+
+    from panel import synthesize as S
+    from panel.schemas import Reaction
+    from panel.tf_client import REASONING_OFF
+
+    seen = {}
+
+    async def fake_chat_json(**kwargs):
+        seen.update(kwargs)
+        raise S.ChatJsonError("stop", 0)
+
+    monkeypatch.setattr(S, "chat_json", fake_chat_json)
+    shard = [
+        Reaction(
+            persona_id=f"p{i:03d}", sentiment=-1, would_act=False, gut_reaction="g",
+            top_confusion="c", top_objection="o", what_would_change_my_mind="w",
+        )
+        for i in range(1, 4)
+    ]
+    assert await S._digest_shard(shard, asyncio.Semaphore(1)) is None
+    assert seen["model"] == S.MODEL_DIGEST
+    assert seen["extra_body"] == REASONING_OFF
+
+
+def test_headline_follows_the_top_row_after_the_counted_sort(pool):
+    """Ultra's headline was about a finding the recount ranked low."""
+    reactions = _reactions_for(pool, {"p001", "p002", "p009"})
+    synth = make_synthesis(["p001", "p002", "p003"], affected_pct=90, headline="12% of everyone shrugs")
+    synth = synth.model_copy(
+        update={"findings": [f.model_copy(update={"claim": "90% of low-tech readers balk"}) for f in synth.findings]}
+    )
+    out = _apply_recounted_pct(synth, pool, reactions)
+    top = out.findings[0]
+    assert out.headline == top.claim
+    assert f"{top.affected_pct}%" in out.headline

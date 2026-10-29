@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from panel.config import MAX_CONCURRENCY, MODEL_NANO
 from panel.prompts import REACTION_SYSTEM, reaction_user
 from panel.schemas import Persona, Reaction, ReactionAnswer
-from panel.tf_client import chat_json
+from panel.tf_client import REASONING_OFF, chat_json
 
 
 def seed_for(persona_id: str) -> int:
@@ -34,7 +34,7 @@ REACTION_MAX_TOKENS = 3000
 # first try (92-98 on), mean sentiment ~0.1 less negative, and would_act
 # 3/16/0 vs 4/8/0 on pricing/ad/policy. It needs ReactionAnswer's
 # verdict-last field order to stay that close.
-FAST_EXTRA_BODY = {"chat_template_kwargs": {"enable_thinking": False}}
+FAST_EXTRA_BODY = REASONING_OFF
 # Observed completions run ~150 tokens with no reasoning to pay for.
 REACTION_FAST_MAX_TOKENS = 800
 

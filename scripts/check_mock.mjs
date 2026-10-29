@@ -127,7 +127,7 @@ for (const ex of M.EXAMPLES) {
 
 // Findings carry the backend's recount semantics: affected_pct is the
 // negative share *within* the segment, segment_size is the segment's head
-// count, and the headline quotes the lead finding's real number.
+// count, severity is counted, and the headline quotes the top row's number.
 {
   const people = M.buildMockPersonas(200)
   const rs = M.buildMockReactions(people, pricing)
@@ -145,6 +145,14 @@ for (const ex of M.EXAMPLES) {
     if (Math.abs(f.segment_pct - (100 * members.length) / people.length) > 1e-9) ok = false
   }
   if (!syn.headline.includes(`${syn.findings[0].affected_pct}%`)) ok = false
+  // Severity is counted the backend's way and the rows sort by it.
+  const rank = { high: 0, medium: 1, low: 2 }
+  for (const f of syn.findings) {
+    if (f.severity !== M.countedSeverity(f.affected_pct, syn.overall_negative_pct)) ok = false
+  }
+  for (let i = 1; i < syn.findings.length; i++) {
+    if (rank[syn.findings[i - 1].severity] > rank[syn.findings[i].severity]) ok = false
+  }
   const overall = Math.round((100 * rs.filter((r) => r.sentiment < 0).length) / rs.length)
   if (syn.overall_negative_pct !== overall) ok = false
   if (!ok) bad++
@@ -217,21 +225,40 @@ for (const ex of M.EXAMPLES) {
   console.log((ok ? 'OK   ' : 'WRONG') + ' compare flips and would-act change share one denominator')
 }
 
-// Fast mode imitates the measured direction: never more negative, at
-// least as willing to act, and no null objections (ReactionAnswer).
+// Fast mode imitates the measured direction: onto the fence (fewer
+// negative), at least as willing to act, and no null objections.
 {
   const people = M.buildMockPersonas(200)
   const text = M.EXAMPLES[1].text
   const slow = M.buildMockReactions(people, text)
   const fast = M.buildMockReactions(people, text, { fast: true })
-  const mean = (rs) => rs.reduce((s, r) => s + r.sentiment, 0) / rs.length
+  const negative = (rs) => rs.filter((r) => r.sentiment < 0).length
   const acts = (rs) => rs.filter((r) => r.would_act).length
   const ok =
-    mean(fast) >= mean(slow) &&
+    negative(fast) < negative(slow) &&
     acts(fast) >= acts(slow) &&
     fast.every((r) => r.top_confusion !== null && r.top_objection !== null)
   if (!ok) bad++
-  console.log((ok ? 'OK   ' : 'WRONG') + ' fast mode is a little softer and never leaves objections empty')
+  console.log((ok ? 'OK   ' : 'WRONG') + ' fast mode moves people onto the fence and never leaves objections empty')
+}
+
+// The headline names the top row's segment, for every example and at
+// sizes where a different segment can come out on top.
+{
+  const words = { 'low tech comfort': 'low-tech-comfort', 'high skepticism': 'high-skepticism', Southwest: 'Southwest' }
+  let ok = true
+  for (const n of [10, 50, 100, 300]) {
+    const people = M.buildMockPersonas(n)
+    for (const ex of [...M.EXAMPLES, { text: OWN[0] }]) {
+      const rs = M.buildMockReactions(people, ex.text)
+      const syn = M.buildMockSynthesis(people, ex.text, rs)
+      const top = syn.findings[0]
+      const key = Object.keys(words).find((k) => top.affected_segment.startsWith(k))
+      if (!syn.headline.includes(words[key]) || !syn.headline.includes(`${top.affected_pct}%`)) ok = false
+    }
+  }
+  if (!ok) bad++
+  console.log((ok ? 'OK   ' : 'WRONG') + ' the headline is about the top finding')
 }
 
 console.log(bad ? `\n${bad} PROBLEM(S)` : '\nmock mode asserts nothing it cannot support')

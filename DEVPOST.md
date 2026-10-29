@@ -36,14 +36,17 @@ notice. Pick how many people should read it, from 10 to 1,000. Hit run.
 
 What happens next is the part worth watching: a grid of tiles fills in
 live, one per person, each turning a colour as that persona's reaction
-lands. At the default 100 people, you have a verdict in a couple of minutes:
+lands. At the default 100 people, you have a verdict in a minute or two, or
+about 15 seconds with fast mode on:
 
 - **A headline finding** with a counted number attached, e.g. "30% of
   lower-income, high-skepticism readers react negatively, mostly on price
   with no proof of savings." Each finding also shows how many people that
   segment is and what share of the panel it makes up.
-- **Three findings ranked by severity**, each naming the affected segment
-  and citing the specific people whose objections support it. Click a
+- **Three findings ranked by severity**, where severity is counted: how
+  many points more negative the segment is than the whole panel, which
+  each row shows beside its own rate. Each names the affected segment and
+  cites the specific people whose objections support it. Click a
   segment and the grid filters to exactly the readers in it.
 - **One highest-leverage edit** — a verbatim phrase from your copy and a
   proposed replacement.
@@ -80,7 +83,7 @@ almost nobody does one — they ship and guess. The people who most need the
 feedback (a solo founder, a small nonprofit, a city writing a parking
 notice) are exactly the people who can't buy it.
 
-Panel costs about ten cents and takes a couple of minutes.
+Panel costs about ten cents and takes a minute or two.
 
 But the reason to build it on an open model family specifically is sharper
 than cost. The job needs a *hundred to a thousand* cheap opinions and *one*
@@ -162,6 +165,19 @@ Both reversals are written up in FEEDBACK.md rather than quietly
 corrected, because a judge re-running the harness should find it agrees
 with us.
 
+**Reasoning turned out to be all or nothing.** Token Factory honours one
+switch, `enable_thinking: false`, and silently ignores `/no_think`,
+`reasoning_effort` and every budget parameter we tried. On Ultra,
+reasoning came back inside the answer and was mostly hand-counting
+personas, which Python redoes anyway. Switching it off took the report
+from about 90 seconds (two truncations, every time) to 3-4, with
+comparable reports. Super's condensing step, used above 150 people and in
+the market comparison, went from 38 seconds a batch to 6. On Nano it's an opt-in fast mode: a full run in 14
+seconds instead of 57-80, at the cost of personas sitting on the fence far
+more. Without reasoning, the schema's field order decides the verdict:
+asked for "would act" before the objections, 12 of 40 said yes; after,
+3 of 40.
+
 **The other recurring theme:** these models cannot count over a list, and
 asking them to is not merely unreliable, it is destructive. One request for
 "themes, the IDs expressing each, and a count, most common first" made a
@@ -171,6 +187,8 @@ the evidence; Python does the arithmetic.
 
 ## Accomplishments we're proud of
 
+- **A full 100-person run in 14 seconds** with fast mode, and the report
+  step cut from about 90 seconds to 3-4 by switching Ultra's reasoning off.
 - **100 people in 35 seconds at best, measured**, with zero rate-limit
   errors at 50 concurrent calls at every level we tested (one to two
   minutes when the shared endpoint is busy) — and a thousand in roughly
@@ -246,7 +264,9 @@ The run order that shows the most in the least time:
 1. **Open with the grid empty and the slider at 100.** Say what it is in one
    sentence while clicking the "Pricing page v1" example.
 2. **Hit run and don't talk over it.** The tiles filling in live is the
-   thing people remember; give it ten seconds of silence.
+   thing people remember; give it ten seconds of silence. A normal run
+   takes a minute or more; with fast mode on it's about 15 seconds, but its
+   percentages come out lower, so if you use it, say so on camera.
 3. **Read the headline aloud**, then click one finding's segment chip so the
    grid visibly filters to that cohort. That is the moment it stops looking
    like a text generator.

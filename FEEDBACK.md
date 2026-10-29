@@ -2,7 +2,7 @@
 
 Submitted alongside **Panel**, a 1,000-persona synthetic focus group for
 marketing copy. Every number below was measured against the live Token
-Factory API between 2026-10-27 and 2026-10-28, on
+Factory API between 2026-10-27 and 2026-10-29, on
 `NVIDIA-Nemotron-3-Nano-30B-A3B`, `nemotron-3-super-120b-a12b` and
 `Nemotron-3-Ultra-550b-a55b`. Where a finding changed the code, the file is
 named so it can be checked.
@@ -271,7 +271,109 @@ Credit where it is due, because the above is a list of problems:
 - **`seed` is honoured** and does reduce run-to-run variance, though not
   to determinism (expected at temperature > 0).
 
-## 8. Concrete requests, in priority order
+## 8. Reasoning is all or nothing, and the switch is undocumented
+
+We wanted a middle setting: a little reasoning for the 100-1,000 Nano
+reaction calls, which are each a short in-character answer. We tried every
+control we could find, on the same persona and prompt, and measured
+completion tokens:
+
+| Control | Effect |
+| --- | --- |
+| `extra_body={"chat_template_kwargs": {"enable_thinking": False}}` | **Works.** ~150 completion tokens instead of ~1,100 |
+| `/no_think` in the system prompt | None |
+| `reasoning_effort="low"` | None |
+| `reasoning_budget`, `thinking_budget`, `max_thinking_tokens` | None, and no error |
+
+So reasoning is fully on or fully off, and the one switch that works is a
+chat-template detail rather than a documented API parameter. Ignoring an
+unknown parameter silently is the costly part: we believed we had a budget
+in place until the token counts said otherwise.
+
+Off is a real option, with a cost we would want every integrator to know
+about. Nano on 100 personas, each of three examples:
+
+| | Reasoning on | Reasoning off |
+| --- | --- | --- |
+| Median call | 13-21s | 3-7s |
+| Slowest call | 27-38s | 7-17s |
+| Valid on the first try | 92-98 of 100 | 100 of 100 |
+| Negative sentiment (pricing / ad / policy) | 35% / 53% / 29% | 13% / 35% / 16% |
+| Would act (pricing / ad / policy) | 4 / 8 / 0 | 3 / 16 / 0 |
+
+Two things were needed before off was usable at all:
+
+- **Nullable fields come back null.** With reasoning off, Nano returned
+  null for `top_confusion` or `top_objection` on 9-14 calls in 20, where
+  the schema allowed null but our validator only permitted it for the most
+  positive readers. Making both required strings fixed it (100/100).
+- **Field order becomes the decision order.** Without a reasoning pass the
+  model commits to fields in the order it writes them. With `would_act`
+  and `sentiment` first, 12 of 40 personas said they would act on the
+  pricing page; moved after the objections, 3 of 40; with reasoning on,
+  1 of 38. The schema is effectively the reasoning now, which is worth a
+  line in any structured-output guide.
+
+Even then, reasoning-off personas sit on the fence far more, as the
+negative-sentiment row shows. Panel ships it as an opt-in "fast mode"
+(`panel/react.py`, `ReactionAnswer` in `panel/schemas.py`) and tells users
+its numbers aren't comparable with a normal run.
+
+## 9. Ultra's reasoning arrives in `content`, and it was counting
+
+§1 describes Nano truncating with empty content: its reasoning is hidden,
+and content only starts once reasoning ends. Ultra behaved differently on
+our synthesis call, with `response_format` set to a `json_schema`. A
+truncated answer at 6,000 tokens held 13,661 characters of plain-prose
+reasoning in `message.content`, beginning "I need to analyze the reactions
+and produce a JSON object..." and ending mid-way through a hand tally of
+persona IDs:
+
+```
+So for high skepticism (>=70) personas that appear in reactions:
+Negative (-1): p002, p014, p015, p019, p022, ... = 17
+Neutral (0): p004, p007, p027, ...
+```
+
+That is the counting §3 says these models do badly, and the prompt already
+said the percentages would be recomputed in code. Every recording of our
+three examples truncated at 6,000 and 12,000 tokens before fitting in
+24,000, about a minute and a half per report.
+
+With `enable_thinking: false`, 9 of 9 reports (three examples, three runs
+each) were valid on the first try at 660-860 completion tokens and 4-5
+seconds, and their headlines, segments and proposed edits were comparable
+to the reasoning-on recordings. Panel now runs its report that way
+(`panel/synthesize.py`). Super's condensing call kept its reasoning hidden
+but was the same trade: 12 shards on versus off, all valid, 38s versus 6s
+median, ~5,400 versus ~530 completion tokens, as many themes. At N=200,
+condensing plus the report went from 48s to 9.4s. A full 100-person run went from 57-80s, most of it
+reading, to 14s with fast mode on as well.
+
+Two requests follow. Return reasoning in a separate field for every model,
+so a schema-constrained answer contains only the answer. And document
+which models expose reasoning where, since the same client code saw it
+hidden on Nano and inline on Ultra.
+
+## 10. Tavily
+
+The market comparison uses Tavily Search to find competitors' pages and
+Tavily Extract to read them (`panel/market.py`, `panel/fetch.py`).
+
+- **Extract just worked.** On 2026-10-29 it returned text for all nine
+  competitor pages the three examples' searches picked (5,486-18,023
+  characters each), with no fallback to our direct fetch.
+- **Search needs a page-type filter.** For "meal planning app pricing
+  page", 9 of 12 results on 2026-10-29 were listicles, comparison posts or
+  blogs, even with 40 review and news domains in `exclude_domains`. We
+  added two more gates (local path and title rules, then a Nano call that
+  classifies what survives) to find the three companies' own pages. A
+  parameter preferring commercial or product pages over editorial ones
+  would remove most of that code.
+- **`exclude_domains` on subdomains** was best-effort in our use, so the
+  same list is checked again locally.
+
+## 11. Concrete requests, in priority order
 
 1. **Populate `completion_tokens_details.reasoning_tokens`.** It is the
    single thing that would most improve the integration experience. It
@@ -289,6 +391,9 @@ Credit where it is due, because the above is a list of problems:
    is the hardest class of failure to detect.
 5. **Task-shaped model selection guidance** rather than size-shaped, per
    §4.
+6. **Document `enable_thinking`**, and reject unknown reasoning parameters
+   instead of ignoring them (§8).
+7. **Return reasoning outside `content` on every model** (§9).
 
 ---
 

@@ -100,6 +100,10 @@ _EDITORIAL_TITLE = re.compile(
 )
 
 
+# "us", "en", "en-us", "en_GB": a language or country folder, not depth.
+_LOCALE_SEGMENT = re.compile(r"[a-z]{2}(?:[-_][a-z]{2})?", re.I)
+
+
 def _host(url: str) -> str:
     return (urlparse(url).hostname or "").lower().removeprefix("www.")
 
@@ -123,8 +127,11 @@ def looks_like_a_product_page(candidate: Candidate) -> bool:
         return False
     # Deep paths are usually articles; product and pricing pages sit near
     # the root. Measured: /pricing, /savings/high-yield-savings, / -- all
-    # 0-2 segments.
+    # 0-2 segments. Leading locale folders don't count: they pushed
+    # Marcus's own /us/en/savings/high-yield-savings page over the limit.
     segments = [s for s in path.split("/") if s]
+    while segments and _LOCALE_SEGMENT.fullmatch(segments[0]):
+        segments.pop(0)
     return len(segments) <= 3
 
 

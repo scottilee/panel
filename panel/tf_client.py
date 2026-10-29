@@ -124,6 +124,12 @@ def _json_schema_for(schema: type[BaseModel]) -> dict:
     }
 
 
+# Switches a Nemotron model's reasoning pass off. The only reasoning
+# control Token Factory honours (measured 2026-10-28): /no_think,
+# reasoning_effort and every budget parameter tried are silently ignored.
+REASONING_OFF = {"chat_template_kwargs": {"enable_thinking": False}}
+
+
 @dataclass
 class ChatJsonResult:
     data: BaseModel
