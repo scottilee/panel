@@ -462,7 +462,7 @@ export function startBenchmark({ runId, text, panelSize, onEvent }) {
     onEvent({ type: 'started', data: { benchmark_id: benchmarkId } })
 
     es = new EventSource(`/benchmark/${benchmarkId}/stream`)
-    const TERMINAL = ['done', 'no_pages', 'cancelled']
+    const TERMINAL = ['done', 'no_pages', 'pages_unusable', 'cancelled']
     for (const type of ['searching', 'query', 'pages', 'page_done', 'comparing', 'comparison', ...TERMINAL]) {
       es.addEventListener(type, (e) => {
         onEvent({ type, data: e.data ? JSON.parse(e.data) : undefined })

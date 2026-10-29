@@ -154,6 +154,14 @@ PERSONA_POOL = load_personas()
 # keeps a three-competitor benchmark at ~150 Nano calls, about 4 cents.
 MARKET_PANEL_SIZE = int(config.env("MARKET_PANEL_SIZE") or "50")
 
+# The non-reaction model calls a benchmark makes, in persona-reaction
+# units: roughly 20 Super digest calls (4 pages x 5 shards of 10), 2 Nano
+# alignment calls, derive_query and pick_pages, plus the Tavily search and
+# extracts. Super is several times a Nano reaction, so this is deliberately
+# generous rather than exact -- the point is that the ceilings stop
+# ignoring it, not that it is metered precisely.
+BENCHMARK_OVERHEAD_UNITS = int(config.env("BENCHMARK_OVERHEAD_UNITS") or "60")
+
 
 @dataclass
 class BenchmarkContext:
@@ -161,6 +169,7 @@ class BenchmarkContext:
     run_id: str
     status: str = "pending"
     query: str = ""
+    category: str = ""
     pages: list[MarketPage] = field(default_factory=list)
     comparison: MarketComparison | None = None
     error_message: str | None = None
@@ -171,6 +180,11 @@ class BenchmarkContext:
     personas_sent: int = 0
     # Who started it, for the one-active-job-per-client rule.
     client_ip: str = ""
+    # The run being compared. Held here rather than looked up when the
+    # task first runs: RUNS evicts finished runs, and a burst of new ones
+    # between create_benchmark and the task's first step would otherwise
+    # turn a validated benchmark into "the market comparison failed".
+    parent: RunContext | None = None
     # Pages the panel has finished reading, so a reconnecting stream can
     # replay per-page progress rather than only the page list.
     pages_done: list[str] = field(default_factory=list)
@@ -178,6 +192,12 @@ class BenchmarkContext:
 
 # A benchmark still doing (and still paying for) work.
 BENCHMARK_ACTIVE_STATUSES = ("pending", "searching", "reading", "comparing")
+
+# Every way one can end. "no_pages" means the search found nothing worth
+# comparing against and nothing was spent; "pages_unusable" means pages
+# were found and read and too few readers answered on them, which is a
+# different thing to tell the user and is worth retrying.
+BENCHMARK_TERMINAL_STATUSES = ("done", "error", "no_pages", "pages_unusable", "cancelled")
 
 
 BENCHMARKS: dict[str, BenchmarkContext] = {}
@@ -797,7 +817,7 @@ async def _panel_on_text(
 
 
 async def _execute_benchmark(ctx: BenchmarkContext) -> None:
-    parent = RUNS.get(ctx.run_id)
+    parent = ctx.parent or RUNS.get(ctx.run_id)
     try:
         if parent is None:
             raise ValueError("the run this benchmark was started from is gone")
@@ -812,6 +832,7 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
         await _broadcast_benchmark(ctx, "searching", {})
         market = await derive_query(own_text)
         ctx.query = market.query
+        ctx.category = market.category
         await _broadcast_benchmark(
             ctx, "query", {"category": market.category, "query": market.query}
         )
@@ -851,7 +872,7 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
                 print(f"benchmark: skipping {candidate.url}: only {len(text)} characters of text")
                 continue
             page = MarketPage(
-                label=_host_label(candidate.url),
+                label=_unique_label(_host_label(candidate.url), pages),
                 url=candidate.url,
                 panel_size=len(personas),
                 text=text,
@@ -879,7 +900,23 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
         # panel_size was set optimistically to the personas sent. What
         # belongs next to the themes is how many of them answered: a page
         # whose themes came from 26 readers must not be labelled 50.
-        pages[0].panel_size = len(usable(own_reactions))
+        own_answered = len(usable(own_reactions))
+        pages[0].panel_size = own_answered
+        # Held to the same floor as the competitors. The parent run passed
+        # this over its whole panel, which at 1,000 personas says nothing
+        # about the 50 reused here -- and every finding below is stated
+        # relative to the user's page, so it is the one that matters most.
+        if own_answered < len(personas) * MIN_USABLE_SHARE:
+            ctx.status = "pages_unusable"
+            # On error_message because that is what a reconnect replays.
+            ctx.error_message = (
+                f"Only {own_answered} of {len(personas)} readers answered on your own "
+                "page, too few to compare anything against. Try again in a minute."
+            )
+            await _broadcast_benchmark(
+                ctx, "pages_unusable", {"message": ctx.error_message}
+            )
+            return
         breakdowns["Your page"] = await theme_breakdown(own_reactions)
         await _benchmark_page_done(ctx, "Your page")
 
@@ -905,8 +942,20 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
             await _benchmark_page_done(ctx, page.label)
 
         if len(pages) < 2:
-            ctx.status = "no_pages"
-            await _broadcast_benchmark(ctx, "no_pages", {"query": market.query})
+            # Not the same outcome as finding nothing to compare: these
+            # pages were found, fetched and read, and those reads are
+            # already paid for. Reporting it as "no comparable pages
+            # found" blames the search for what is usually a transient
+            # model failure the user could retry straight through.
+            ctx.status = "pages_unusable"
+            ctx.error_message = (
+                f"Read {len(fetched)} comparable "
+                f"{'page' if len(fetched) == 1 else 'pages'}, but too few readers "
+                "answered on them to compare. Try again in a minute."
+            )
+            await _broadcast_benchmark(
+                ctx, "pages_unusable", {"message": ctx.error_message}
+            )
             return
 
         # The list changed under the client: pages were dropped above and
@@ -923,7 +972,7 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
         await _broadcast_benchmark(ctx, "comparing", {})
         ctx.comparison = await build_comparison(ctx.query, pages, breakdowns)
         ctx.status = "done"
-        await _broadcast_benchmark(ctx, "comparison", ctx.comparison)
+        await _broadcast_benchmark(ctx, "comparison", _comparison_payload(ctx.comparison))
         await _broadcast_benchmark(ctx, "done", {})
     except asyncio.CancelledError:
         if ctx.status != "cancelled":
@@ -940,6 +989,30 @@ async def _execute_benchmark(ctx: BenchmarkContext) -> None:
 async def _benchmark_page_done(ctx: BenchmarkContext, label: str) -> None:
     ctx.pages_done.append(label)
     await _broadcast_benchmark(ctx, "page_done", {"label": label})
+
+
+def _comparison_payload(comparison: MarketComparison) -> dict:
+    """The comparison without the page texts. They are up to 20k chars
+    each and already sent in the "pages" event, which is where the UI
+    reads them from -- embedding them again doubled the payload."""
+    data = comparison.model_dump(mode="json")
+    for page in data.get("pages", []):
+        page.pop("text", None)
+    return data
+
+
+def _unique_label(label: str, pages: list[MarketPage]) -> str:
+    """breakdowns is keyed by label and so is the comparison the UI reads,
+    so two pages may not share one. _host_label truncates to 40 chars,
+    which is all it takes for two long hosts to collide."""
+    taken = {p.label for p in pages}
+    if label not in taken:
+        return label
+    for n in range(2, 100):
+        candidate = f"{label} ({n})"
+        if candidate not in taken:
+            return candidate
+    return f"{label} ({secrets.token_urlsafe(4)})"
 
 
 def _host_label(url: str) -> str:
@@ -978,8 +1051,17 @@ async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
     _check_rate_limit(client_ip)
     # Reserved for the most it can read; settled to the pages it actually
     # ran once it stops (a search can find fewer pages, or none).
+    #
+    # Plus the fixed overhead, which the budgets used to ignore entirely:
+    # a benchmark also spends a Super digest call per shard of 10 across
+    # four pages, two Nano alignment calls, derive_query, pick_pages, and
+    # the Tavily search and extracts. Counted in persona-reaction units
+    # because that is what the ceilings are denominated in, and rounded
+    # up -- a Super call costs well over one Nano reaction.
     spend = _reserve_spend(
-        client_ip, COMPETITOR_PAGES * min(MARKET_PANEL_SIZE, len(parent.personas))
+        client_ip,
+        COMPETITOR_PAGES * min(MARKET_PANEL_SIZE, len(parent.personas))
+        + BENCHMARK_OVERHEAD_UNITS,
     )
 
     # Unguessable for the same reason run ids are (see _new_run_id): a
@@ -987,13 +1069,25 @@ async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
     # which embeds the user's own copy's themes.
     benchmark_id = f"b_{secrets.token_urlsafe(16)}"
     ctx = BenchmarkContext(
-        benchmark_id=benchmark_id, run_id=req.run_id, spend=spend, client_ip=client_ip
+        benchmark_id=benchmark_id,
+        run_id=req.run_id,
+        spend=spend,
+        client_ip=client_ip,
+        parent=parent,
     )
     BENCHMARKS[benchmark_id] = ctx
     _evict_old_benchmarks()
     ctx.task = asyncio.create_task(_execute_benchmark(ctx))
+    # Refunds the pages it never read, but keeps the fixed overhead: those
+    # calls are made before the first page and are not refundable, so
+    # settling to personas_sent alone would hand the budget back money
+    # that was already spent.
     ctx.task.add_done_callback(
-        lambda _t: setattr(spend, "personas", min(spend.personas, ctx.personas_sent))
+        lambda _t: setattr(
+            spend,
+            "personas",
+            min(spend.personas, ctx.personas_sent + BENCHMARK_OVERHEAD_UNITS),
+        )
     )
     return {"benchmark_id": benchmark_id}
 
@@ -1048,7 +1142,7 @@ async def get_benchmark(benchmark_id: str) -> dict:
         "status": ctx.status,
         "query": ctx.query,
         "pages": [p.model_dump(mode="json") for p in ctx.pages],
-        "comparison": ctx.comparison.model_dump(mode="json") if ctx.comparison else None,
+        "comparison": _comparison_payload(ctx.comparison) if ctx.comparison else None,
         "error": ctx.error_message,
     }
 
@@ -1066,7 +1160,9 @@ async def stream_benchmark(benchmark_id: str) -> EventSourceResponse:
             # Replay enough for a reconnect to catch up, same
             # subscribe-before-replay ordering as stream_run.
             if ctx.query:
-                yield _sse_event("query", {"query": ctx.query})
+                yield _sse_event(
+                    "query", {"category": ctx.category, "query": ctx.query}
+                )
             if ctx.pages:
                 yield _sse_event(
                     "pages", {"pages": [p.model_dump(mode="json") for p in ctx.pages]}
@@ -1076,14 +1172,14 @@ async def stream_benchmark(benchmark_id: str) -> EventSourceResponse:
             if ctx.status == "comparing":
                 yield _sse_event("comparing", {})
             if ctx.comparison is not None:
-                yield _sse_event("comparison", ctx.comparison)
-            if ctx.status in ("done", "error", "no_pages", "cancelled"):
+                yield _sse_event("comparison", _comparison_payload(ctx.comparison))
+            if ctx.status in BENCHMARK_TERMINAL_STATUSES:
                 yield _sse_event(ctx.status, {"message": ctx.error_message or ""})
                 return
             while True:
                 event = await queue.get()
                 yield event
-                if event["event"] in ("done", "error", "no_pages", "cancelled"):
+                if event["event"] in BENCHMARK_TERMINAL_STATUSES:
                     break
         finally:
             if queue in ctx.subscribers:

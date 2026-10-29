@@ -50,6 +50,59 @@ const okSpecific = JSON.stringify(synP).includes('$29') && pricing.includes('$29
 console.log((okSpecific ? 'OK   ' : 'WRONG') + ' pricing example still gets its tailored findings')
 if (!okSpecific) bad++
 
+// The three examples must not borrow each other's vocabulary. The check
+// above only ever looked at arbitrary pasted text, so it missed the real
+// case: "specific" once meant "is a recognized example", and the parking
+// notice was described in the pricing page's words -- headline, findings
+// and a suggested edit quoting a $29 it does not contain.
+const EXAMPLE_WORDS = {
+  pricing_v1: ['$29', 'PlateUp', 'meal'],
+  ad_v1: ['Nimbus', '4.8', 'FDIC', 'APY'],
+  policy_v1: ['permit', 'Riverton', 'parking'],
+}
+for (const e of M.EXAMPLES) {
+  const rs = M.buildMockReactions(ps, e.text)
+  const syn = M.buildMockSynthesis(ps, e.text, rs)
+  const blob = JSON.stringify(rs) + JSON.stringify(syn)
+  const foreign = Object.entries(EXAMPLE_WORDS)
+    .filter(([id]) => id !== e.id)
+    .flatMap(([, words]) => words)
+    .filter((w) => blob.includes(w) && !e.text.includes(w))
+  if (foreign.length) {
+    bad++
+    console.log('WRONG', e.id, 'borrows another example\'s words:', JSON.stringify(foreign))
+  } else {
+    console.log('OK    no borrowed specifics for:', e.id)
+  }
+  // The suggested edit must quote the artifact, or apply-and-compare has
+  // nothing to replace.
+  const ct = syn.highest_leverage_edit.current_text
+  if (!ct || !e.text.includes(ct)) {
+    bad++
+    console.log('WRONG', e.id, 'edit current_text is not in the artifact:', JSON.stringify(ct))
+  } else {
+    console.log('OK    edit quotes the artifact:', e.id)
+  }
+}
+
+// A reader shown as strongly negative must not say something cheerful:
+// gut_reaction used to be picked by a hash unrelated to the sentiment.
+for (const e of M.EXAMPLES) {
+  const rs = M.buildMockReactions(M.buildMockPersonas(300), e.text)
+  const shared = new Map()
+  for (const r of rs) {
+    if (!shared.has(r.gut_reaction)) shared.set(r.gut_reaction, new Set())
+    shared.get(r.gut_reaction).add(r.sentiment)
+  }
+  const straddles = [...shared].filter(([, bands]) => bands.size > 1)
+  if (straddles.length) {
+    bad++
+    console.log('WRONG', e.id, 'one line spans several sentiment bands:', straddles[0][0])
+  } else {
+    console.log('OK    every gut reaction matches its sentiment:', e.id)
+  }
+}
+
 // And the per-example distributions must still track the real measured
 // numbers (README's anti-sycophancy table), or mock mode is back to
 // painting a rosier picture than the product gives.

@@ -129,6 +129,8 @@ export default function App() {
   // a reset effect.
   const [textCheckEntry, setTextCheckEntry] = useState(null)
   const [confirmCheckEntry, setConfirmCheckEntry] = useState(null)
+  // True only while Run is waiting on a check it had to make itself.
+  const [checking, setChecking] = useState(false)
   const [applyError, setApplyError] = useState(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
   // Market benchmark: null until started, then a status string plus
@@ -331,7 +333,20 @@ export default function App() {
   // The check can only ever ask; it never refuses.
   async function handleRun() {
     if (state.inputMode === 'text' && !confirmCheck) {
-      const verdict = textCheck ?? (await checkArtifact(checkableText))
+      // The debounced check above usually has an answer ready. When it
+      // doesn't -- Run clicked while still typing, or straight after a
+      // paste -- this is a model call, so the button has to say it is
+      // busy. Without `checking` the click looked ignored for several
+      // seconds and the natural response was to click it again.
+      let verdict = textCheck
+      if (!verdict) {
+        setChecking(true)
+        try {
+          verdict = await checkArtifact(checkableText)
+        } finally {
+          setChecking(false)
+        }
+      }
       if (verdict && verdict.is_reviewable === false) {
         setConfirmCheckEntry({ text: checkableText, verdict })
         return
@@ -346,7 +361,7 @@ export default function App() {
     // is mode-aware rather than simply requiring one.
     if (!state.runId && !isMockMode()) return
     marketHandleRef.current?.cancel()
-    setMarket({ status: 'pending', query: '', pages: [], comparison: null, error: null })
+    setMarket({ status: 'pending', query: '', pages: [], pagesDone: [], comparison: null, error: null })
     marketHandleRef.current = startBenchmark({
       runId: state.runId,
       text: state.artifactText,
@@ -361,6 +376,12 @@ export default function App() {
               return { ...m, status: 'searching', query: event.data.query }
             case 'pages':
               return { ...m, status: 'reading', pages: event.data.pages }
+            // Reading three pages takes minutes. Without this the card
+            // shows one unchanging line for all of it and reads as hung.
+            case 'page_done':
+              return m.pagesDone.includes(event.data.label)
+                ? m
+                : { ...m, pagesDone: [...m.pagesDone, event.data.label] }
             case 'comparing':
               return { ...m, status: 'comparing' }
             case 'comparison':
@@ -369,6 +390,10 @@ export default function App() {
               return { ...m, status: 'done' }
             case 'no_pages':
               return { ...m, status: 'no_pages' }
+            // Pages were found and read; too few readers answered on
+            // them. Carries its own message because the reason differs.
+            case 'pages_unusable':
+              return { ...m, status: 'pages_unusable', error: event.data?.message ?? null }
             // Without this the status stays 'reading', which keeps
             // marketBusy true and so leaves Run disabled for good.
             case 'cancelled':
@@ -526,6 +551,7 @@ export default function App() {
   const marketBusy = ['pending', 'searching', 'reading', 'comparing'].includes(market?.status)
   const canRun =
     !isRunning &&
+    !checking &&
     !marketBusy &&
     (state.inputMode === 'text'
       ? state.artifactText.trim().length >= MIN_TEXT_LENGTH && state.artifactText.length <= MAX_TEXT_LENGTH
@@ -588,8 +614,14 @@ export default function App() {
               mock={isMockMode()}
             />
             <button type="button" className="run-button" disabled={!canRun} onClick={handleRun}>
-              {isRunning && <span className="run-spinner" aria-hidden="true" />}
-              {isRunning ? 'Running' : anyRunStarted ? 'Run again' : 'Run panel'}
+              {(isRunning || checking) && <span className="run-spinner" aria-hidden="true" />}
+              {isRunning
+                ? 'Running'
+                : checking
+                  ? 'Checking'
+                  : anyRunStarted
+                    ? 'Run again'
+                    : 'Run panel'}
             </button>
             {(isRunning || compareIsRunning) && (
               <button
@@ -820,18 +852,22 @@ export default function App() {
 
         {/* Below the findings: the market comparison needs a finished run
             to compare, and reads as "and here is how that sits against
-            everyone else" rather than competing with the verdict. Hidden
-            in mock mode, which has no backend to search with. */}
+            everyone else" rather than competing with the verdict. Mock
+            mode gets a synthetic version -- nothing is searched or read,
+            and the card says so. */}
         {features.market && state.synthesis && (state.runId || isMockMode()) && (
           <MarketPanel
             status={market?.status}
             query={market?.query ?? ''}
             pages={market?.pages ?? []}
+            pagesDone={market?.pagesDone ?? []}
             comparison={market?.comparison ?? null}
             error={market?.error ?? null}
             onStart={handleStartBenchmark}
             onDismiss={handleDismissMarket}
-            disabled={isRunning}
+            // A compare run holds the same per-client slot a run does, so
+            // the server would refuse this while one is in flight.
+            disabled={isRunning || compareIsRunning}
             isMock={isMockMode()}
           />
         )}

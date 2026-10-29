@@ -61,6 +61,7 @@ export default function MarketPanel({
   status,
   query,
   pages,
+  pagesDone = [],
   comparison,
   error,
   onStart,
@@ -112,6 +113,12 @@ export default function MarketPanel({
             <h2 className="market-headline market-headline-busy">
               <span className="run-spinner market-spinner" aria-hidden="true" />
               {STATUS_LABEL[status]}
+              {status === 'reading' && pages.length > 0 && (
+                <span className="market-progress">
+                  {' '}
+                  &middot; {pagesDone.length} of {pages.length} done
+                </span>
+              )}
             </h2>
           ) : null}
         </div>
@@ -127,6 +134,20 @@ export default function MarketPanel({
           articles and roundups rather than companies’ own pages, so there is
           nothing honest to compare against.
         </p>
+      )}
+
+      {/* Distinct from no_pages: pages were found and read, and those
+          reads are already paid for. Worth retrying, which no_pages
+          never is. */}
+      {status === 'pages_unusable' && (
+        <div className="market-retry">
+          <p className="market-note">
+            {error || 'Too few readers answered to compare these pages.'}
+          </p>
+          <button type="button" className="market-start" onClick={onStart} disabled={disabled}>
+            Try again
+          </button>
+        </div>
       )}
 
       {status === 'error' && (
@@ -156,19 +177,33 @@ export default function MarketPanel({
 
       {pages.length > 0 && (
         <div className="market-pages">
-          {pages.map((p) => (
-            <button
-              key={p.label}
-              type="button"
-              className={`market-page${p.is_yours ? ' market-page-yours' : ''}`}
-              onClick={() => setOpenPage(p)}
-            >
-              <span className="market-page-label">{p.label}</span>
-              <span className="market-page-meta">
-                {p.panel_size} readers &middot; what they read
-              </span>
-            </button>
-          ))}
+          {pages.map((p) => {
+            // Only meaningful while reading: once the comparison is in,
+            // every page left on screen is one the panel finished.
+            const pending = status === 'reading' && !pagesDone.includes(p.label)
+            return (
+              <button
+                key={p.label}
+                type="button"
+                className={`market-page${p.is_yours ? ' market-page-yours' : ''}${
+                  pending ? ' market-page-pending' : ''
+                }`}
+                onClick={() => setOpenPage(p)}
+              >
+                <span className="market-page-label">{p.label}</span>
+                <span className="market-page-meta">
+                  {pending ? (
+                    <>
+                      <span className="run-spinner market-page-spinner" aria-hidden="true" />
+                      reading…
+                    </>
+                  ) : (
+                    `${p.panel_size} readers · what they read`
+                  )}
+                </span>
+              </button>
+            )
+          })}
         </div>
       )}
 

@@ -483,13 +483,23 @@ def test_cancel_is_idempotent():
     RUNS.clear()
 
 
-def test_cancelled_runs_do_not_count_against_the_concurrency_limit():
-    from api.main import MAX_CONCURRENT_RUNS, _active_run_count
+def test_cancelled_runs_do_not_count_against_the_concurrency_limit(monkeypatch):
+    """The run body is stubbed out. This is the one test that takes POST
+    /run past its guards, and unstubbed it did what this file's docstring
+    says it never does: start a real panel, spending ten Nano calls and an
+    Ultra synthesis on every `make test`, with the suite's duration set by
+    how fast the network answered."""
+    from api import main as M
+
+    async def no_model_calls(ctx, skip_synthesis):
+        ctx.run.status = "done"
+
+    monkeypatch.setattr(M, "_execute_run", no_model_calls)
 
     RUNS.clear()
-    for i in range(MAX_CONCURRENT_RUNS + 2):
+    for i in range(M.MAX_CONCURRENT_RUNS + 2):
         RUNS[f"c{i}"] = _finished_ctx(f"c{i}", status="cancelled")
-    assert _active_run_count() == 0
+    assert M._active_run_count() == 0
     r = client.post("/run", json={"text": LONG_ENOUGH, "persona_count": 10})
     # Not a 429 -- cancelled runs are finished runs.
     assert r.status_code != 429
@@ -921,6 +931,30 @@ def test_a_running_benchmark_holds_the_clients_slot_and_a_service_slot():
         M.BENCHMARKS.clear()
 
 
+def test_benchmarks_from_other_clients_use_up_the_service_wide_limit():
+    """The companion to the test above, which only ever exercised the
+    per-client rule: its fixture IP matched TestClient's, so the 429 it
+    asserted came from _client_is_busy and the service-wide ceiling was
+    never reached. That ceiling is the one that actually bounds spend,
+    because a benchmark is three panel reads of 50 concurrent calls."""
+    from api import main as M
+
+    for i in range(M.MAX_CONCURRENT_RUNS):
+        M.BENCHMARKS[f"other{i}"] = _benchmark_ctx(f"other{i}", client_ip=f"10.0.0.{i}")
+    try:
+        assert M._active_run_count() == M.MAX_CONCURRENT_RUNS
+        # Not this caller's own job, so the per-client rule lets it past.
+        assert not M._client_is_busy("testclient")
+        r = client.post("/run", json={"text": LONG_ENOUGH})
+        assert r.status_code == 429
+        assert "too many runs in flight" in r.json()["detail"]
+        # The cached replay makes no model calls, so it stays available.
+        cached = client.post("/run?cached=true", json={"text": LONG_ENOUGH, "label": "pricing_v1"})
+        assert cached.status_code != 429, cached.json()
+    finally:
+        M.BENCHMARKS.clear()
+
+
 def test_cancelling_a_benchmark_stops_its_task():
     import asyncio
 
@@ -942,6 +976,89 @@ def test_cancelling_a_benchmark_stops_its_task():
         assert ctx.task.cancelled()
     finally:
         M.BENCHMARKS.clear()
+
+
+def test_cancelling_a_benchmark_stops_the_paid_calls_and_the_pages_after_it():
+    """The real substance of the cancel claim, which the plumbing test
+    above does not touch: that cancellation reaches fan_out's in-flight
+    reaction calls and that the pages queued behind the current one are
+    never started. Guards against, say, someone wrapping _panel_on_text in
+    asyncio.shield to "make a page read atomic"."""
+    import asyncio
+
+    from api import main as M
+    from panel import react as R
+    from panel.market import Candidate, MarketQuery
+
+    started, finished, pages_read = 0, 0, []
+
+    async def slow_call(*args, **kwargs):
+        nonlocal started, finished
+        started += 1
+        await asyncio.sleep(30)  # cancelled long before this returns
+        finished += 1
+        raise AssertionError("should never complete")
+
+    parent = _finished_ctx("parent")
+    parent.personas = PERSONA_POOL[:4]
+    parent.run.reactions = [_reaction(p.id) for p in parent.personas]
+
+    real_panel = M._panel_on_text
+
+    async def tracking_panel(text, personas, run_id, **kwargs):
+        pages_read.append(run_id)
+        return await real_panel(text, personas, run_id, **kwargs)
+
+    async def scenario(monkeypatch):
+        RUNS["parent"] = parent
+        ctx = _benchmark_ctx("b_cancel", status="pending")
+        ctx.parent = parent
+        M.BENCHMARKS["b_cancel"] = ctx
+
+        monkeypatch.setattr(M, "derive_query", lambda t: _async(MarketQuery(category="c", query="q")))
+        monkeypatch.setattr(M, "search_candidates", lambda q, u: [])
+        monkeypatch.setattr(
+            M, "pick_pages",
+            lambda c, cat, n: _async(
+                [Candidate(url=f"https://p{i}.example/", title=f"p{i}") for i in range(3)]
+            ),
+        )
+        monkeypatch.setattr(M, "fetch_url_text", lambda url: f"a real competitor page {url} " * 10)
+        monkeypatch.setattr(M, "theme_breakdown", lambda r: _async(
+            {"confusions": [], "objections": [], "requested_changes": []}))
+        monkeypatch.setattr(M, "_panel_on_text", tracking_panel)
+        # The only thing not stubbed: the real fan_out, with the model
+        # call underneath it replaced by something slow and countable.
+        monkeypatch.setattr(R, "chat_json", slow_call)
+
+        ctx.task = asyncio.create_task(M._execute_benchmark(ctx))
+        # Wait for the first page's calls to be in flight. Real sleeps,
+        # not event-loop turns: the page fetch goes through
+        # asyncio.to_thread, so this needs an actual thread hop and a
+        # turn-counting wait is a coin flip under load.
+        deadline = asyncio.get_running_loop().time() + 5
+        while started < len(parent.personas) and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.01)
+        in_flight = started
+        await M.cancel_benchmark("b_cancel")
+        await asyncio.gather(ctx.task, return_exceptions=True)
+        await asyncio.sleep(0)
+        return ctx, in_flight, [t for t in asyncio.all_tasks() if not t.done() and t is not asyncio.current_task()]
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        ctx, in_flight, leftover = asyncio.run(scenario(monkeypatch))
+    finally:
+        monkeypatch.undo()
+        M.BENCHMARKS.clear()
+        RUNS.pop("parent", None)
+
+    assert in_flight == 4, "the first page's calls should all be in flight"
+    assert finished == 0, "a cancelled call must not complete and bill"
+    assert ctx.status == "cancelled"
+    # Three competitor pages were queued; only the first was ever started.
+    assert len(pages_read) == 1, f"pages started: {pages_read}"
+    assert not leftover, f"orphaned tasks still running: {leftover}"
 
 
 def test_benchmark_eviction_never_drops_a_running_one():
@@ -970,6 +1087,9 @@ def test_benchmark_skips_thin_pages_and_pages_most_readers_failed(monkeypatch):
 
     parent = _finished_ctx("parent")
     parent.personas = PERSONA_POOL[:10]
+    # The user's own page has to clear the same floor, or the benchmark
+    # stops before it reads anything.
+    parent.run.reactions = [_reaction(p.id) for p in parent.personas]
     RUNS["parent"] = parent
     ctx = _benchmark_ctx("b3", status="pending")
 
@@ -1003,7 +1123,10 @@ def test_benchmark_skips_thin_pages_and_pages_most_readers_failed(monkeypatch):
     monkeypatch.setattr(M, "theme_breakdown", breakdown)
     asyncio.run(M._execute_benchmark(ctx))
     # The thin page is never read; the broken one is read and dropped.
-    assert ctx.status == "no_pages"
+    # Not "no_pages": two pages were found and one was paid for, so the
+    # user is told that rather than that the search came up empty.
+    assert ctx.status == "pages_unusable"
+    assert "too few readers answered" in ctx.error_message
     assert ctx.personas_sent == 10
     assert [p.label for p in ctx.pages] == ["Your page"]
 
@@ -1087,7 +1210,15 @@ def test_benchmark_corrects_panel_size_and_rebroadcasts_the_surviving_pages():
         monkeypatch.setattr(M, "fetch_url_text", lambda url: f"a real competitor page {url} " * 10)
         monkeypatch.setattr(M, "_panel_on_text", panel)
         monkeypatch.setattr(M, "theme_breakdown", lambda r: _async({"confusions": [], "objections": [], "requested_changes": []}))
-        monkeypatch.setattr(M, "build_comparison", lambda q, p, b: _async({"pages": [x.model_dump(mode="json") for x in p]}))
+        monkeypatch.setattr(
+            M, "build_comparison",
+            lambda q, p, b: _async(
+                M.MarketComparison(
+                    query=q, pages=list(p), shared_confusions=[], shared_objections=[],
+                    only_yours_confusions=[], only_yours_objections=[],
+                )
+            ),
+        )
         events = _capture_benchmark_events(monkeypatch)
         asyncio.run(M._execute_benchmark(ctx))
     finally:
@@ -1217,3 +1348,40 @@ def test_a_cached_replay_is_not_refused_while_the_client_has_a_benchmark():
         assert cached.status_code != 429, cached.json()
     finally:
         M.BENCHMARKS.clear()
+
+
+def test_a_benchmark_reserves_its_fixed_overhead_and_keeps_it_on_settle():
+    """The digest, alignment, query and Tavily calls are made before the
+    first page is read and are not refundable. The budgets used to ignore
+    them entirely, and settling to the pages actually read would have
+    handed back money already spent."""
+    from api import main as M
+
+    personas = PERSONA_POOL[:10]
+    parent = _finished_ctx("parent")
+    parent.personas = personas
+    parent.run.reactions = [_reaction(p.id) for p in personas]
+    RUNS["parent"] = parent
+    try:
+        import time as _time
+
+        before = M._daily_spend(_time.monotonic())
+        r = client.post("/benchmark", json={"run_id": "parent"})
+        if r.status_code == 503:
+            pytest.skip("no Tavily key configured in this environment")
+        assert r.status_code == 200, r.json()
+        ctx = M.BENCHMARKS[r.json()["benchmark_id"]]
+        # The search fails without a reachable Tavily, so by now the task
+        # has finished and settled having read no pages at all.
+        assert ctx.personas_sent == 0
+        charged = M._daily_spend(_time.monotonic()) - before
+        # Not zero: the pre-page calls happened and cannot be refunded.
+        assert charged == M.BENCHMARK_OVERHEAD_UNITS
+        # And the reservation was the overhead plus every page it could
+        # have read, which is what the refund came out of.
+        assert ctx.spend.personas <= M.COMPETITOR_PAGES * len(personas) + M.BENCHMARK_OVERHEAD_UNITS
+    finally:
+        for bid in list(M.BENCHMARKS):
+            M.BENCHMARKS[bid].task = None
+        M.BENCHMARKS.clear()
+        RUNS.pop("parent", None)

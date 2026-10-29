@@ -160,93 +160,130 @@ export function buildMockPersonas(n = 100) {
   return personas
 }
 
-const GUT_REACTIONS = [
-  "Is this a subscription? It doesn't say, which means yes.",
-  "Fine, I'll keep reading.",
-  "Too much jargon, I'm already skimming past it.",
-  "Okay this is actually clear, surprising.",
-  "Where's the catch, there's always a catch.",
-]
-
-// Two sets, and which one is used depends on whether the artifact is a
-// recognized example.
+// One content set per example, plus a generic set for anything else.
 //
-// The specific set quotes the pricing example's actual content ("$29",
-// "the free trial"). That reads well when the pricing example is what was
-// submitted -- and is a fabrication about anything else. Mock data is
-// synthetic by definition, but it must not assert things about the user's
-// copy that are false (scripts/check_mock.mjs pins this).
-const SPECIFIC_CONFUSIONS = [
-  'Whether the $29 is monthly or one-time',
-  'What happens after the free trial',
-  'Who this is actually for',
-  null,
-]
-
-const SPECIFIC_OBJECTIONS = [
-  'No visible cancellation policy',
-  'No price until the third screen',
-  'Too much jargon to trust it',
-  null,
-]
-
-const SPECIFIC_CHANGES = [
-  "Say 'cancel anytime, one click' next to the price",
-  'Put the price in the first sentence',
-  'Drop the jargon, use plain words',
-  'Show one real customer, not a stock photo',
-]
-
-// The generic set quotes nothing. Every line is true of almost any
-// public-facing copy, so it stays honest about arbitrary input.
-const GENERIC_CONFUSIONS = [
-  'What exactly I am being asked to do',
-  'Who this is meant for',
-  'What it would cost me',
-  null,
-]
-
-const GENERIC_OBJECTIONS = [
-  'Nothing here backs up the claims',
-  'It does not say what happens next',
-  'Too vague to act on',
-  null,
-]
-
-const GENERIC_CHANGES = [
-  'Say plainly what the reader should do next',
-  'Put one concrete number in the first line',
-  'Name who this is for',
-  'Back the main claim with something checkable',
-]
-
-const GENERIC_GUT_REACTIONS = [
-  "I'm not sure what they want me to do here.",
-  'Fine, I skimmed it.',
-  "Too vague for me to care.",
-  'Clear enough, I suppose.',
-  "What's the catch?",
-]
+// Not one "specific" set shared by all three examples, which is what this
+// used to be: `specific` meant "is a recognized example", so the parking
+// notice and the fintech ad were both described in the pricing page's
+// words -- the $29, the free trial -- neither of which appears in either.
+// The honesty rule is per artifact, so the content has to be too, and
+// scripts/check_mock.mjs now checks each example against the others'
+// vocabulary rather than only checking arbitrary pasted text.
+//
+// `guts` is keyed by sentiment band, not a flat list. It used to be flat
+// and picked by a hash unrelated to the sentiment, so a persona the grid
+// paints as strongly negative could say "Fine, I'll keep reading" -- the
+// one thing a reader is certain to notice, because the tile colour and
+// the words are side by side. In a real run the model writes the band and
+// the sentence in the same breath, so they cannot disagree; mock mode has
+// to arrange that for itself.
+const CONTENT = {
+  pricing_v1: {
+    guts: {
+      '-2': ["Twenty-nine dollars for a list of recipes? No.", 'I can do this with a notepad and a free afternoon.'],
+      '-1': ["It says $29 and nothing about how often. That's deliberate.", "'Early user feedback from our beta' is not a testimonial."],
+      '0': ["Fine, I'll keep reading.", 'Sounds useful. I still need to know what $29 actually buys.'],
+      '1': ["Okay this is actually clear, surprising.", "If that $29 is once, that's fair."],
+      '2': ['This is my Sunday, exactly. I would try it.', 'Thirty-minute recipes and a sorted list — sold.'],
+    },
+    confusions: [
+      'Whether the $29 is monthly or one-time',
+      'Whether I can stop after the first week',
+      'Who this is actually for',
+    ],
+    objections: [
+      'No visible cancellation policy',
+      'The price appears with no period attached',
+      "The $40 a week saving isn't backed by anything",
+    ],
+    changes: [
+      "Say '$29 a month' or '$29 once' next to the price",
+      'Put the price in the first sentence',
+      'Show one real customer, not beta feedback',
+      'Say what happens after the first week',
+    ],
+  },
+  ad_v1: {
+    guts: {
+      '-2': ["'Not a bank' in the small print. That's the whole story.", 'Rate arbitrage with my emergency fund. Absolutely not.'],
+      '-1': ['4.8% today means 3% by spring.', "Too much engineered language for somewhere I'd keep cash."],
+      '0': ["Fine, I'll keep reading.", "The yield is interesting. Where the money sits isn't clear."],
+      '1': ['If the FDIC part holds up, this is worth a look.', 'Clearer than most of these, I will give it that.'],
+      '2': ['11x the average and still insured. I would move money.', 'This is what my savings account should have been doing.'],
+    },
+    confusions: [
+      'Whether my money is actually FDIC insured',
+      "What 'pass-through coverage' means for me",
+      'Whether the 4.8% can drop next month',
+    ],
+    objections: [
+      "A company that says it isn't a bank holding my cash",
+      'The APY has no floor and no guarantee',
+      "'Dynamic yield optimization' explains nothing",
+    ],
+    changes: [
+      'Say plainly who holds the money and who insures it',
+      'Say what the rate was a year ago',
+      "Drop 'rate arbitrage' and say where the cash sits",
+      'Name the partner banks',
+    ],
+  },
+  policy_v1: {
+    guts: {
+      '-2': ['So now I pay to park outside my own house.', 'Decided in a council vote I never heard about.'],
+      '-1': ["Where do I actually get a permit? It doesn't say.", "Effective next month and I'm hearing it now."],
+      '0': ["Fine, I'll keep reading.", 'I need to know whether my street is in this.'],
+      '1': ['Clear enough about what is changing, at least.', 'Fair, if the spillover is as bad as they say.'],
+      '2': ['Finally. The commuters park here all day.', 'Overdue on my block, honestly.'],
+    },
+    confusions: [
+      'Whether my street is in one of the new zones',
+      'How to actually get a permit',
+      'What the posted hours will be',
+    ],
+    objections: [
+      'No permit cost is given anywhere',
+      "A month's notice for something this disruptive",
+      'Visitors are left with nowhere to park',
+    ],
+    changes: [
+      'List the affected streets, not the neighbourhoods',
+      'Say what a permit costs and where to get one',
+      'Give the posted hours',
+      'Say what visitors are meant to do',
+    ],
+  },
+  // Quotes nothing. Every line is true of almost any public-facing copy,
+  // so it stays honest about arbitrary input.
+  generic: {
+    guts: {
+      '-2': ['I have no idea what they want from me.', 'Closed it in my head already.'],
+      '-1': ['Too vague for me to care.', 'Nothing here tells me what it would cost.'],
+      '0': ['Fine, I skimmed it.', 'Could go either way on this.'],
+      '1': ['Clear enough, I suppose.', 'Makes sense. I would want one more detail.'],
+      '2': ['This is exactly what I needed to read.', 'Clear and to the point, which is rare.'],
+    },
+    confusions: [
+      'What exactly I am being asked to do',
+      'Who this is meant for',
+      'What it would cost me',
+    ],
+    objections: [
+      'Nothing here backs up the claims',
+      'It does not say what happens next',
+      'Too vague to act on',
+    ],
+    changes: [
+      'Say plainly what the reader should do next',
+      'Put one concrete number in the first line',
+      'Name who this is for',
+      'Back the main claim with something checkable',
+    ],
+  },
+}
 
 function contentFor(artifactText) {
-  const specific = !!calibrationFor(artifactText).match
-  return specific
-    ? {
-        guts: GUT_REACTIONS,
-        confusions: SPECIFIC_CONFUSIONS.filter((c) => c !== null),
-        objections: SPECIFIC_OBJECTIONS.filter((o) => o !== null),
-        changes: SPECIFIC_CHANGES,
-        nullableConfusions: SPECIFIC_CONFUSIONS,
-        nullableObjections: SPECIFIC_OBJECTIONS,
-      }
-    : {
-        guts: GENERIC_GUT_REACTIONS,
-        confusions: GENERIC_CONFUSIONS.filter((c) => c !== null),
-        objections: GENERIC_OBJECTIONS.filter((o) => o !== null),
-        changes: GENERIC_CHANGES,
-        nullableConfusions: GENERIC_CONFUSIONS,
-        nullableObjections: GENERIC_OBJECTIONS,
-      }
+  return CONTENT[calibrationFor(artifactText).content ?? 'generic']
 }
 
 // Per-example calibration, taken from the real anti-sycophancy
@@ -266,12 +303,12 @@ function contentFor(artifactText) {
 // phrase is checked to appear in its example by scripts/check_mock.mjs.
 const ARTIFACT_CALIBRATION = [
   // real: mean -0.28, 2.7% would act -> mock: -0.29, 2.6%
-  { match: 'PlateUp', shift: -6, actRate: 0.1 },
+  { match: 'PlateUp', content: 'pricing_v1', shift: -6, actRate: 0.1 },
   // real: mean -0.48, 2.0% would act -> the harshest of the three
-  { match: 'Nimbus is a financial technology company', shift: -10, actRate: 0.08 },
+  { match: 'Nimbus is a financial technology company', content: 'ad_v1', shift: -10, actRate: 0.08 },
   // real: mean -0.30, 0.0% would act -- a civic notice offers no action
   // to take, so nobody "converts" and mock mode must say so too
-  { match: 'RESIDENTIAL PERMIT PARKING', shift: -6, actRate: 0 },
+  { match: 'RESIDENTIAL PERMIT PARKING', content: 'policy_v1', shift: -6, actRate: 0 },
 ]
 // Arbitrary pasted text: no measurement to match, so this sits in the
 // same range as the examples rather than pretending to a figure.
@@ -299,7 +336,8 @@ export function buildMockReaction(persona, i, calibration = DEFAULT_CALIBRATION,
     persona_id: persona.id,
     sentiment,
     would_act: sentiment >= 1 && (hash32(i) % 100) / 100 < calibration.actRate,
-    gut_reaction: pick(c.guts, hash32(i + 1)),
+    // Keyed by the band, so the sentence agrees with the tile's colour.
+    gut_reaction: pick(c.guts[String(sentiment)], hash32(i + 1)),
     top_confusion: atTwo && hash32(i) % 2 === 0 ? null : pick(c.confusions, hash32(i + 2)),
     top_objection: atTwo && hash32(i) % 2 === 1 ? null : pick(c.objections, hash32(i + 3)),
     what_would_change_my_mind: pick(c.changes, hash32(i + 4)),
@@ -363,6 +401,79 @@ function recount(personas, reactionsById, clauses) {
   }
 }
 
+// The verdict's prose, per artifact, for the same reason CONTENT is per
+// artifact: this used to be one "specific" branch shared by all three
+// examples, so running the parking notice produced the headline "The $29
+// reads as a subscription" and offered to rewrite a `$29` that is not in
+// it. The segments and percentages below are real either way -- they are
+// recounted over the mock reactions -- but the prose asserts things about
+// the copy, so it has to match the copy.
+//
+// `edit` is null where there is no safe verbatim phrase to quote: the
+// generic branch then picks the artifact's longest sentence, so the
+// apply-and-compare flow still has something real to replace.
+const PROSE = {
+  pricing_v1: {
+    claims: [
+      'The $29 figure is read as monthly by low-tech-comfort personas',
+      'High-skepticism personas object to the missing cancellation policy',
+      'Southwest and Southeast US personas are the most price-anchored',
+    ],
+    edit: {
+      current_text: '$29',
+      proposed_text: '$29 one-time. No subscription.',
+      rationale: 'Resolves the top confusion for low-tech-comfort readers without changing the price.',
+    },
+    headline: (pct) => `The $29 reads as a subscription: ${pct}% of low-tech-comfort readers reacted negatively`,
+    losing: 'Older, price-sensitive, low-trust readers who leave before the second paragraph.',
+    winning: 'Tech-comfortable 25-40 year olds who skim and see a low number.',
+  },
+  ad_v1: {
+    claims: [
+      'Low-tech-comfort personas could not tell whether their money is insured',
+      'High-skepticism personas read "not a bank" as the real headline',
+      'Southwest and Southeast US personas distrust the rate most',
+    ],
+    edit: {
+      current_text: 'Nimbus is a financial technology company, not a bank.',
+      proposed_text:
+        'Nimbus is a financial technology company, not a bank. Your cash is held at our partner banks, each FDIC-insured, and you can withdraw it at any time.',
+      rationale: 'Answers the question the disclosure raises, in the place readers find it.',
+    },
+    headline: (pct) => `"Not a bank" is doing the damage: ${pct}% of low-tech-comfort readers reacted negatively`,
+    losing: 'Cautious savers who read the small print before the rate.',
+    winning: 'Yield-chasing 25-40 year olds who already use three fintech apps.',
+  },
+  policy_v1: {
+    claims: [
+      'Low-tech-comfort personas could not tell whether their street is affected',
+      'High-skepticism personas object to the notice period',
+      'Southwest and Southeast US personas were the least moved',
+    ],
+    edit: {
+      current_text: 'Streets within the newly designated zones will transition to permit-only',
+      proposed_text:
+        'The full list of affected streets is on the back of this notice. Streets within the newly designated zones will transition to permit-only',
+      rationale: 'The one thing every reader is looking for, before anything else on the page.',
+    },
+    headline: (pct) => `Readers cannot tell if this is about them: ${pct}% of low-tech-comfort readers reacted negatively`,
+    losing: 'Residents who need to act and cannot work out whether they must.',
+    winning: 'Neighbours already fighting commuter parking on their block.',
+  },
+  generic: {
+    claims: [
+      'Low-tech-comfort personas could not tell what they were being asked to do',
+      'High-skepticism personas wanted something checkable before acting',
+      'Southwest and Southeast US personas were the least moved',
+    ],
+    edit: null,
+    headline: (pct) =>
+      `${pct}% of low-tech-comfort readers reacted negatively and could not tell what this asks of them`,
+    losing: 'Older, low-trust readers who leave before the second paragraph.',
+    winning: 'Tech-comfortable 25-40 year olds who skim and give it the benefit of the doubt.',
+  },
+}
+
 export function buildMockSynthesis(personas, artifactText, reactions = []) {
   // Evidence ids are drawn from the personas this run actually has, and
   // the offsets wrap, so every cited id has a tile in the grid at any N.
@@ -377,7 +488,7 @@ export function buildMockSynthesis(personas, artifactText, reactions = []) {
   // filters the grid to exactly the people it names. What changes with
   // the artifact is the prose, which otherwise claims things about copy
   // that may not contain them.
-  const specific = !!calibrationFor(artifactText).match
+  const prose = PROSE[calibrationFor(artifactText).content ?? 'generic']
   const segments = [
     {
       affected_segment: 'low tech comfort (33 or below)',
@@ -395,30 +506,15 @@ export function buildMockSynthesis(personas, artifactText, reactions = []) {
       severity: 'low',
     },
   ]
-  const claims = specific
-    ? [
-        'The $29 figure is read as monthly by low-tech-comfort personas',
-        'High-skepticism personas object to the missing cancellation policy',
-        'Southwest and Southeast US personas are the most price-anchored',
-      ]
-    : [
-        'Low-tech-comfort personas could not tell what they were being asked to do',
-        'High-skepticism personas wanted something checkable before acting',
-        'Southwest and Southeast US personas were the least moved',
-      ]
   const findings = segments.map((seg, i) => ({
-    claim: claims[i],
+    claim: prose.claims[i],
     ...recount(personas, reactionsById, seg.affected_segment_filter),
     ...seg,
     evidence: evidenceFrom(i * 10),
   }))
 
-  const edit = specific
-    ? {
-        current_text: '$29',
-        proposed_text: '$29 one-time. No subscription.',
-        rationale: 'Resolves the top confusion for low-tech-comfort readers without changing the price.',
-      }
+  const edit = prose.edit
+    ? prose.edit
     : (() => {
         const target = longestSentence(artifactText)
         return target
@@ -436,17 +532,11 @@ export function buildMockSynthesis(personas, artifactText, reactions = []) {
 
   const lead = findings[0].affected_pct
   return {
-    headline: specific
-      ? `The $29 reads as a subscription: ${lead}% of low-tech-comfort readers reacted negatively`
-      : `${lead}% of low-tech-comfort readers reacted negatively and could not tell what this asks of them`,
+    headline: prose.headline(lead),
     findings,
     highest_leverage_edit: { ...edit, predicted_flips: Math.max(1, Math.round(personas.length * 0.05)) },
-    who_you_are_losing: specific
-      ? 'Older, price-sensitive, low-trust readers who leave before the second paragraph.'
-      : 'Older, low-trust readers who leave before the second paragraph.',
-    who_you_are_winning: specific
-      ? 'Tech-comfortable 25-40 year olds who skim and see a low number.'
-      : 'Tech-comfortable 25-40 year olds who skim and give it the benefit of the doubt.',
+    who_you_are_losing: prose.losing,
+    who_you_are_winning: prose.winning,
     // The whole panel as one segment, as the backend computes it.
     overall_negative_pct: recount(personas, reactionsById, []).affected_pct,
   }
