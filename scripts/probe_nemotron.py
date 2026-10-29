@@ -1,11 +1,12 @@
-"""Measurement harness for the Nemotron behaviours FEEDBACK.md reports.
+"""Measurement harness for the Nemotron behaviours the README's feedback
+section reports.
 
     python scripts/probe_nemotron.py --trials 10
 
-Exists so the numbers in FEEDBACK.md can be re-derived rather than taken
-on trust. Every probe calls the live API and costs real credits (the
-budget probe provokes failures on purpose, and a failed call bills for
-every token it burned), so none of this runs in the test suite.
+Exists so the numbers in the README's feedback section can be re-derived
+rather than taken on trust. Every probe calls the live API and costs real
+credits (the budget probe provokes failures on purpose, and a failed call
+bills for every token it burned), so none of this runs in the test suite.
 
 Ten trials is the floor worth reporting. At three, this harness told us a
 24000-token budget failed 0/3 and we changed production code on it; at ten

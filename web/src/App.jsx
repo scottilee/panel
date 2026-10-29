@@ -221,6 +221,31 @@ export default function App() {
     () => state.personas.find((p) => p.id === pinnedPersonaId) ?? null,
     [state.personas, pinnedPersonaId],
   )
+  // Which people answered differently in Run B, and how many. Used both
+  // for the Run B status line and to outline those tiles, so the A/B
+  // toggle shows *which* readers moved rather than only that some did.
+  const changedIdsFromA = useMemo(() => {
+    const a = state.reactionsById
+    const b = state.compare.reactionsById
+    const changed = new Set()
+    for (const [id, after] of Object.entries(b)) {
+      const before = a[id]
+      if (!before || !after) continue
+      if (before.sentiment !== after.sentiment || before.would_act !== after.would_act) {
+        changed.add(id)
+      }
+    }
+    return changed
+  }, [state.reactionsById, state.compare.reactionsById])
+  const changedFromA = changedIdsFromA.size
+
+  // In Run B, ring the people who answered differently from Run A --
+  // reusing the evidence-hover ring, which is already the right affordance
+  // for "these specific ones". Hovering a finding's evidence still wins
+  // while it is active.
+  const ringedIds =
+    highlightedIds ?? (viewMode === 'B' && state.compare.result ? changedIdsFromA : null)
+
   const deltaByPersonaId = useMemo(
     () => (viewMode === 'delta' ? selectDeltaByPersonaId(state) : null),
     [viewMode, state],
@@ -569,6 +594,15 @@ export default function App() {
   } else if (viewMode === 'delta' && state.compare.result) {
     const { flipped_positive: yes, flipped_negative: no } = state.compare.result
     statusText = `${yes} moved to yes, ${no} moved to no`
+  } else if (viewMode === 'B' && state.compare.result) {
+    // One edit moves a handful of people out of hundreds -- that is the
+    // finding, not a bug -- so switching to Run B recolours about 6% of
+    // the grid and otherwise looks inert. Saying how many changed turns
+    // a toggle that reads as broken into a number worth reading.
+    statusText =
+      changedFromA === 1
+        ? `1 of ${total} read it differently than in Run A`
+        : `${changedFromA} of ${total} read it differently than in Run A`
   } else {
     statusText = `${doneCount} of ${total} have answered`
   }
@@ -802,7 +836,7 @@ export default function App() {
             personas={displayPersonas}
             reactionsById={gridReactionsById}
             filteredIds={filteredIds}
-            highlightedIds={highlightedIds}
+            highlightedIds={ringedIds}
             deltaByPersonaId={deltaByPersonaId}
             onTileClick={handleTileClick}
             onBackgroundClick={handleBackgroundClick}

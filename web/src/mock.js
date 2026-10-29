@@ -186,15 +186,18 @@ const CONTENT = {
       '1': ["Okay this is actually clear, surprising.", "If that $29 is once, that's fair."],
       '2': ['This is my Sunday, exactly. I would try it.', 'Thirty-minute recipes and a sorted list — sold.'],
     },
+    // Order matters: the only-yours column shows confusions[2] and
+    // objections[1..2], so the sharpest, most page-specific problems go
+    // there, and nothing may restate a generic shared theme.
     confusions: [
-      'Whether the $29 is monthly or one-time',
-      'Whether I can stop after the first week',
       'Who this is actually for',
+      'Whether I can stop after the first week',
+      'Whether the $29 is monthly or one-time',
     ],
     objections: [
-      'No visible cancellation policy',
-      'The price appears with no period attached',
       "The $40 a week saving isn't backed by anything",
+      'The price appears with no period attached',
+      'No visible cancellation policy',
     ],
     changes: [
       "Say '$29 a month' or '$29 once' next to the price",
@@ -212,9 +215,9 @@ const CONTENT = {
       '2': ['11x the average and still insured. I would move money.', 'This is what my savings account should have been doing.'],
     },
     confusions: [
-      'Whether my money is actually FDIC insured',
-      "What 'pass-through coverage' means for me",
       'Whether the 4.8% can drop next month',
+      "What 'pass-through coverage' means for me",
+      'Whether my money is actually FDIC insured',
     ],
     objections: [
       "A company that says it isn't a bank holding my cash",
@@ -237,9 +240,9 @@ const CONTENT = {
       '2': ['Finally. The commuters park here all day.', 'Overdue on my block, honestly.'],
     },
     confusions: [
-      'Whether my street is in one of the new zones',
-      'How to actually get a permit',
       'What the posted hours will be',
+      'How to actually get a permit',
+      'Whether my street is in one of the new zones',
     ],
     objections: [
       'No permit cost is given anywhere',
@@ -843,10 +846,55 @@ City's official website.`,
 // them. They exist so the page-text modal has something real to show:
 // seeing WHAT the panel read is most of the value of that modal, and an
 // empty one would teach the user nothing about the feature.
-const MOCK_COMPETITORS = [
-  {
-    label: 'Competitor A',
-    text: `Save smarter. 4.10% APY, no minimum.
+// One competitor set per example, for the same reason CONTENT is per
+// example. These three savings pages were written for the fintech ad and
+// were originally used for all three: running the market comparison on the
+// parking notice claimed that readers of three savings-account landing
+// pages had also wondered whether their street was in a new parking zone,
+// and the meal-planning page's "$29" confusion was reported as shared
+// across pages that never mention a price. check_mock.mjs now pins this.
+const MOCK_COMPETITORS = {
+  pricing_v1: [
+    {
+      label: 'Competitor A',
+      text: `Dinner, sorted. $12 a month.
+
+Pick your household size and the meals you already like. We send seven
+dinners every Thursday with a grocery list you can hand to anyone.
+
+Cancel in one click, any time, from your account page. No contract and no
+minimum number of weeks.`,
+    },
+    {
+      label: 'Competitor B',
+      text: `Stop deciding what to cook.
+
+A weekly plan built from what is already in your kitchen. Swap any meal for
+another in two taps.
+
+- 20 minutes or less, every recipe
+- Scales from 1 to 8 people
+- Free for two weeks, then $9/month
+- 31,000 households, average 4.6 stars
+
+Works with any supermarket. No boxes, no deliveries.`,
+    },
+    {
+      label: 'Competitor C',
+      text: `Weekly meal plans from real cooks.
+
+Every plan is written by a chef and tested on a family of four. You get the
+plan, the list, and the prep order.
+
+$29 for three months, billed quarterly. Pause whenever you like.
+
+Questions? Reply to any email and a person answers.`,
+    },
+  ],
+  ad_v1: [
+    {
+      label: 'Competitor A',
+      text: `Save smarter. 4.10% APY, no minimum.
 
 Open an account in three minutes. No monthly fees, no minimum balance, no
 penalty for withdrawing. Your money is FDIC insured to $250,000 through our
@@ -854,10 +902,10 @@ partner bank.
 
 Rate is variable and may change after account opening. See the rate sheet
 for current terms.`,
-  },
-  {
-    label: 'Competitor B',
-    text: `A savings account that actually pays.
+    },
+    {
+      label: 'Competitor B',
+      text: `A savings account that actually pays.
 
 Most high street banks pay 0.4%. We pay 4.25%. That is the whole pitch.
 
@@ -868,10 +916,10 @@ Most high street banks pay 0.4%. We pay 4.25%. That is the whole pitch.
 
 Takes about four minutes to open. You will need a photo ID and your Social
 Security number.`,
-  },
-  {
-    label: 'Competitor C',
-    text: `Earn 4.00% APY on every dollar.
+    },
+    {
+      label: 'Competitor C',
+      text: `Earn 4.00% APY on every dollar.
 
 No minimum deposit. No monthly maintenance fee. Unlimited transfers between
 your accounts.
@@ -880,11 +928,102 @@ Already a member? Sign in to open a savings account in one step.
 
 Annual Percentage Yield accurate as of today and subject to change without
 notice. Fees may reduce earnings.`,
-  },
-]
+    },
+  ],
+  // Other cities' notices rather than competitors -- the comparison is
+  // "other pages doing this same job", which for a civic notice is other
+  // councils announcing the same kind of change.
+  policy_v1: [
+    {
+      label: 'Oakvale',
+      text: `CITY OF OAKVALE — PERMIT PARKING ZONE 4 EXPANSION
+
+Beginning the first Monday of next month, permit parking hours on the
+streets listed overleaf change to 8am-8pm, Monday through Saturday.
+
+Affected streets: Alder, Birchwood, Cannery Row, Delmar (300-700 blocks).
+
+Permits cost $35 per year per vehicle and can be bought online at
+oakvale.gov/parking or at the Civic Center counter. Residents of the listed
+streets are eligible. Two visitor passes are included per household.
+
+Vehicles without a displayed permit during posted hours are subject to a
+$60 citation.`,
+    },
+    {
+      label: 'Ashford',
+      text: `TOWN OF ASHFORD — RESIDENT PARKING PROGRAM NOTICE
+
+The Town Council has approved an expansion of the Resident Parking Program
+to the Mill District, effective in 60 days.
+
+What changes: on-street parking on affected blocks becomes permit-only
+between 9am and 6pm on weekdays.
+
+What you need to do: nothing, if you already hold a 2026 permit. New
+applicants should apply at the Town Clerk's office. Processing takes about
+two weeks, so apply before the effective date.
+
+A map of affected blocks and the full fee schedule are available at
+ashford.gov/rpp or by calling the Clerk's office.`,
+    },
+    {
+      label: 'Westbury',
+      text: `NOTICE OF PARKING RESTRICTION CHANGES — WESTBURY
+
+Per Municipal Code 14-220, parking restrictions in the Harbor and Depot
+districts will be modified following a petition by affected residents and a
+traffic study completed in the prior quarter.
+
+Restrictions take effect upon installation of signage, which is expected
+within 30 to 45 days of this notice. Posted signs govern.
+
+Inquiries regarding eligibility, permit issuance and the appeals process
+should be directed to the Department of Public Works.`,
+    },
+  ],
+  // Arbitrary pasted text: no category to imitate, so these are
+  // deliberately bland pages that the generic confusions ("what it would
+  // cost me", "nothing backs up the claims") are honestly true of.
+  generic: [
+    {
+      label: 'Competitor A',
+      text: `The simplest way to get started.
+
+Join thousands of teams already working faster. Setup takes minutes and our
+team is here to help you every step of the way.
+
+Get started today and see the difference for yourself.`,
+    },
+    {
+      label: 'Competitor B',
+      text: `Built for people who care about the details.
+
+We believe software should get out of your way. That is why we rebuilt ours
+from the ground up, with the things you actually use on the first screen.
+
+Try it free. No credit card needed.`,
+    },
+    {
+      label: 'Competitor C',
+      text: `Everything you need, nothing you don't.
+
+Plans start at a price that makes sense for your size, and you can change
+tier whenever you like.
+
+Talk to our team to find the right fit, or start on your own in under five
+minutes.`,
+    },
+  ],
+}
+
+function competitorsFor(artifactText) {
+  return MOCK_COMPETITORS[calibrationFor(artifactText).content ?? 'generic']
+}
 
 export function buildMockComparison(artifactText, panelSize) {
   const content = contentFor(artifactText)
+  const SHARED = CONTENT.generic
   const pages = [
     {
       label: 'Your page',
@@ -893,7 +1032,7 @@ export function buildMockComparison(artifactText, panelSize) {
       panel_size: panelSize,
       text: artifactText || '',
     },
-    ...MOCK_COMPETITORS.map((c) => ({
+    ...competitorsFor(artifactText).map((c) => ({
       label: c.label,
       url: null,
       is_yours: false,
@@ -904,15 +1043,27 @@ export function buildMockComparison(artifactText, panelSize) {
   const everyone = [pages[0].label, pages[1].label, pages[2].label]
   const two = [pages[0].label, pages[3].label]
   return {
-    query: `${content.confusions.length ? '' : ''}mock search — no web request was made`,
+    query: 'mock search — no web request was made',
     pages,
-    // Shared: drawn from the generic pools, so they match the reactions.
+    // The two columns draw from different pools, on purpose.
+    //
+    // Shared themes use the GENERIC pool: a theme claimed to be shared is
+    // a claim about pages whose text the user can open and read, so it has
+    // to be true of them. "What exactly I am being asked to do" is
+    // honestly true of bland marketing copy; the artifact-specific
+    // version was not. Asserting "whether my street is in one of the new
+    // zones" was shared with Oakvale's notice contradicted Oakvale's
+    // notice, which lists its affected streets.
+    //
+    // Only-yours themes stay artifact-specific, because there the
+    // specificity is both correct and the entire point: it is a claim
+    // about the user's own page and nothing else.
     shared_confusions: [
-      { theme: content.confusions[0], pages: everyone, evidence: [] },
-      { theme: content.confusions[1], pages: two, evidence: [] },
+      { theme: SHARED.confusions[0], pages: everyone, evidence: [] },
+      { theme: SHARED.confusions[1], pages: two, evidence: [] },
     ].filter((t) => t.theme),
     shared_objections: [
-      { theme: content.objections[0], pages: everyone, evidence: [] },
+      { theme: SHARED.objections[0], pages: everyone, evidence: [] },
     ].filter((t) => t.theme),
     only_yours_confusions: [
       { theme: content.confusions[2] ?? 'Something only your page leaves unclear', pages: ['Your page'], evidence: [] },

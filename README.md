@@ -1,27 +1,12 @@
 # Panel
 
-**Find out who you're losing, and why — before you ship.**
+**Find out who you're losing, and why before you ship.**
 
-Paste a landing page, ad, pricing page, or policy notice. A panel of
-distinct synthetic people — 100 by default, up to 1,000 — reads it in
-parallel and reacts the way they actually would in the first twenty seconds:
-bored, confused, suspicious, indifferent. One stronger model reads their
-reactions (or, above 150 people, themes condensed from them) and tells you the three things that are costing you, which segment
-each one affects, and one specific edit to try. Apply the edit and it reruns
-the same people so you can see who changed their mind.
+Paste a landing page, ad, pricing page, or policy notice. A panel of distinct synthetic people (100 by default, up to 1,000) reads it in parallel and reacts the way they actually would in the first twenty seconds: bored, confused, suspicious, indifferent. One stronger model reads their reactions (or, above 150 people, themes condensed from them) and tells you the three things that are costing you, which segment each one affects, and one specific edit to try. Apply the edit and it reruns the same people so you can see who changed their mind.
 
-A real 100-person copy test costs thousands of dollars and takes a week.
-This costs about ten cents and takes a minute or two, depending on load on
-Token Factory, or about 15 seconds with fast mode on (see
-[Performance](#performance)).
+A real 100-person copy test costs thousands of dollars and takes a week. This costs about ten cents and takes a minute or two, depending on load on Token Factory, or about 15 seconds with fast mode on (see [Performance](#performance)).
 
-**More than nine in ten personas say "I wouldn't act on this." That's the point.** The
-panel is deliberately built to be hard to please (see
-[Anti-sycophancy](#anti-sycophancy-why-the-panel-says-no)) — a panel that
-tells you your copy is great is worth nothing.
-
-Built for the Nebius x NVIDIA Global AI Hackathon, Best Apps and Agents
-track.
+**More than nine in ten personas say "I wouldn't act on this." That's the point.** The panel is deliberately built to be hard to please (see [Anti-sycophancy](#anti-sycophancy-why-the-panel-says-no)) — a panel that tells you your copy is great is worth nothing.
 
 ---
 
@@ -56,8 +41,8 @@ flowchart LR
 | Model | Role | Why this size |
 | --- | --- | --- |
 | **Nemotron Nano** (`NVIDIA-Nemotron-3-Nano-30B-A3B`) | One reaction call per persona per run (100–1,000) | The work is "stay in character, react in one sentence, fill six short fields." Cheap and fast matters far more than depth — and it's the call that happens N× per run. Fast mode switches its reasoning off ([below](#reasoning-on-or-off)). |
-| **Nemotron Super** (`nemotron-3-super-120b-a12b`) | Writes the 1,000-persona pool, once, offline. Above N=150, condenses the reactions into themes, 10 at a time | Persona quality is a one-time cost every future run inherits, so it's worth a mid-size model. The condensing job we twice assigned wrongly before measuring properly — it left for Nano and came back (see [what we learned](#what-we-learned-building-this)); paired over 10 trials at the shipped batch size, Super wins on reliability, latency and richness alike. |
-| **Nemotron Ultra** (`Nemotron-3-Ultra-550b-a55b`) | 1 synthesis call per run | Reads the reactions (or, at large N, the themes condensed from them) plus a persona table and has to find the non-obvious pattern, name the affected segment, and quote the artifact verbatim. This is the one call where model size is worth paying for. Its reasoning pass is off: on Token Factory it arrived inside the answer, and was mostly Ultra counting personas by hand, which Python redoes anyway ([below](#reasoning-on-or-off)). |
+| **Nemotron Super** (`nemotron-3-super-120b-a12b`) | Writes the 1,000-persona pool, once, offline. Above N=150, condenses the reactions into themes, 10 at a time | Persona quality is a one-time cost every future run inherits, so it's worth a mid-size model. The condensing job we twice assigned wrongly before measuring properly — it left for Nano and came back (see [§4 of the feedback](#4-we-blamed-a-model-for-a-batch-size-problem-twice)); paired over 10 trials at the shipped batch size, Super wins on reliability, latency and richness alike. |
+| **Nemotron Ultra** (`Nemotron-3-Ultra-550b-a55b`) | 1 synthesis call per run | Reads the reactions (or, at large N, the themes condensed from them) plus a persona table and has to find the non-obvious pattern, name the affected segment, and quote the artifact verbatim. This is the one call where model size is worth paying for. Its reasoning pass is off: it took 16-23k tokens and over a minute per report, and was mostly Ultra counting personas by hand, which Python redoes anyway ([below](#reasoning-on-or-off)). |
 
 At N ≤ 150 Ultra reads the raw reactions directly; above it, Super makes
 one extra pass to condense them first, because 1,000 raw reactions is a
@@ -94,7 +79,7 @@ costs well under a dollar.
   repaired all 1,000 personas offline (`scripts/gen_personas.py`), and the
   anti-sycophancy gate runs the real Nano reaction call against them.
 - **Cheap enough to measure properly.** Every architectural decision in
-  [what we learned](#what-we-learned-building-this) came from repeated
+  [the feedback section](#feedback-on-nemotron-and-token-factory) came from repeated
   paired trials against the live models (`scripts/probe_nemotron.py`).
   At these prices, ten trials per configuration is affordable, and it
   reversed two of our conclusions.
@@ -155,14 +140,15 @@ second terminal (it proxies API calls to port 8000). Add `?mock=1` to the URL
 to drive the whole UI from synthetic data with zero API calls and zero cost —
 useful for working on the interface without spending credits.
 
-Try it from the command line instead:
-
-```bash
-python run.py --artifact data/examples/pricing_v1.txt --n 100
-```
-
 Run the tests with `make test` — the whole suite is offline, so it costs
 nothing and makes no model calls.
+
+## Deployment
+
+- cd infra && cp terraform.tfvars.example terraform.tfvars
+- make bootstrap    # enables APIs, creates the registry
+- make push         # Cloud Build → Artifact Registry; prints the image
+- make deploy       # prints the live URL
 
 A note on the deployed configuration: Cloud Run serves the app to
 `allUsers`, because judges need a link rather than credentials, and every
@@ -256,13 +242,34 @@ false}`; `/no_think`, `reasoning_effort` and every reasoning-budget
 parameter we tried are silently ignored. So reasoning is all or nothing,
 and Panel uses it in two places:
 
-**Ultra's report: always off.** With reasoning on, Ultra's reasoning came
-back inside the answer, and most of it was Ultra counting personas by hand
-(the arithmetic `_apply_recounted_pct` does anyway). Every recording ran
-past 6,000 and then 12,000 tokens before fitting in 24,000, about a minute
-and a half per report. Off, 9 of 9 reports on the three examples were valid
+**Ultra's report: always off.** With reasoning on, a finished report took
+16,000-23,000 completion tokens and 66-102 seconds. When one ran out of
+room, the API returned the unfinished reasoning as the answer, and it was
+mostly Ultra counting personas by hand (the arithmetic
+`_apply_recounted_pct` does anyway). Every recording ran past 6,000 and
+then 12,000 tokens before fitting in 24,000, about a minute and a half per
+report. On 2026-10-29 the pricing example ran out at 24,000 on 3 of 3
+tries, so with reasoning on its report would likely have failed outright. Off, 9 of 9 reports on the three examples were valid
 first try, at 660-860 tokens and 4-5 seconds, with comparable headlines,
 segments and edits. The report step went from about 90s to 3-4s.
+
+We also tested what the report is for: does its suggested edit change
+minds? On each example, two edits from reports written with reasoning on
+and two with it off were applied, and the same 100 people reread the
+copy, next to an unchanged rerun as a noise control (2026-10-29; pricing
+had one reasoning-on edit, as its fresh report never fit in 24,000
+tokens). Net change in people who would act:
+
+| | Unchanged rerun | Reasoning-on edits | Reasoning-off edits |
+| --- | --- | --- | --- |
+| Pricing | −3 | +11 | +12, +2 |
+| Ad | −1 | −2, +3 | −3, 0 |
+| Policy | 0 | 0, 0 | 0, 0 |
+
+Only the pricing edits clearly beat the noise, and the best of them was
+written with reasoning off. On the ad and the policy notice, no edit from
+either mode moved more people than rerunning the unchanged copy did, and
+the unchanged rerun alone moved the negative share by up to 10 points.
 
 **Super's condensing: always off.** Its reasoning stayed hidden, but cost
 the same way: 12 shards of 10 reactions, on versus off, were all valid
@@ -312,7 +319,7 @@ Five and a half times faster than where it started, and only the
 small-batch rows read the whole panel rather than half of it. All of that
 came from the batch size, not the model — note that the same model which
 was worst at 50 per shard is best at 10
-(see [what we learned](#what-we-learned-building-this) — getting this
+(see [§4 of the feedback](#4-we-blamed-a-model-for-a-batch-size-problem-twice) — getting this
 wrong twice is the most instructive thing in the project).
 
 Extrapolating to a full 1,000-persona panel: ~6 minutes of reading, well
@@ -321,130 +328,21 @@ with reasoning off), plus a few seconds of synthesis — roughly 7 minutes,
 against an 1,800s request timeout. The default stays at
 100 because a minute or two is a different kind of experience.
 
----
+### Other things we learned
 
-## What we learned building this
-
-The non-obvious findings, because they shaped the architecture. The
-model-behaviour ones are written up properly, with full measurement
-tables, in [FEEDBACK.md](FEEDBACK.md) — and the two that drove design
-decisions are reproducible with `python scripts/probe_nemotron.py`.
-
-- **All three Nemotron models spend completion-token budget on hidden
-  reasoning before emitting content, and how much is stochastic.** The spec
-  we wrote assumed `max_tokens=400` was plenty for a six-field JSON
-  reaction. In practice essentially every call truncated before reaching
-  content. The same prompt at the same budget succeeded on one call and
-  truncated with zero content on an immediate retry. Fix: a measured
-  budget (`REACTION_MAX_TOKENS=3000`, observed usage peaking at 2092) plus
-  treating `finish_reason == "length"` as a distinct retry case from
-  "content didn't validate," since they need opposite responses.
-- **A token budget that *usually* fits is the expensive kind of wrong.**
-  Persona generation ran at `max_tokens=8000` against a prompt needing ~4.5k
-  of content and ~3.4k of reasoning. It worked — every truncated call was
-  silently retried at double the budget — so the only symptom was speed: a
-  900-persona run paced at 110 minutes instead of 25. Sitting *near* the
-  ceiling costs about 2.3× the tokens and wall-clock of sitting well above
-  it, and the retry that hides the problem is what makes it invisible.
-- **Don't ask an LLM to count.** Ultra's `affected_pct` claims were off by
-  12-70 percentage points on the pricing example and by as much as 82
-  across the three, and a retry with the exact discrepancy spelled
-  out produced identical wrong numbers. So Ultra proposes *which* segment
-  matters as a structured filter, and Python computes the percentage from
-  the actual reactions: how many people match the filter, and what share of
-  them reacted negatively. Every finding's number is counted, not
-  estimated, and the prompt bars the headline and claims from citing any
-  other figure; a filter that can't be recounted is shown labelled as an
-  estimate. (Counting the right thing took a second pass: our first
-  recount measured the segment's share of the *panel*, a true number
-  answering a different question than the sentence printed above it.)
-  Severity is counted the same way: a finding is high when its segment is
-  20+ points more negative than the whole panel, medium at 10-19, low
-  below that, and each row shows the whole-panel rate next to its own.
-  The rows sort by it, and the headline is always about the top row: when
-  Ultra's own headline doesn't quote that row's counted number, the row's
-  claim replaces it.
-- **…and asking anyway isn't merely unreliable, it's destructive.** We
-  learned the same lesson a second time writing the shard digests, and it
-  took two tries to stop asking. v1 wanted a theme, the persona IDs
-  expressing it, *and* a count, ordered most-common-first: on a real
-  200-person run one shard spent 32,000 completion tokens — every rung of
-  the retry ladder — reasoning about those counts and emitted **zero**
-  content, discarding half the panel's data. v2 dropped the count but still
-  asked for *every* ID under each theme: no truncation, but the stage ran
-  for over eight minutes, because exhaustively classifying 50 reactions into
-  three categories is the same long serial task wearing a different hat.
-  v3 asks for themes plus **2-5 examples**, capped in the schema, and prints
-  no quantity at all. Every finding's number comes from recounting
-  Ultra's segment filter against the real personas — which is where this
-  project's numbers came from in the first place.
-- **Benchmark at the configuration you ship.** "Condense a batch of
-  reactions" reads like mid-tier work, so Super got it. Raced head-to-head
-  against Nano on one real 50-reaction shard, Nano finished in 83s with 10
-  themes and the 5 required quotes; Super took 157s, returned 13 themes and
-  **zero** quotes, and on live runs exhausted the whole truncation ladder on
-  some shards. We moved the job to Nano. Then the batch size dropped to 10
-  for unrelated reasons, and a paired 10-trial comparison at *that* size
-  reversed the result: Super 10/10 at 38s median with richer themes, Nano
-  9/10 at 54s. The single trial had measured a batch-size problem and
-  blamed the model. The job went back to Super, and that is what ships.
-- **A graceful degradation path is worth building before you need it.**
-  That failed shard didn't fail the run — `_digest_shard` returns `None`,
-  the label tells Ultra it's seeing 100 of 200 reactions, and the report
-  that came out was still coherent and correctly segmented. Every Nano call
-  was already paid for by the time digesting starts, so "lose a shard" has
-  to beat "lose the run."
-- **Personas ask for things text can't deliver.** Early reaction data was
-  full of "show me a video," "add a screenshot," "link a live dashboard" —
-  unanswerable by any copy edit, so they poisoned the edit suggestions. The
-  reaction prompt now requires a change to the words on the page.
+- **Build the graceful degradation path before you need it.** When a shard
+  failed, the run didn't: `_digest_shard` returns `None`, Ultra is told it
+  is seeing 100 of 200 reactions, and the report was still coherent. Every
+  Nano call is paid for by then, so losing a shard has to beat losing the
+  run.
+- **Personas ask for things text can't deliver.** Early reactions were
+  full of "show me a video" and "add a screenshot", which no copy edit can
+  answer, and they poisoned the edit suggestions. The reaction prompt now
+  requires a change to the words on the page.
 - **Synthetic people are hard to persuade, and that's honest.** One good
-  edit flips roughly 0-7 of 100, not the 20+ we hoped. We tested
-  single-phrase edits, multi-theme rewrites, and edits targeting the single
-  most-requested change; the ceiling held. We report the real number.
-
----
-
-## Honest limitations
-
-- **Directional, not a replacement for real research.** These are language
-  models role-playing demographics, not humans. Use it to catch the
-  confusions and objections you can't see in your own copy, not to forecast
-  conversion rates.
-- **Flip counts sit close to the noise floor.** An unchanged rerun moved
-  4-7 people in 100 at temperature 0.7 (the shipped 0.4 should be quieter;
-  `scripts/measure_noise.py` measures it), so a small flip count is not
-  evidence on its own. The compare view says so next to every count.
-- **One edit moves few people.** See above — expect a few percent. The
-  diagnosis is the value; the flip count is a sanity check on it.
-- **Run state is in memory.** A server restart loses in-flight runs, and the
-  deployment must be pinned to a single instance or SSE reconnects will land
-  on an instance that doesn't know the run.
-- **Compare requires identical persona counts** on both runs, enforced in
-  the UI by locking the control once a compare starts.
-- **The market comparison is only as good as its page picks.** Search
-  results for a category are mostly listicles and reviews; the filters
-  described above catch most of them, not all, which is why the panel
-  shows every URL it used and the exact text it read from each.
-- **A 1,000-person run takes about eight minutes**, because throughput is
-  concurrency-bound (50 concurrent Nano calls) and the panel size is the
-  numerator. The default stays at 100 for that reason; the slider goes to
-  1,000 when the question is worth the wait.
-- **Occupations repeat in the pool, names don't.** All 1,000 full names are
-  unique and that's enforced; occupations are a measured target rather than
-  a gate, because 1,000 people genuinely do include more than one nurse.
-  732 of 1,000 are distinct, and the most common one is 9 people (0.9% of
-  the pool) — against 5 of 100 (5.0%) before the scale-up.
-- **The pool over-represents unusual jobs.** Telling the generator to avoid
-  stock occupations worked, and then kept working: six lighthouse keepers
-  and nine funeral directors per thousand people is not what a real
-  population looks like. It makes the crowd feel varied, which is what the
-  grid needs, but don't read the occupation mix as demographically faithful.
-- **Some traits cluster despite the prompt.** Tech comfort spreads across 63
-  distinct values in 1,000 personas; extraversion only 30, most of them
-  between 38 and 55. The model rounds to familiar numbers no matter how
-  firmly it's asked not to, so the Big Five traits carry less signal at the
-  edges than skepticism and tech comfort do.
+  edit flips roughly 0-7 of 100 outside pricing, not the 20+ we hoped. We
+  tested single-phrase edits, multi-theme rewrites, and edits targeting the
+  most-requested change; the ceiling held.
 
 ---
 

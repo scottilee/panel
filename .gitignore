@@ -29,3 +29,6 @@ data/personas.partial.json
 # copies also need `git rm -r --cached .sbx .claude` to leave the repo.
 .sbx/
 .claude/
+
+# Paste-in copy for the Devpost form; the README covers the same ground.
+DEVPOST.md

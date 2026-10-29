@@ -262,4 +262,76 @@ for (const ex of M.EXAMPLES) {
 }
 
 console.log(bad ? `\n${bad} PROBLEM(S)` : '\nmock mode asserts nothing it cannot support')
+// --- Market comparison honesty ---------------------------------------------
+//
+// The comparison names which pages share a theme, and the user can open
+// every one of those pages and read it. So the claims have to survive
+// being read. Two things used to break that: the competitor pages were
+// savings-account copy regardless of the artifact (so a parking notice was
+// compared against APY offers), and the shared themes were artifact-
+// specific (so "whether my street is in a new zone" was asserted of pages
+// that are not about parking at all).
+const normalize = (t) =>
+  t.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/)
+    .filter((w) => !['a','an','the','is','my','i','this','it','of','for','to','in','on','and','what','who','whether','does','not','be','are','am','being'].includes(w))
+    .sort().join(' ')
+
+for (const e of M.EXAMPLES) {
+  const cmp = M.buildMockComparison(e.text, 50)
+  const shared = [...cmp.shared_confusions, ...cmp.shared_objections]
+  const yours = [...cmp.only_yours_confusions, ...cmp.only_yours_objections]
+  const labels = new Set(cmp.pages.map((p) => p.label))
+
+  // 1. Every page a theme cites must exist.
+  const ghosts = [...shared, ...yours].flatMap((t) => t.pages.filter((l) => !labels.has(l)))
+  if (ghosts.length) {
+    bad++
+    console.log('WRONG', e.id, 'theme cites pages that do not exist:', JSON.stringify(ghosts))
+  } else {
+    console.log('OK    every cited page exists:', e.id)
+  }
+
+  // 2. A theme cannot be both category-wide and yours alone.
+  const sharedKeys = new Set(shared.map((t) => normalize(t.theme)))
+  const both = yours.filter((t) => sharedKeys.has(normalize(t.theme))).map((t) => t.theme)
+  if (both.length) {
+    bad++
+    console.log('WRONG', e.id, 'theme is in both columns at once:', JSON.stringify(both))
+  } else {
+    console.log('OK    columns do not contradict each other:', e.id)
+  }
+
+  // 3. Competitor pages must not be another example's subject matter.
+  const foreign = Object.entries(EXAMPLE_WORDS)
+    .filter(([id]) => id !== e.id)
+    .flatMap(([, words]) => words)
+    .filter((w) => cmp.pages.slice(1).some((p) => p.text.includes(w)))
+  if (foreign.length) {
+    bad++
+    console.log('WRONG', e.id, 'competitor pages are about another example:', JSON.stringify(foreign))
+  } else {
+    console.log('OK    competitor pages match the category:', e.id)
+  }
+}
+
+// 4. The category column must be identical for every artifact, because it
+// is the one claim made about pages whose text the user can open. Drawn
+// from the generic pool, it is true of any bland marketing page; drawn
+// from the artifact's own pool it was not, and nothing mechanical catches
+// that -- "whether my money is actually FDIC insured" asserted of a page
+// that says "FDIC insured to $250,000" needs a reader to notice. Pinning
+// the invariant is what stops it coming back.
+const sharedPerExample = M.EXAMPLES.map((e) => {
+  const cmp = M.buildMockComparison(e.text, 50)
+  return [...cmp.shared_confusions, ...cmp.shared_objections].map((t) => t.theme).join(' | ')
+})
+if (new Set(sharedPerExample).size !== 1) {
+  bad++
+  console.log('WRONG the category column differs per artifact, so it is making')
+  console.log('      artifact-specific claims about pages it did not read:')
+  M.EXAMPLES.forEach((e, i) => console.log('        ' + e.id + ': ' + sharedPerExample[i]))
+} else {
+  console.log('OK    the category column is artifact-independent')
+}
+
 process.exit(bad ? 1 : 0)

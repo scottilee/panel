@@ -500,9 +500,9 @@ _ALIGN_SYSTEM = (
 # The first version ended with "every line must appear in exactly one
 # group", which is exhaustive assignment over a list -- the exact pattern
 # that broke the condensing stage three times and is written up in
-# FEEDBACK.md as a thing not to do. It duly ran away: zero content at
-# 4000, 8000 and 16000 tokens in turn, then fell back to lexical
-# grouping, which is what alignment exists to improve on.
+# the README's feedback section (§3) as a thing not to do. It duly ran
+# away: zero content at 4000, 8000 and 16000 tokens in turn, then fell
+# back to lexical grouping, which is what alignment exists to improve on.
 #
 # Asking only "which of these mean the same thing as each other" is a far
 # smaller job and a far smaller answer. Lines the model does not mention

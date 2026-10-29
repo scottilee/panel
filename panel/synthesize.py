@@ -25,12 +25,12 @@ from panel.schemas import INCOME_BANDS, Persona, REGIONS, Reaction, SegmentClaus
 from panel.stats import mean, mean_sentiment, usable, would_act_pct
 from panel.tf_client import REASONING_OFF, ChatJsonError, ChatJsonTruncatedError, chat_json
 
-# Ultra runs with its reasoning pass off. On Token Factory its reasoning
-# lands in the content, not a separate field, and most of it was Ultra
-# counting personas by hand -- arithmetic _apply_recounted_pct redoes
-# anyway. With reasoning on, every recording truncated at 6000 and 12000
-# tokens (10-24k characters of that counting) before fitting in 24000,
-# roughly a minute and a half per report. Off, measured 2026-10-29 on the
+# Ultra runs with its reasoning pass off. With it on, a finished report
+# spent 16-23k completion tokens and 66-102s reasoning, and a truncated one
+# came back as its unfinished reasoning, which was mostly Ultra counting
+# personas by hand -- arithmetic _apply_recounted_pct redoes anyway. Every
+# recording truncated at 6000 and 12000 tokens before fitting in 24000,
+# and on 2026-10-29 pricing_v1 ran out at 24000 on 3 of 3 tries. Off, measured 2026-10-29 on the
 # three examples, 3 runs each: 9/9 valid first try, 660-860 completion
 # tokens, 4-5s, with headlines, segments and edits comparable to the
 # reasoning-on recordings.
@@ -441,14 +441,14 @@ def _apply_recounted_pct(
 #   Super 10/10 ok, 38s median, 7.8 themes, 5.6 quotes
 #
 # At 50 reactions a batch the ranking was reversed, which is how the job
-# briefly went to Nano -- see FEEDBACK.md.
+# briefly went to Nano -- see the README's feedback section, §4.
 MODEL_DIGEST = MODEL_SUPER
 
 SHARD_THRESHOLD = 150
 
 # Small and wide: runaway reasoning gets likelier the more there is to
 # read, so short shards are both more reliable and faster per call
-# (single digest call, 8000 budget, 10 trials each -- FEEDBACK.md section 5:
+# (single digest call, 8000 budget, 10 trials each -- README feedback §5:
 # 50 reactions 0/10, 25 3/10, 10 10/10 at 46s median, 5 10/10 at 31s but
 # too few people per batch for recurring themes). 100 shards for a 1,000
 # panel run in two waves at 50 concurrent.
@@ -477,8 +477,8 @@ DIGEST_THEMES_PER_CATEGORY = 6
 class _DigestTheme(BaseModel):
     """One recurring theme with a few example persona ids. Deliberately no
     count or exhaustive membership list: asking for either made the model
-    spend its whole budget reasoning and emit nothing (FEEDBACK.md). The
-    ids are examples to cite, never a tally."""
+    spend its whole budget reasoning and emit nothing (README feedback
+    §3). The ids are examples to cite, never a tally."""
 
     theme: str
     persona_ids: list[str] = Field(max_length=DIGEST_EXAMPLES_PER_THEME)
