@@ -174,6 +174,29 @@ resource "google_cloud_run_v2_service" "panel" {
         value = "/tmp/runs"
       }
 
+      # Magic-link sign-in, which gates live runs only (panel/auth.py).
+      # All three are public Firebase web config, not secrets, so they are
+      # plain env vars rather than Secret Manager entries.
+      #
+      # Leave firebase_project_id empty and the gate disappears: the server
+      # reports auth disabled, the frontend never loads the Firebase SDK,
+      # and live runs work for anyone, exactly as before auth existed. That
+      # is the intended way to turn this off in a hurry.
+      env {
+        name  = "FIREBASE_PROJECT_ID"
+        value = var.firebase_project_id
+      }
+
+      env {
+        name  = "FIREBASE_API_KEY"
+        value = var.firebase_api_key
+      }
+
+      env {
+        name  = "FIREBASE_AUTH_DOMAIN"
+        value = var.firebase_auth_domain
+      }
+
       env {
         name = "TF_API_KEY"
         value_source {

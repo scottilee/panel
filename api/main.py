@@ -16,10 +16,12 @@ from dataclasses import dataclass, field
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
 
 from panel import config
+from panel import auth as fb_auth
 from panel.classify import check_artifact
 from panel.compare import delta
 from panel.market import (
@@ -260,6 +262,29 @@ _FETCHING_CLIENTS: set[str] = set()
 # Above this many tracked clients, windows with no recent requests are
 # swept so the table can't grow without bound over weeks of uptime.
 _RATE_SWEEP_THRESHOLD = 10_000
+
+
+async def _require_human(request: Request, what: str) -> dict | None:
+    """Gate for the calls that spend credits. Returns the signed-in user,
+    or None when auth isn't configured on this deployment.
+
+    Only spending is gated. The landing page, the persona pool, the
+    examples, the pre-submission check and every cached replay stay open,
+    so a judge following a link sees the whole app work without an account.
+
+    The per-client limits deliberately stay keyed on IP rather than on the
+    user id. Keying on the user would be better -- it survives a change of
+    network and isn't shared across a NAT -- but it would mean re-working
+    the rate limiter, the one-job-per-client rule and the daily budgets,
+    all of which are measured and working, in exchange for nothing the
+    gate doesn't already achieve.
+    """
+    if not fb_auth.enabled():
+        return None
+    user = await fb_auth.verify(fb_auth.bearer_token(request.headers.get("authorization")))
+    if user is None:
+        raise HTTPException(401, f"sign in to {what}")
+    return user
 
 
 def _client_ip(request: Request) -> str:
@@ -598,6 +623,11 @@ async def create_run(request: Request, req: RunRequest, cached: bool = False) ->
     ceiling = min(MAX_PERSONA_COUNT, len(PERSONA_POOL))
     if persona_count > ceiling:
         raise HTTPException(400, f"persona_count {persona_count} exceeds the limit ({ceiling})")
+
+    # A live run spends real credits, so it needs a signed-in human. The
+    # cached replay of an example does not, and stays open.
+    if not cached:
+        await _require_human(request, "run the panel on your own copy")
 
     client_ip = _client_ip(request)
     if req.replaces:
@@ -1032,6 +1062,7 @@ async def create_benchmark(request: Request, req: BenchmarkRequest) -> dict:
     """
     if not TAVILY_API_KEY:
         raise HTTPException(503, "the market comparison is not configured on this server")
+    await _require_human(request, "compare your page against the market")
     parent = RUNS.get(req.run_id)
     if parent is None:
         raise HTTPException(404, "run not found")
@@ -1190,6 +1221,8 @@ async def stream_benchmark(benchmark_id: str) -> EventSourceResponse:
 
 @app.post("/compare")
 async def compare_runs(request: Request, req: CompareRequest) -> CompareResult:
+    # One Ultra call per pair, so this spends too.
+    await _require_human(request, "compare two runs")
     ctx_a = RUNS.get(req.run_a)
     ctx_b = RUNS.get(req.run_b)
     if ctx_a is None or ctx_b is None:
@@ -1228,8 +1261,12 @@ async def check_text(request: Request, req: CheckRequest) -> ArtifactCheck:
 @app.get("/features")
 async def get_features() -> dict:
     """What this deployment can do, so the UI hides what it can't rather
-    than offering a button that fails."""
-    return {"market": bool(TAVILY_API_KEY)}
+    than offering a button that fails.
+
+    `auth` carries the Firebase web config, which is public by design, so
+    the frontend can be configured without rebuilding the image. Absent
+    config means {"enabled": false} and no gating anywhere."""
+    return {"market": bool(TAVILY_API_KEY), "auth": fb_auth.public_config()}
 
 
 @app.get("/personas")
@@ -1259,6 +1296,26 @@ async def get_examples() -> list[dict]:
         }
         for path in sorted(config.EXAMPLES_DIR.glob("*.txt"))
     ]
+
+
+# The frontend routes client-side, so every page it can show needs to
+# resolve to index.html on a direct hit or a refresh. StaticFiles(html=True)
+# only does that for directories that exist on disk, and /demo/ is not a
+# directory -- without this, opening or reloading the demo link 404s, which
+# is exactly the link we hand to judges.
+#
+# Registered BEFORE the mount, because Starlette matches in order.
+if config.WEB_DIST_DIR.is_dir():
+    _INDEX_HTML = config.WEB_DIST_DIR / "index.html"
+
+    @app.get("/demo", include_in_schema=False)
+    @app.get("/demo/", include_in_schema=False)
+    @app.get("/live", include_in_schema=False)
+    @app.get("/live/", include_in_schema=False)
+    @app.get("/signin", include_in_schema=False)
+    @app.get("/signin/", include_in_schema=False)
+    async def client_route() -> FileResponse:
+        return FileResponse(_INDEX_HTML)
 
 
 # Mounted last: Starlette matches in registration order, so a catch-all

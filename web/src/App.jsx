@@ -7,6 +7,8 @@ import {
   getPoolSize,
   isMockMode,
   previewPersonas,
+  setLiveAllowed,
+  setTokenSource,
   startBenchmark,
   startRun,
 } from './api.js'
@@ -14,13 +16,17 @@ import ArtifactInput, { MAX_TEXT_LENGTH, MIN_TEXT_LENGTH } from './components/Ar
 import CompareBar from './components/CompareBar.jsx'
 import Filters from './components/Filters.jsx'
 import Findings from './components/Findings.jsx'
+import Landing from './components/Landing.jsx'
 import MarketPanel from './components/MarketPanel.jsx'
+import SignInDialog from './components/SignInDialog.jsx'
 import Grid from './components/Grid.jsx'
 import PersonaCard from './components/PersonaCard.jsx'
 import FastModeToggle from './components/FastModeToggle.jsx'
 import PersonaCountControl from './components/PersonaCountControl.jsx'
 import StatsStrip from './components/StatsStrip.jsx'
 import Verdict from './components/Verdict.jsx'
+import { useAuth } from './auth.js'
+import { DEMO, LANDING, LIVE, SIGNIN, useRoute } from './router.js'
 import { applyEdit } from './edit.js'
 import {
   STATUS,
@@ -69,13 +75,42 @@ export default function App() {
 
   const [examples, setExamples] = useState([])
   // Optional server features; the market comparison needs a Tavily key.
-  const [features, setFeatures] = useState({ market: false })
+  const [features, setFeatures] = useState(null)
+
+  // Magic-link sign-in. Gates live runs only: with no auth configured on
+  // the server, `enabled` is false and nothing below changes.
+  const auth = useAuth(features === null ? null : (features.auth ?? { enabled: false }))
+  const { route, navigate } = useRoute()
+  const appShellRef = useRef(null)
 
   // The pool fetch is load-bearing for the whole setup card: poolSize is
   // the N slider's maximum, and previewPersonas() throws until the pool
   // has landed. A failure has to say so on screen, or the slider just
   // looks frozen.
+  // Features first and on its own: it carries the auth config, and until
+  // that has landed we don't know whether this visitor gets live runs or
+  // the recorded demo.
   useEffect(() => {
+    getFeatures()
+      .then(setFeatures)
+      .catch(() => setFeatures({ market: false, auth: { enabled: false } }))
+  }, [])
+
+  // Live mode has to be decided BEFORE the persona pool loads. Mock mode
+  // serves 1,000 generated personas and live mode serves the real pool,
+  // so a mode flip after loading would leave the grid showing people the
+  // run isn't about. `authSettled` is the gate.
+  const authSettled =
+    features !== null && (!auth.enabled || (auth.status !== 'loading' && auth.status !== 'error'))
+
+  const onAppPage = route === DEMO || route === LIVE
+
+  useEffect(() => {
+    if (!authSettled || !onAppPage) return
+    // /demo is recorded data for everyone; /live is the only page that
+    // calls the models, and only once there is someone to charge it to.
+    setLiveAllowed(route === LIVE && (!auth.enabled || auth.signedIn))
+    setTokenSource(auth.getToken)
     getPoolSize()
       .then((poolSize) => {
         dispatch({ type: 'SET_POOL_SIZE', poolSize })
@@ -92,10 +127,7 @@ export default function App() {
     getExamples()
       .then(setExamples)
       .catch(() => setExamples([]))
-    getFeatures()
-      .then(setFeatures)
-      .catch(() => setFeatures({ market: false }))
-  }, [])
+  }, [authSettled, onAppPage, route, auth.enabled, auth.signedIn, auth.getToken])
 
   const isRunning = selectIsRunning(state)
   const compareIsRunning = selectCompareIsRunning(state)
@@ -607,14 +639,64 @@ export default function App() {
     statusText = `${doneCount} of ${total} have answered`
   }
 
+  // Signing out swaps the real persona pool back for the mock one, and
+  // doing that under a loaded grid would leave tiles showing people the
+  // next run isn't about. A full reload avoids it. Signing IN always
+  // arrives via a page load anyway -- the emailed link navigates here --
+  // so this makes both directions behave the same way.
+  async function handleSignOut() {
+    await auth.signOut()
+    window.location.assign('/')
+  }
+
+  if (route === LIVE && authSettled && auth.enabled && !auth.signedIn) {
+    return <SignInDialog auth={auth} onClose={() => navigate('/demo')} />
+  }
+
+  if (route === LANDING) {
+    return (
+      <Landing
+        signedIn={auth.signedIn}
+        email={auth.email}
+        onSignIn={() => navigate('/signin')}
+        onSignOut={handleSignOut}
+        onSeeItRun={() => navigate('/demo')}
+      />
+    )
+  }
+
+  if (route === SIGNIN) {
+    return <SignInDialog auth={auth} onClose={() => navigate('/')} />
+  }
+
   return (
-    <div className="app-shell">
+    <>
+    <div className="app-shell" ref={appShellRef}>
       <div className="app-column app-column-left">
         <h1 className="app-title">Panel</h1>
         <aside aria-label="Set up a run" className="setup-card">
           <div className="setup-logo">
-            <span className="logo-badge">P</span>
-            <span className="logo-word">Panel</span>
+            <a className="logo-home" href="/" onClick={(e) => { e.preventDefault(); navigate('/') }}>
+              <span className="logo-badge">P</span>
+              <span className="logo-word">Panel</span>
+            </a>
+            {/* Says which page this is, driven by the route rather than
+                by auth state, so /demo reads DEMO for everyone and can
+                never claim to be live. */}
+            {route === DEMO ? (
+              <>
+                <span className="logo-demo-badge">DEMO</span>
+                <button
+                  type="button"
+                  className="logo-signin-link"
+                  onClick={() => navigate('/signin')}
+                >
+                  Run on Nebius models
+                </button>
+              </>
+            ) : (
+              <span className="logo-live-badge">NEBIUS MODELS</span>
+            )}
           </div>
           <ArtifactInput
             mode={state.inputMode}
@@ -889,7 +971,7 @@ export default function App() {
             everyone else" rather than competing with the verdict. Mock
             mode gets a synthetic version -- nothing is searched or read,
             and the card says so. */}
-        {features.market && state.synthesis && (state.runId || isMockMode()) && (
+        {features?.market && state.synthesis && (state.runId || isMockMode()) && (
           <MarketPanel
             status={market?.status}
             query={market?.query ?? ''}
@@ -914,5 +996,6 @@ export default function App() {
         />
       )}
     </div>
+    </>
   )
 }

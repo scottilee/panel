@@ -876,7 +876,11 @@ def test_benchmark_is_refused_and_hidden_without_a_tavily_key(monkeypatch):
     from api import main as M
 
     monkeypatch.setattr(M, "TAVILY_API_KEY", None)
-    assert client.get("/features").json() == {"market": False}
+    body = client.get("/features").json()
+    assert body["market"] is False
+    # /features also carries the (public) Firebase web config; unset in
+    # tests, which is also what a deployment with auth off looks like.
+    assert body["auth"] == {"enabled": False}
     RUNS["done"] = _finished_ctx("done")
     r = client.post("/benchmark", json={"run_id": "done"})
     assert r.status_code == 503
@@ -1385,3 +1389,130 @@ def test_a_benchmark_reserves_its_fixed_overhead_and_keeps_it_on_settle():
             M.BENCHMARKS[bid].task = None
         M.BENCHMARKS.clear()
         RUNS.pop("parent", None)
+
+
+# --- Live-run gate (magic-link auth) ---------------------------------------
+#
+# The gate exists to stop an unauthenticated internet spending credits. It
+# must be closed when configured, and -- just as important -- completely
+# absent when not, because that is the kill switch if auth misbehaves in
+# production.
+
+
+def _auth_on(monkeypatch, user=None):
+    """Configured auth, with token verification stubbed."""
+    from panel import auth as fb
+
+    monkeypatch.setattr(fb, "FIREBASE_PROJECT_ID", "p")
+    monkeypatch.setattr(fb, "FIREBASE_API_KEY", "k")
+    monkeypatch.setattr(fb, "FIREBASE_AUTH_DOMAIN", "p.firebaseapp.com")
+
+    async def verify(token):
+        return user if token else None
+
+    monkeypatch.setattr(fb, "verify", verify)
+
+
+def test_a_live_run_is_refused_without_a_signed_in_user(monkeypatch):
+    _auth_on(monkeypatch)
+    r = client.post("/run", json={"text": LONG_ENOUGH})
+    assert r.status_code == 401
+    assert "sign in" in r.json()["detail"]
+
+
+def test_the_cached_replay_stays_open_to_anonymous_visitors(monkeypatch):
+    """The whole point of gating only live runs: a judge with a link sees
+    the app work without an account, because a replay spends nothing."""
+    _auth_on(monkeypatch)
+    r = client.post("/run?cached=true", json={"text": LONG_ENOUGH, "label": "pricing_v1"})
+    assert r.status_code != 401, r.json()
+
+
+def test_the_free_endpoints_stay_open(monkeypatch):
+    _auth_on(monkeypatch)
+    assert client.get("/personas").status_code == 200
+    assert client.get("/examples").status_code == 200
+    assert client.get("/features").status_code == 200
+
+
+def test_market_and_compare_are_gated_too(monkeypatch):
+    """Both spend: a benchmark is three panel reads plus Tavily, a compare
+    is an Ultra call."""
+    _auth_on(monkeypatch)
+    RUNS["done"] = _finished_ctx("done")
+    RUNS["done"].run.reactions = [_reaction("p001")]
+    RUNS["other"] = _finished_ctx("other")
+    assert client.post("/benchmark", json={"run_id": "done"}).status_code in (401, 503)
+    assert client.post("/compare", json={"run_a": "done", "run_b": "other"}).status_code == 401
+
+
+def test_a_signed_in_user_gets_through(monkeypatch):
+    from api import main as M
+
+    _auth_on(monkeypatch, user={"uid": "abc", "email": "a@b.com"})
+
+    async def no_model_calls(ctx, skip_synthesis):
+        ctx.run.status = "done"
+
+    monkeypatch.setattr(M, "_execute_run", no_model_calls)
+    r = client.post(
+        "/run", json={"text": LONG_ENOUGH}, headers={"Authorization": "Bearer tok"}
+    )
+    assert r.status_code == 200, r.json()
+
+
+def test_a_malformed_authorization_header_is_simply_not_signed_in(monkeypatch):
+    _auth_on(monkeypatch, user={"uid": "abc", "email": "a@b.com"})
+    for header in ("", "Bearer", "Bearer   ", "Basic tok", "tok"):
+        r = client.post("/run", json={"text": LONG_ENOUGH}, headers={"Authorization": header})
+        assert r.status_code == 401, f"{header!r} should not authenticate"
+
+
+def test_unconfigured_auth_gates_nothing(monkeypatch):
+    """The kill switch. With the config unset the gate must vanish, not
+    fail closed -- otherwise a bad auth deploy locks everyone out of live
+    runs with no way back short of a code change."""
+    from api import main as M
+    from panel import auth as fb
+
+    monkeypatch.setattr(fb, "FIREBASE_PROJECT_ID", None)
+    assert fb.enabled() is False
+
+    async def no_model_calls(ctx, skip_synthesis):
+        ctx.run.status = "done"
+
+    monkeypatch.setattr(M, "_execute_run", no_model_calls)
+    r = client.post("/run", json={"text": LONG_ENOUGH})
+    assert r.status_code == 200, r.json()
+
+
+def test_half_configured_auth_is_treated_as_off(monkeypatch):
+    """A project id but no web API key means the frontend cannot sign
+    anyone in. Gating then would lock out every live run."""
+    from panel import auth as fb
+
+    monkeypatch.setattr(fb, "FIREBASE_PROJECT_ID", "p")
+    monkeypatch.setattr(fb, "FIREBASE_API_KEY", None)
+    monkeypatch.setattr(fb, "FIREBASE_AUTH_DOMAIN", None)
+    assert fb.enabled() is False
+    assert client.get("/features").json()["auth"] == {"enabled": False}
+
+
+def test_the_client_routes_serve_the_app_rather_than_404ing():
+    """The frontend routes client-side, so /demo and /signin are not
+    directories on disk. Without an explicit fallback StaticFiles 404s
+    them -- and /demo is the link handed to judges, so a 404 on refresh or
+    on a direct open would be the worst possible failure."""
+    from panel import config
+
+    if not config.WEB_DIST_DIR.is_dir():
+        pytest.skip("frontend not built; the fallback is only registered when web/dist exists")
+
+    for path in ("/demo", "/demo/", "/signin", "/signin/"):
+        r = client.get(path)
+        assert r.status_code == 200, f"{path} returned {r.status_code}"
+        assert "<div id=\"root\">" in r.text or "<html" in r.text.lower()
+
+    # Still a 404 for things that are genuinely not routes, so a typo
+    # doesn't silently render the app.
+    assert client.get("/not-a-page").status_code == 404

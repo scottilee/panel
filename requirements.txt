@@ -18,6 +18,12 @@ openai==3.40.0
 requests==2.34.2
 readability-lxml==0.9
 sse-starlette==3.6.0
+# Verifies Firebase ID tokens for the live-run gate (panel/auth.py).
+# google-auth rather than firebase-admin: all we need is one function,
+# verify_firebase_token, and firebase-admin drags in grpcio and a
+# service-account init dance for no benefit. Installs clean on Python
+# 3.14, which is not a given here -- see the note at the top of this file.
+google-auth==2.62.0
 
 pytest==9.1.1
 pytest-asyncio==1.4.1

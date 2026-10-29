@@ -29,9 +29,26 @@ const REACTION_INTERVAL_MS = 80
 const FAST_REACTION_INTERVAL_MS = 20
 const SYNTHESIS_DELAY_MS = 500
 
+// Whether live runs are available. False until App has resolved auth, so
+// a signed-out visitor gets the recorded demo rather than a 401 -- which
+// is also what the landing page shows off.
+//
+// Module-level because isMockMode() is called from plain functions all
+// over this file (same reasoning as lastRealRunId below). Defaults to true
+// so a deployment with no auth configured behaves exactly as it did
+// before auth existed.
+let liveAllowed = true
+
+export function setLiveAllowed(value) {
+  liveAllowed = value
+}
+
 export function isMockMode() {
   if (typeof window === 'undefined') return false
-  return new URLSearchParams(window.location.search).has('mock')
+  // ?mock=1 still forces the recorded demo, signed in or not: it is how
+  // the UI gets reviewed without spending anything.
+  if (new URLSearchParams(window.location.search).has('mock')) return true
+  return !liveAllowed
 }
 
 // The real pool, fetched once and cached -- previewPersonas needs it
@@ -170,6 +187,19 @@ function errorDetail(body, fallback) {
 // run's fire-and-forget cancel and could be refused with a 429.
 let lastRealRunId = null
 
+// Set by App from the auth hook. Returns a fresh ID token, or null when
+// nobody is signed in or auth is off.
+let getIdToken = async () => null
+
+export function setTokenSource(fn) {
+  getIdToken = fn
+}
+
+async function authHeaders() {
+  const token = await getIdToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 function startRealRun({ text, url, label, personaCount, onEvent, cached = false, skipSynthesis = false, fast = false }) {
   let cancelled = false
   let es = null
@@ -186,7 +216,7 @@ function startRealRun({ text, url, label, personaCount, onEvent, cached = false,
     try {
       const res = await fetch(`/run${cached ? '?cached=true' : ''}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         // RunRequest is text XOR url, so send exactly one. JSON.stringify
         // drops undefined keys, which is what makes that work here.
         body: JSON.stringify({
@@ -312,7 +342,7 @@ export async function getCompareResult({ personas, reactionsAById, runA, runB })
   }
   const res = await fetch('/compare', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
     body: JSON.stringify({ run_a: runA, run_b: runB }),
   })
   if (!res.ok) {
@@ -442,7 +472,7 @@ export function startBenchmark({ runId, text, panelSize, onEvent }) {
     try {
       const res = await fetch('/benchmark', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ run_id: runId }),
       })
       if (!res.ok) {

@@ -158,6 +158,9 @@ input::placeholder {
 .setup-logo {
   display: flex;
   align-items: center;
+  /* Wraps because the mode badge and the sign-in link share this row with
+     the wordmark inside a column that can be 300px wide. */
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -178,6 +181,59 @@ input::placeholder {
   font-weight: 800;
   font-size: 18px;
   letter-spacing: -0.02em;
+}
+
+/* The logo doubles as the way back to the landing page. */
+.logo-home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Which page this is, stated next to the wordmark. DEMO is the honest
+   default: a visitor on /demo is looking at recorded data, and leaving
+   that to be inferred from a note elsewhere invites someone to mistake it
+   for live model output. */
+.logo-demo-badge,
+.logo-live-badge {
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  flex: 0 0 auto;
+}
+
+.logo-demo-badge {
+  background: #e7eaef;
+  color: var(--text-dim);
+}
+
+.logo-live-badge {
+  background: #e7f0ff;
+  color: var(--accent);
+}
+
+/* Its own row beneath the wordmark, left-aligned with it. Pushed to the
+   right of the badge it read as a stray affordance floating in the
+   column's gutter. flex-basis forces the wrap rather than relying on the
+   text being long enough to cause one. */
+.logo-signin-link {
+  flex-basis: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin-top: -2px;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .setup-step {
@@ -2307,4 +2363,568 @@ input::placeholder {
   color: var(--text);
   white-space: pre-wrap;
   overflow-wrap: break-word;
+}
+
+/* --- Landing page: "Ripple field" ---------------------------------------
+   From the design canvas direction of the same name. Its own palette
+   rather than the app's --panel-dark-* tokens: this page is a deeper,
+   cooler navy than the in-app dark panels, and mapping it onto those
+   tokens would have changed them everywhere they are used. */
+.landing {
+  --l-ground: #10151f;
+  --l-ground-lift: #1b2436;
+  --l-fg: #f9fafb;
+  --l-muted: #b4bcc8;
+  --l-dim: #9ca3af;
+  --l-line: #263042;
+  --l-edge: #3a4456;
+  --l-card: rgba(22, 29, 42, 0.88);
+  --l-card-line: #2e3850;
+
+  min-height: 100vh;
+  background: radial-gradient(1200px 700px at 78% 30%, var(--l-ground-lift) 0%, var(--l-ground) 60%);
+  color: var(--l-fg);
+  /* The field is a rotating 3D body; without this its corners extend the
+     page and produce a horizontal scrollbar at some widths. */
+  overflow: hidden;
+}
+
+.landing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 40px;
+  position: relative;
+  z-index: 2;
+}
+
+.landing-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.landing-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--l-fg);
+  color: var(--l-ground);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.landing-wordmark {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.landing-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.landing-email {
+  font-size: 14px;
+  color: var(--l-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40vw;
+}
+
+.landing-link-button {
+  border: 0;
+  background: transparent;
+  padding: 8px 2px;
+  color: var(--l-fg);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.landing-link-button:hover {
+  color: #bfdbfe;
+}
+
+.landing-main {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 40px 40px 80px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 72px;
+}
+
+/* An explicit grid, not flex-wrap. With flex the break to one column
+   happened implicitly whenever the container fell under the sum of the two
+   flex-bases (1120px), which did not line up with the width at which the
+   field is actually hidden -- so between those two widths the field
+   stacked underneath the pitch instead of sitting beside it. One
+   breakpoint now decides both. */
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 40px;
+}
+
+/* The field's stage is a fixed 440px square (the tile positions are
+   absolute px), so the second column is a fixed 520px and the breakpoint
+   is where that plus a readable pitch column fits. */
+@media (min-width: 1100px) {
+  .landing-hero {
+    grid-template-columns: minmax(0, 1fr) 520px;
+  }
+}
+
+.landing-pitch {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  animation: landing-up 0.8s ease-out both;
+  /* The headline sizes off THIS column, not the viewport: the column is
+     720px wide at 1440 but 460px at the two-column breakpoint, and a
+     viewport-based clamp cannot tell those apart -- it would set the same
+     60-ish px in both, overflowing the narrow one. */
+  container-type: inline-size;
+}
+
+@keyframes landing-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* clamp() rather than the design's flat 80px: at 1440 it matches, and it
+   stays readable down to phone width without a second breakpoint. */
+.landing-headline {
+  margin: 0;
+  /* 11cqw puts it at the design's 80px when the column is 720px wide, and
+     scales down with the column from there. */
+  font-size: clamp(32px, 11cqw, 80px);
+  line-height: 1.02;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+}
+
+.landing-sub {
+  margin: 0;
+  max-width: 620px;
+  font-size: clamp(16px, 2.8cqw, 20px);
+  line-height: 1.6;
+  color: var(--l-muted);
+}
+
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.landing-cta,
+.landing-cta-secondary {
+  min-height: 56px;
+  padding: 0 28px;
+  border-radius: 16px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.landing-cta {
+  border: 0;
+  background: var(--l-fg);
+  color: var(--l-ground);
+}
+
+.landing-cta-secondary {
+  border: 1.5px solid var(--l-edge);
+  background: transparent;
+  color: var(--l-fg);
+}
+
+.landing-cta-secondary:hover {
+  border-color: var(--l-muted);
+}
+
+.landing-note {
+  margin: 0;
+  max-width: 520px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--l-dim);
+}
+
+/* --- The ripple field ---
+   100 cubes, one per reader, on a plate tilted 60deg and turning slowly.
+   Each cube is three faces of one colour at different brightnesses, which
+   is cheaper than real lighting and reads the same at this size. */
+.landing-field {
+  min-width: 0;
+  height: 640px;
+  position: relative;
+  perspective: 1500px;
+  display: grid;
+  place-items: center;
+}
+
+.landing-field-stage {
+  position: relative;
+  width: 440px;
+  height: 440px;
+  transform-style: preserve-3d;
+  animation: landing-spin 48s linear infinite;
+}
+
+@keyframes landing-spin {
+  from {
+    transform: rotateX(60deg) rotateZ(0deg);
+  }
+  to {
+    transform: rotateX(60deg) rotateZ(360deg);
+  }
+}
+
+.landing-tile {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  transform-style: preserve-3d;
+  animation: landing-rise 3.4s ease-in-out infinite;
+}
+
+/* The ripple: each tile's delay is set inline from its distance to the
+   centre, so the rise spreads outwards as a ring. */
+@keyframes landing-rise {
+  0%,
+  100% {
+    transform: translateZ(0);
+  }
+  50% {
+    transform: translateZ(40px);
+  }
+}
+
+.landing-tile-front,
+.landing-tile-side,
+.landing-tile-top {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.landing-tile-front {
+  width: 34px;
+  height: 24px;
+  filter: brightness(0.62);
+  transform: translate3d(0, 22px, 12px) rotateX(90deg);
+}
+
+.landing-tile-side {
+  width: 24px;
+  height: 34px;
+  filter: brightness(0.45);
+  transform: translate3d(22px, 0, 12px) rotateY(90deg);
+}
+
+.landing-tile-top {
+  inset: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  transform: translateZ(24px);
+}
+
+.landing-float {
+  position: absolute;
+  right: 8px;
+  top: 70px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: var(--l-card);
+  border: 1px solid var(--l-card-line);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  animation: landing-floaty 5s ease-in-out infinite;
+}
+
+@keyframes landing-floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.landing-float-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--l-dim);
+}
+
+.landing-float-value {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.landing-legend {
+  position: absolute;
+  left: 24px;
+  bottom: 30px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 13px;
+  color: var(--l-dim);
+}
+
+.landing-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.landing-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+/* --- Measured figures --- */
+.landing-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.landing-stat {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--l-line);
+}
+
+.landing-stat-figure {
+  font-size: clamp(40px, 3.9vw, 56px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.landing-stat-label {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.landing-stat-note {
+  font-size: 15px;
+  color: var(--l-dim);
+}
+
+/* The field is the only decorative motion on the page; honouring this is
+   part of the design, not an addition to it. */
+@media (prefers-reduced-motion: reduce) {
+  .landing *,
+  .landing *::before,
+  .landing *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Below the two-column break there is no room to turn a 440px plate
+   beside the pitch, and the field is decorative. Matches the min-width
+   above exactly, so there is no band where it stacks. */
+@media (max-width: 1099px) {
+  .landing-field {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .landing-header,
+  .landing-main {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+/* --- /signin -------------------------------------------------------------
+   A page, not a modal. The first version reused .modal, whose padding and
+   right-aligned button row are sized to sit over content; standing alone
+   it read as cramped and off-centre. */
+.signin-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  box-sizing: border-box;
+}
+
+.signin-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 36px;
+  box-sizing: border-box;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  box-shadow: 0 8px 28px rgba(17, 24, 39, 0.07);
+}
+
+.signin-home {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.signin-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: #111827;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.signin-wordmark {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.signin-title {
+  margin: 0 0 14px;
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.028em;
+  color: var(--text);
+}
+
+/* Paragraphs rather than <br><br>: the gap is a margin, so it stays even
+   when the text wraps differently at narrow widths. */
+.signin-body {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.signin-label {
+  display: block;
+  margin: 24px 0 7px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.signin-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.signin-input::placeholder {
+  color: var(--text-placeholder);
+}
+
+.signin-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+/* Stacked and full width, primary first. The side-by-side row the modal
+   used put the real action in the bottom-right corner of a page with
+   nothing else in it. */
+.signin-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.signin-submit {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.signin-submit:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.signin-secondary {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.signin-secondary:hover {
+  color: var(--text);
+}
+
+.signin-card .run-note-error {
+  margin-top: 12px;
 }

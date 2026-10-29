@@ -90,3 +90,33 @@ variable "daily_client_persona_budget" {
   type        = number
   default     = 2000
 }
+
+# --- Magic-link sign-in (optional) -----------------------------------------
+#
+# Set all three to gate live runs behind an emailed sign-in link; leave them
+# empty (the default) and the app stays fully open, which is how it shipped
+# before auth existed. Half-configuring is treated as off, deliberately:
+# with a project id but no web API key the frontend could not sign anyone
+# in, so gating would lock out every live run.
+#
+# These are the public Firebase web config values, readable by anyone who
+# opens the page. They are not credentials and do not belong in Secret
+# Manager.
+
+variable "firebase_project_id" {
+  description = "Firebase/Identity Platform project id. Empty disables the sign-in gate."
+  type        = string
+  default     = ""
+}
+
+variable "firebase_api_key" {
+  description = "Firebase Web API key (public). Empty disables the sign-in gate."
+  type        = string
+  default     = ""
+}
+
+variable "firebase_auth_domain" {
+  description = "Firebase auth domain, usually PROJECT.firebaseapp.com. Empty disables the gate."
+  type        = string
+  default     = ""
+}
